@@ -6,16 +6,22 @@ import {
     PrimaryButton,
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
-  import { FontAwesome } from "@expo/vector-icons";
-  import {
+import {
     sendPhoneOtp,
     signIn,
     signInWithApple,
     signInWithGoogle,
-  } from "@/services/authService";
+} from "@/services/authService";
+import { FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { useState } from "react";
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+    ActivityIndicator,
+    Pressable,
+    StyleSheet,
+    Text,
+    View,
+} from "react-native";
 
 export default function Login() {
   const [mode, setMode] = useState<"phone" | "email">("phone");
@@ -188,7 +194,9 @@ export default function Login() {
           title="Apple"
         />
       </View>
-      <Text style={styles.secureNote}>Secure sign-in powered by Supabase Auth</Text>
+      <Text style={styles.secureNote}>
+        Secure sign-in powered by Supabase Auth
+      </Text>
       <View style={styles.footer}>
         <Text style={styles.footerText}>Don&apos;t have an account? </Text>
         <Pressable onPress={() => router.push("/(auth)/signup")}>
@@ -334,7 +342,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginLeft: 5,
   },
-  secureNote: { color: colors.muted, fontSize: 9, marginTop: 11, textAlign: "center" },
+  secureNote: {
+    color: colors.muted,
+    fontSize: 9,
+    marginTop: 11,
+    textAlign: "center",
+  },
   footer: {
     alignItems: "center",
     flexDirection: "row",
