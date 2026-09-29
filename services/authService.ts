@@ -87,7 +87,7 @@ export async function signIn(email: string, password: string) {
   return data;
 }
 
-export async function signInWithGoogle() {
+async function signInWithOAuthProvider(provider: "apple" | "google") {
   const redirectTo = makeRedirectUri({
     path: "auth/callback",
     scheme: "grabandgomobile",
@@ -97,7 +97,7 @@ export async function signInWithGoogle() {
       redirectTo,
       skipBrowserRedirect: true,
     },
-    provider: "google",
+    provider,
   });
 
   if (error) throw error;
@@ -121,6 +121,14 @@ export async function signInWithGoogle() {
     });
   if (sessionError) throw sessionError;
   return sessionData;
+}
+
+export async function signInWithGoogle() {
+  return signInWithOAuthProvider("google");
+}
+
+export async function signInWithApple() {
+  return signInWithOAuthProvider("apple");
 }
 
 export async function requestPasswordReset(email: string) {

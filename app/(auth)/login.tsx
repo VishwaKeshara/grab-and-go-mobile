@@ -4,13 +4,18 @@ import {
     ErrorBanner,
     Field,
     PrimaryButton,
-    SecondaryButton,
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
-import { sendPhoneOtp, signIn, signInWithGoogle } from "@/services/authService";
+  import { FontAwesome } from "@expo/vector-icons";
+  import {
+    sendPhoneOtp,
+    signIn,
+    signInWithApple,
+    signInWithGoogle,
+  } from "@/services/authService";
 import { router } from "expo-router";
 import { useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function Login() {
   const [mode, setMode] = useState<"phone" | "email">("phone");
@@ -20,6 +25,7 @@ export default function Login() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   const submit = async () => {
     setError("");
@@ -63,6 +69,23 @@ export default function Login() {
     }
   };
 
+  const continueWithApple = async () => {
+    setError("");
+    setAppleLoading(true);
+    try {
+      await signInWithApple();
+      router.replace("/(customer)/home");
+    } catch (appleError) {
+      setError(
+        appleError instanceof Error
+          ? appleError.message
+          : "Apple sign-in could not be completed.",
+      );
+    } finally {
+      setAppleLoading(false);
+    }
+  };
+
   return (
     <AuthFrame>
       <AuthHeader title="Login" />
@@ -71,6 +94,10 @@ export default function Login() {
         Enter your registered details to access express pre-orders and pickup
         passes.
       </Text>
+      <View style={styles.trustRow}>
+        <View style={styles.trustDot} />
+        <Text style={styles.trustText}>FAST LOCAL PICKUP • MALABE EXPRESS</Text>
+      </View>
       {error ? <ErrorBanner message={error} /> : null}
       <View style={styles.segmented}>
         <Pressable
@@ -148,19 +175,20 @@ export default function Login() {
         <View style={styles.dividerLine} />
       </View>
       <View style={styles.socialRow}>
-        <SecondaryButton onPress={continueWithGoogle}>
-          {googleLoading ? "Connecting..." : "Google"}
-        </SecondaryButton>
-        <SecondaryButton
-          onPress={() =>
-            setError(
-              "Apple sign-in will be enabled after the provider is configured in Supabase.",
-            )
-          }
-        >
-          Apple
-        </SecondaryButton>
+        <SocialButton
+          icon="google"
+          loading={googleLoading}
+          onPress={continueWithGoogle}
+          title="Google"
+        />
+        <SocialButton
+          icon="apple"
+          loading={appleLoading}
+          onPress={continueWithApple}
+          title="Apple"
+        />
       </View>
+      <Text style={styles.secureNote}>Secure sign-in powered by Supabase Auth</Text>
       <View style={styles.footer}>
         <Text style={styles.footerText}>Don&apos;t have an account? </Text>
         <Pressable onPress={() => router.push("/(auth)/signup")}>
@@ -177,6 +205,42 @@ export default function Login() {
   );
 }
 
+function SocialButton({
+  icon,
+  loading,
+  onPress,
+  title,
+}: {
+  icon: "apple" | "google";
+  loading: boolean;
+  onPress: () => void;
+  title: string;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      disabled={loading}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.socialButton,
+        pressed && styles.socialButtonPressed,
+        loading && styles.socialButtonDisabled,
+      ]}
+    >
+      <View style={styles.socialIcon}>
+        {loading ? (
+          <ActivityIndicator color={colors.ink} size="small" />
+        ) : (
+          <FontAwesome color={colors.ink} name={icon} size={18} />
+        )}
+      </View>
+      <Text style={styles.socialButtonText}>
+        {loading ? "Connecting" : `Continue with ${title}`}
+      </Text>
+    </Pressable>
+  );
+}
+
 const styles = StyleSheet.create({
   heading: {
     color: colors.ink,
@@ -190,6 +254,28 @@ const styles = StyleSheet.create({
     lineHeight: 18,
     marginBottom: 19,
     marginTop: 6,
+  },
+  trustRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginBottom: 16,
+    marginTop: -7,
+  },
+  trustDot: {
+    backgroundColor: colors.mint,
+    borderRadius: 5,
+    height: 9,
+    marginRight: 6,
+    shadowColor: colors.mint,
+    shadowOpacity: 0.8,
+    shadowRadius: 5,
+    width: 9,
+  },
+  trustText: {
+    color: "#07856A",
+    fontSize: 9,
+    fontWeight: "800",
+    letterSpacing: 0.5,
   },
   segmented: {
     backgroundColor: "#E7E8F9",
@@ -224,7 +310,31 @@ const styles = StyleSheet.create({
   },
   dividerLine: { backgroundColor: colors.line, flex: 1, height: 1 },
   dividerText: { color: colors.muted, fontSize: 9, fontWeight: "700" },
-  socialRow: { flexDirection: "row", gap: 9 },
+  socialRow: { gap: 10 },
+  socialButton: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderRadius: 11,
+    borderWidth: 1,
+    flexDirection: "row",
+    minHeight: 48,
+    paddingHorizontal: 14,
+  },
+  socialButtonPressed: {
+    backgroundColor: "#F0F1FC",
+    transform: [{ scale: 0.99 }],
+  },
+  socialButtonDisabled: { opacity: 0.6 },
+  socialIcon: { alignItems: "center", width: 28 },
+  socialButtonText: {
+    color: colors.ink,
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "800",
+    marginLeft: 5,
+  },
+  secureNote: { color: colors.muted, fontSize: 9, marginTop: 11, textAlign: "center" },
   footer: {
     alignItems: "center",
     flexDirection: "row",
