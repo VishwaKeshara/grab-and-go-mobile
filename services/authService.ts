@@ -105,7 +105,10 @@ export async function getProfile() {
   return data;
 }
 
-export async function updateProfile(input: { fullName: string; phone: string }) {
+export async function updateProfile(input: {
+  fullName: string;
+  phone: string;
+}) {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throw userError;
   if (!userData.user) throw new Error("Please sign in to update your profile.");

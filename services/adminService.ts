@@ -21,7 +21,13 @@ export async function listManagedUsers() {
   return (data ?? []) as ManagedUser[];
 }
 
-export async function updateManagedUserStatus(id: string, status: ManagedUser["status"]) {
-  const { error } = await supabase.from("profiles").update({ status }).eq("id", id);
+export async function updateManagedUserStatus(
+  id: string,
+  status: ManagedUser["status"],
+) {
+  const { error } = await supabase
+    .from("profiles")
+    .update({ status })
+    .eq("id", id);
   if (error) throw error;
 }

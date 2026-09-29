@@ -14,7 +14,9 @@ export type Notification = {
 export async function listNotifications() {
   const { data, error } = await supabase
     .from("notifications")
-    .select("id, kind, title, body, action_label, action_route, is_read, created_at")
+    .select(
+      "id, kind, title, body, action_label, action_route, is_read, created_at",
+    )
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -22,7 +24,10 @@ export async function listNotifications() {
 }
 
 export async function markNotificationRead(id: string) {
-  const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+  const { error } = await supabase
+    .from("notifications")
+    .update({ is_read: true })
+    .eq("id", id);
   if (error) throw error;
 }
 
@@ -31,7 +36,11 @@ export async function markAllNotificationsRead() {
   if (userError) throw userError;
   if (!userData.user) return;
 
-  const { error } = await supabase.from("notifications").update({ is_read: true }).eq("user_id", userData.user.id).eq("is_read", false);
+  const { error } = await supabase
+    .from("notifications")
+    .update({ is_read: true })
+    .eq("user_id", userData.user.id)
+    .eq("is_read", false);
   if (error) throw error;
 }
 
