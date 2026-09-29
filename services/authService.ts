@@ -104,3 +104,19 @@ export async function getProfile() {
   if (error) throw error;
   return data;
 }
+
+export async function updateProfile(input: { fullName: string; phone: string }) {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user) throw new Error("Please sign in to update your profile.");
+
+  const { data, error } = await supabase
+    .from("profiles")
+    .update({ full_name: input.fullName.trim(), phone: input.phone.trim() })
+    .eq("id", userData.user.id)
+    .select("*")
+    .single();
+
+  if (error) throw error;
+  return data;
+}
