@@ -7,7 +7,7 @@ import {
     SecondaryButton,
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
-import { sendPhoneOtp, signIn } from "@/services/authService";
+import { sendPhoneOtp, signIn, signInWithGoogle } from "@/services/authService";
 import { router } from "expo-router";
 import { useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -19,6 +19,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
 
   const submit = async () => {
     setError("");
@@ -42,6 +43,23 @@ export default function Login() {
       );
     } finally {
       setLoading(false);
+    }
+  };
+
+  const continueWithGoogle = async () => {
+    setError("");
+    setGoogleLoading(true);
+    try {
+      await signInWithGoogle();
+      router.replace("/(customer)/home");
+    } catch (googleError) {
+      setError(
+        googleError instanceof Error
+          ? googleError.message
+          : "Google sign-in could not be completed.",
+      );
+    } finally {
+      setGoogleLoading(false);
     }
   };
 
@@ -131,13 +149,9 @@ export default function Login() {
       </View>
       <View style={styles.socialRow}>
         <SecondaryButton
-          onPress={() =>
-            setError(
-              "Google sign-in will be enabled after the provider is configured in Supabase.",
-            )
-          }
+          onPress={continueWithGoogle}
         >
-          Google
+          {googleLoading ? "Connecting..." : "Google"}
         </SecondaryButton>
         <SecondaryButton
           onPress={() =>

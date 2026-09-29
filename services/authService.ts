@@ -1,4 +1,9 @@
 import { supabase } from "@/lib/supabase";
+import * as QueryParams from "expo-auth-session/build/QueryParams";
+import { makeRedirectUri } from "expo-auth-session";
+import * as WebBrowser from "expo-web-browser";
+
+WebBrowser.maybeCompleteAuthSession();
 
 export type SignUpInput = {
   fullName: string;
@@ -80,6 +85,39 @@ export async function signIn(email: string, password: string) {
 
   if (error) throw error;
   return data;
+}
+
+export async function signInWithGoogle() {
+  const redirectTo = makeRedirectUri({
+    path: "auth/callback",
+    scheme: "grabandgomobile",
+  });
+  const { data, error } = await supabase.auth.signInWithOAuth({
+    options: {
+      redirectTo,
+      skipBrowserRedirect: true,
+    },
+    provider: "google",
+  });
+
+  if (error) throw error;
+  if (!data.url) throw new Error("Google sign-in did not return an authorization URL.");
+
+  const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+  if (result.type !== "success") throw new Error("Google sign-in was cancelled.");
+
+  const { errorCode, params } = QueryParams.getQueryParams(result.url);
+  if (errorCode) throw new Error(errorCode);
+  if (!params.access_token || !params.refresh_token) {
+    throw new Error("Google sign-in did not return a valid session.");
+  }
+
+  const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
+    access_token: params.access_token,
+    refresh_token: params.refresh_token,
+  });
+  if (sessionError) throw sessionError;
+  return sessionData;
 }
 
 export async function requestPasswordReset(email: string) {
