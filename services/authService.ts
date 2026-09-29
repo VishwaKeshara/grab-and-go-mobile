@@ -1,6 +1,6 @@
 import { supabase } from "@/lib/supabase";
-import * as QueryParams from "expo-auth-session/build/QueryParams";
 import { makeRedirectUri } from "expo-auth-session";
+import * as QueryParams from "expo-auth-session/build/QueryParams";
 import * as WebBrowser from "expo-web-browser";
 
 WebBrowser.maybeCompleteAuthSession();
@@ -101,10 +101,12 @@ export async function signInWithGoogle() {
   });
 
   if (error) throw error;
-  if (!data.url) throw new Error("Google sign-in did not return an authorization URL.");
+  if (!data.url)
+    throw new Error("Google sign-in did not return an authorization URL.");
 
   const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
-  if (result.type !== "success") throw new Error("Google sign-in was cancelled.");
+  if (result.type !== "success")
+    throw new Error("Google sign-in was cancelled.");
 
   const { errorCode, params } = QueryParams.getQueryParams(result.url);
   if (errorCode) throw new Error(errorCode);
@@ -112,10 +114,11 @@ export async function signInWithGoogle() {
     throw new Error("Google sign-in did not return a valid session.");
   }
 
-  const { data: sessionData, error: sessionError } = await supabase.auth.setSession({
-    access_token: params.access_token,
-    refresh_token: params.refresh_token,
-  });
+  const { data: sessionData, error: sessionError } =
+    await supabase.auth.setSession({
+      access_token: params.access_token,
+      refresh_token: params.refresh_token,
+    });
   if (sessionError) throw sessionError;
   return sessionData;
 }

@@ -148,9 +148,7 @@ export default function Login() {
         <View style={styles.dividerLine} />
       </View>
       <View style={styles.socialRow}>
-        <SecondaryButton
-          onPress={continueWithGoogle}
-        >
+        <SecondaryButton onPress={continueWithGoogle}>
           {googleLoading ? "Connecting..." : "Google"}
         </SecondaryButton>
         <SecondaryButton
