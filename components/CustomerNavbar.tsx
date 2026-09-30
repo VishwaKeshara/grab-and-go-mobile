@@ -40,9 +40,15 @@ export function CustomerNavbar() {
               style={({ pressed }) => [styles.item, pressed && styles.pressed]}
             >
               <View style={[styles.iconWrap, active && styles.activeIconWrap]}>
-                <FontAwesome color={active ? colors.white : "#8B899B"} name={item.icon} size={17} />
+                <FontAwesome
+                  color={active ? colors.white : "#8B899B"}
+                  name={item.icon}
+                  size={17}
+                />
               </View>
-              <Text style={[styles.label, active && styles.activeLabel]}>{item.label}</Text>
+              <Text style={[styles.label, active && styles.activeLabel]}>
+                {item.label}
+              </Text>
             </Pressable>
           );
         })}
@@ -52,11 +58,38 @@ export function CustomerNavbar() {
 }
 
 const styles = StyleSheet.create({
-  shell: { bottom: 0, left: 0, paddingHorizontal: 16, paddingBottom: 10, position: "absolute", right: 0 },
-  navbar: { alignItems: "center", backgroundColor: "rgba(255,255,255,0.97)", borderColor: "#E5E4EF", borderRadius: 20, borderWidth: 1, elevation: 9, flexDirection: "row", justifyContent: "space-around", paddingHorizontal: 7, paddingTop: 8, shadowColor: colors.ink, shadowOpacity: 0.12, shadowRadius: 14 },
+  shell: {
+    bottom: 0,
+    left: 0,
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    position: "absolute",
+    right: 0,
+  },
+  navbar: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.97)",
+    borderColor: "#E5E4EF",
+    borderRadius: 20,
+    borderWidth: 1,
+    elevation: 9,
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingHorizontal: 7,
+    paddingTop: 8,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.12,
+    shadowRadius: 14,
+  },
   item: { alignItems: "center", flex: 1, minHeight: 50 },
   pressed: { opacity: 0.65 },
-  iconWrap: { alignItems: "center", borderRadius: 12, height: 28, justifyContent: "center", width: 42 },
+  iconWrap: {
+    alignItems: "center",
+    borderRadius: 12,
+    height: 28,
+    justifyContent: "center",
+    width: 42,
+  },
   activeIconWrap: { backgroundColor: colors.ink },
   label: { color: "#8B899B", fontSize: 9, fontWeight: "700", marginTop: 3 },
   activeLabel: { color: colors.ink },
