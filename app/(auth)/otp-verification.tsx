@@ -6,6 +6,7 @@ import {
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
 import {
+  sendPhoneOtp,
     resendSignupOtp,
     verifyPhoneOtp,
     verifySignupOtp,
@@ -36,8 +37,8 @@ export default function OtpVerification() {
 
   const verify = async () => {
     setError("");
-    if (code.length !== 6) {
-      setError("Enter the 6-digit verification code.");
+    if (code.length !== 8) {
+      setError("Enter the 8-digit verification code.");
       return;
     }
     setLoading(true);
@@ -57,9 +58,10 @@ export default function OtpVerification() {
   };
 
   const resend = async () => {
-    if (seconds > 0 || mode !== "signup") return;
+    if (seconds > 0) return;
     try {
-      await resendSignupOtp(email);
+      if (mode === "phone") await sendPhoneOtp(phone);
+      else await resendSignupOtp(email);
       setSeconds(47);
       setError("");
     } catch (resendError) {
@@ -79,7 +81,7 @@ export default function OtpVerification() {
       </View>
       <Text style={styles.heading}>Verify Your Mobile Number</Text>
       <Text style={styles.body}>
-        We&apos;ve sent a 6-digit code via {mode === "phone" ? "SMS" : "email"}{" "}
+        We&apos;ve sent an 8-digit code via {mode === "phone" ? "SMS" : "email"}{" "}
         to{`\n`}
         <Text style={styles.strong}>{mode === "phone" ? phone : email}</Text>
       </Text>
@@ -87,9 +89,9 @@ export default function OtpVerification() {
       <TextInput
         autoFocus
         keyboardType="number-pad"
-        maxLength={6}
+        maxLength={8}
         onChangeText={(value) => setCode(value.replace(/\D/g, ""))}
-        placeholder="• • • • • •"
+        placeholder="• • • • • • • •"
         placeholderTextColor="#C9CBDD"
         style={styles.otpInput}
         value={code}

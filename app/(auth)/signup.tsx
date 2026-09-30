@@ -19,6 +19,7 @@ export default function Signup() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [selectedHubName, setSelectedHubName] = useState("Malabe Bazaar Hub");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -37,9 +38,13 @@ export default function Signup() {
       );
       return;
     }
+    if (!acceptedTerms) {
+      setError("Please accept the Terms of Service and Privacy Policy to continue.");
+      return;
+    }
     setLoading(true);
     try {
-      await signUp({
+      const result = await signUp({
         fullName,
         phone,
         email,
@@ -48,10 +53,14 @@ export default function Signup() {
           (hub) => hub.name === selectedHubName,
         )?.id,
       });
-      router.push({
-        pathname: "/(auth)/otp-verification",
-        params: { email, mode: "signup" },
-      });
+      if (result.session) {
+        router.replace("/(customer)/home");
+      } else {
+        router.push({
+          pathname: "/(auth)/otp-verification",
+          params: { email, mode: "signup" },
+        });
+      }
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -143,13 +152,20 @@ export default function Signup() {
           </Pressable>
         );
       })}
-      <View style={styles.termsRow}>
-        <View style={styles.checkbox} />
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: acceptedTerms }}
+        onPress={() => setAcceptedTerms((checked) => !checked)}
+        style={styles.termsRow}
+      >
+        <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+          {acceptedTerms ? <Text style={styles.checkboxMark}>✓</Text> : null}
+        </View>
         <Text style={styles.terms}>
           I agree to the <Text style={styles.link}>Terms of Service</Text> &amp;{" "}
           <Text style={styles.link}>Privacy Policy</Text>.
         </Text>
-      </View>
+      </Pressable>
       <PrimaryButton loading={loading} onPress={submit}>
         Create Account &amp; Get OTP →
       </PrimaryButton>
@@ -218,6 +234,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
     width: 17,
   },
+  checkboxChecked: { backgroundColor: colors.ink },
+  checkboxMark: { color: colors.mint, fontSize: 12, fontWeight: "900", lineHeight: 17, textAlign: "center" },
   terms: { color: colors.muted, flex: 1, fontSize: 10, lineHeight: 15 },
   link: { color: "#07856A", fontWeight: "800" },
   footer: {
