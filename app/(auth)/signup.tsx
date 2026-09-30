@@ -39,7 +39,9 @@ export default function Signup() {
       return;
     }
     if (!acceptedTerms) {
-      setError("Please accept the Terms of Service and Privacy Policy to continue.");
+      setError(
+        "Please accept the Terms of Service and Privacy Policy to continue.",
+      );
       return;
     }
     setLoading(true);
@@ -158,7 +160,9 @@ export default function Signup() {
         onPress={() => setAcceptedTerms((checked) => !checked)}
         style={styles.termsRow}
       >
-        <View style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}>
+        <View
+          style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}
+        >
           {acceptedTerms ? <Text style={styles.checkboxMark}>✓</Text> : null}
         </View>
         <Text style={styles.terms}>
@@ -235,7 +239,13 @@ const styles = StyleSheet.create({
     width: 17,
   },
   checkboxChecked: { backgroundColor: colors.ink },
-  checkboxMark: { color: colors.mint, fontSize: 12, fontWeight: "900", lineHeight: 17, textAlign: "center" },
+  checkboxMark: {
+    color: colors.mint,
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 17,
+    textAlign: "center",
+  },
   terms: { color: colors.muted, flex: 1, fontSize: 10, lineHeight: 15 },
   link: { color: "#07856A", fontWeight: "800" },
   footer: {

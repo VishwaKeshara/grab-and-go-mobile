@@ -6,8 +6,8 @@ import {
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
 import {
-  sendPhoneOtp,
     resendSignupOtp,
+    sendPhoneOtp,
     verifyPhoneOtp,
     verifySignupOtp,
 } from "@/services/authService";
