@@ -2,15 +2,18 @@ import { colors } from "@/constants/colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const items = [
   { icon: "home", label: "Home", path: "/home" },
   { icon: "search", label: "Search", path: "/search" },
+  { icon: "shopping-basket", label: "Cart", path: "/cart" },
   { icon: "list-alt", label: "Orders", path: "/my-orders" },
   { icon: "user", label: "Profile", path: "/profile" },
 ] as const;
 
 const hiddenPaths = [
+  "/cart",
   "/checkout",
   "/order-confirmation",
   "/order-details",
@@ -23,11 +26,12 @@ const hiddenPaths = [
 
 export function CustomerNavbar() {
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
 
   if (hiddenPaths.some((path) => pathname.endsWith(path))) return null;
 
   return (
-    <View style={styles.shell}>
+    <View style={[styles.shell, { paddingBottom: Math.max(insets.bottom, 10) }]}>
       <View style={styles.navbar}>
         {items.map((item) => {
           const active = pathname.endsWith(item.path);

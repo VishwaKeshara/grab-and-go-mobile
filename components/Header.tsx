@@ -4,8 +4,10 @@ import { router, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 const focusedPaths = [
+  "/cart",
   "/checkout",
   "/notifications",
+  "/my-orders",
   "/order-confirmation",
   "/order-details",
   "/order-tracking",
