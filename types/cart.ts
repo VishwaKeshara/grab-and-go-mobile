@@ -16,7 +16,9 @@ export type CartItem = {
 };
 
 export type PickupSlot = { date: string; start: string; end: string; mode: "express" | "scheduled" };
+
 export type TravelMethod = "walking" | "motorcycle" | "car";
+
 export type PaymentMethod = "wallet" | "card" | "pickup";
 
 export type CheckoutDraft = {
