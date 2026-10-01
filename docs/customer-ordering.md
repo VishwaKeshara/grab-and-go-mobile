@@ -1,0 +1,9 @@
+# Customer ordering flow
+
+The nine customer ordering screens use the existing Expo Router routes. Cart, checkout draft, and orders are stored in AsyncStorage under the signed-in Supabase user ID (or a guest key). The cart starts with three sample products once per account so the flow can be reviewed immediately; clearing it persists the empty state. The cart also offers fresh picks so it can be refilled without changing another member's shopping screens.
+
+The current migrations define profiles and pickup hubs, but no shops, products, carts, orders, payment records, or pickup availability. `services/cartService.ts`, `services/orderService.ts`, and `services/paymentService.ts` are therefore a local demo boundary. Payment methods marked demo never collect card details or charge money. Status changes are an explicit demo simulation. Product photos and the demo pickup QR image require a network connection; the pickup PIN remains available if the QR image fails. Shop phone calls are unavailable until actual shop contact data is connected.
+
+`supabase/migrations/005_customer_ordering.sql` is a proposed, unapplied schema. It adds read policies for customer data. It intentionally does not permit direct client writes to orders or prices. Before switching services to Supabase, add a trusted order creation endpoint that validates current prices, pickup capacity, payment provider results, and the checkout ID atomically. Connect shop status updates and cancellation rules through trusted endpoints, then replace the demo catalog, time slots, contact details, and QR image service. Keep the unique `(customer_id, checkout_id)` constraint for duplicate-order prevention. Do not treat the demo's “paid” status as a real payment receipt.
+
+Run with `npx expo start` on a machine that has the project environment variables. Checks: `npx expo lint`, `npx tsc --noEmit`, and `npm run test:ordering`.

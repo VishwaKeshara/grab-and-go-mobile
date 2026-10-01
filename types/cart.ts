@@ -1,7 +1,4 @@
-export type SubstitutePreference =
-  | { type: "alternative"; productId: string }
-  | { type: "call" }
-  | { type: "none" };
+export type SubstitutePreference = { type: "alternative"; productId: string } | { type: "call" } | { type: "none" };
 
 export type GroceryProduct = {
   id: string;
@@ -18,12 +15,7 @@ export type CartItem = {
   substitution: SubstitutePreference;
 };
 
-export type PickupSlot = {
-  date: string;
-  start: string;
-  end: string;
-  mode: "express" | "scheduled";
-};
+export type PickupSlot = { date: string; start: string; end: string; mode: "express" | "scheduled" };
 
 export type TravelMethod = "walking" | "motorcycle" | "car";
 

@@ -1,12 +1,6 @@
 import type { CartItem, CheckoutDraft } from "@/types/cart";
 
-export type OrderStatus =
-  | "placed"
-  | "accepted"
-  | "packing"
-  | "ready"
-  | "collected"
-  | "cancelled";
+export type OrderStatus = "placed" | "accepted" | "packing" | "ready" | "collected" | "cancelled";
 
 export type Order = {
   id: string;
