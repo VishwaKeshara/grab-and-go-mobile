@@ -19,8 +19,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
-import type { OrderStatus } from "@/types/order";
-import type { ShopOrder } from "@/types/order";
+import type { ShopOrderStatus, ShopOrder } from "@/types/shopOrder";
 import type { InventoryItem } from "@/types/product";
 import type { ShopDashboardSummary, ShopProfile } from "@/types/shop";
 
@@ -106,7 +105,7 @@ export async function getShopDashboardSummary(
  */
 export async function getIncomingOrders(
   shopId: string,
-  statusFilter?: OrderStatus[],
+  statusFilter?: ShopOrderStatus[],
 ): Promise<ShopOrder[]> {
   void shopId;
   void statusFilter;
@@ -156,7 +155,7 @@ export async function getShopOrderById(
  */
 export async function updateOrderStatus(
   orderId: string,
-  newStatus: OrderStatus,
+  newStatus: ShopOrderStatus,
 ): Promise<void> {
   void orderId;
   void newStatus;
