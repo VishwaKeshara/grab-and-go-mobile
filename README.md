@@ -34,7 +34,7 @@ The project includes these important integrations:
 Create a local environment file from the template:
 
 ```powershell
-Copy-Item .env.example .env
+Copy-Item .env
 ```
 
 Set the Supabase values in `.env`:
