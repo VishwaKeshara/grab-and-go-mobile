@@ -72,6 +72,7 @@ export default function ShopLogin() {
   const [selectedShift, setSelectedShift] = useState<ShiftType>("evening");
   const [staffId, setStaffId] = useState("");
   const [pin, setPin] = useState("");
+  const [showPin, setShowPin] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -275,14 +276,40 @@ export default function ShopLogin() {
           </View>
 
           {/* PIN dots */}
-          <Text style={styles.pinLabel}>ENTER YOUR 4-DIGIT PIN</Text>
-          <View style={styles.pinDots}>
-            {[0, 1, 2, 3].map((i) => (
-              <View
-                key={i}
-                style={[styles.pinDot, i < pin.length && styles.pinDotFilled]}
+          <View style={{ flexDirection: "row", justifyContent: "center", alignItems: "center", marginBottom: 16 }}>
+            <Text style={[styles.pinLabel, { marginBottom: 0 }]}>ENTER YOUR 4-DIGIT PIN</Text>
+            <Pressable
+              accessibilityLabel={showPin ? "Hide PIN" : "Show PIN"}
+              accessibilityRole="button"
+              onPress={() => setShowPin(!showPin)}
+              style={{ padding: 4, marginLeft: 6 }}
+            >
+              <FontAwesome
+                color="rgba(255,255,255,0.45)"
+                name={showPin ? "eye-slash" : "eye"}
+                size={14}
               />
-            ))}
+            </Pressable>
+          </View>
+          <View style={styles.pinDots}>
+            {[0, 1, 2, 3].map((i) => {
+              const isFilled = i < pin.length;
+              if (showPin && isFilled) {
+                return (
+                  <View key={i} style={{ width: 18, height: 18, alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ color: colors.mint, fontSize: 18, fontWeight: "900", lineHeight: 20 }}>
+                      {pin[i]}
+                    </Text>
+                  </View>
+                );
+              }
+              return (
+                <View
+                  key={i}
+                  style={[styles.pinDot, isFilled && styles.pinDotFilled]}
+                />
+              );
+            })}
           </View>
 
           {/* Error banner */}
