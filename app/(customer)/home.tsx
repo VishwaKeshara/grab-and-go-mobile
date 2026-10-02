@@ -1,4 +1,7 @@
 import { colors } from "@/constants/colors";
+import { useCart } from "@/hooks/useCart";
+import { products as cartProducts, SHOP } from "@/services/cartService";
+import type { GroceryProduct } from "@/types/cart";
 import { getHomeContext } from "@/services/homeService";
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -16,13 +19,8 @@ import {
 
 type IconName = ComponentProps<typeof FontAwesome>["name"];
 type Category = { icon: IconName; label: string; tint: string };
-type Product = {
-  id: string;
-  name: string;
+type Product = GroceryProduct & {
   shop: string;
-  price: string;
-  unit: string;
-  image: string;
   tag: string;
   tagColor: string;
 };
@@ -36,43 +34,15 @@ const categories: Category[] = [
   { icon: "glass", label: "Beverages", tint: "#DFF7F1" },
 ];
 
-const products: Product[] = [
-  {
-    id: "bananas",
-    name: "Kolikuttu Bananas",
-    shop: "Kandy Fresh Market",
-    price: "LKR 280",
-    unit: "per 500g",
-    image:
-      "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&q=80",
-    tag: "Fresh today",
-    tagColor: colors.mintSoft,
-  },
-  {
-    id: "coconut",
-    name: "King Coconut",
-    shop: "Highland Superstore",
-    price: "LKR 180",
-    unit: "each",
-    image:
-      "https://images.unsplash.com/photo-1581453883351-9a4e9a7b8f6b?w=400&q=80",
-    tag: "Best seller",
-    tagColor: "#FFF0D5",
-  },
-  {
-    id: "bread",
-    name: "Country Grain Loaf",
-    shop: "Pastry Lane",
-    price: "LKR 420",
-    unit: "400g",
-    image:
-      "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80",
-    tag: "Baked fresh",
-    tagColor: "#FFE6E0",
-  },
-];
+const products: Product[] = cartProducts.slice(0, 3).map((product, index) => ({
+  ...product,
+  shop: SHOP.name,
+  tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
+  tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
+}));
 
 export default function Home() {
+  const { addItem, loading: cartLoading } = useCart();
   const [search, setSearch] = useState("");
   const [firstName, setFirstName] = useState("Dilshan");
   const [pickupHub, setPickupHub] = useState("Malabe Bazaar Hub");
@@ -234,7 +204,7 @@ export default function Home() {
           contentContainerStyle={styles.productRow}
         >
           {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard key={product.id} product={product} onAdd={addItem} addingDisabled={cartLoading} />
           ))}
         </ScrollView>
         <View style={styles.bottomSpace} />
@@ -284,39 +254,33 @@ function SectionHeader({
   );
 }
 
-function ProductCard({ product }: { product: Product }) {
+function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onAdd: (product: GroceryProduct) => boolean; addingDisabled: boolean }) {
   return (
-    <Pressable
-      onPress={() => router.push("/(customer)/product-details")}
-      style={styles.productCard}
-    >
+    <View style={styles.productCard}>
       <View style={styles.productImageWrap}>
-        <Image
-          contentFit="cover"
-          source={product.image}
-          style={styles.productImage}
-          transition={200}
-        />
+        <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")} style={styles.productImageTouch}>
+          <Image contentFit="cover" source={product.image} style={styles.productImage} transition={200} />
+        </Pressable>
         <View
           style={[styles.productTag, { backgroundColor: product.tagColor }]}
         >
           <Text style={styles.productTagText}>{product.tag}</Text>
         </View>
-        <View style={styles.addButton}>
+        <Pressable accessibilityLabel={`Add ${product.name} to cart`} accessibilityRole="button" accessibilityState={{ disabled: addingDisabled }} disabled={addingDisabled} onPress={() => onAdd(product)} style={[styles.addButton, addingDisabled && styles.addButtonDisabled]}>
           <FontAwesome color={colors.white} name="plus" size={12} />
-        </View>
+        </Pressable>
       </View>
-      <Text numberOfLines={1} style={styles.productName}>
-        {product.name}
-      </Text>
+      <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")}>
+        <Text numberOfLines={1} style={styles.productName}>{product.name}</Text>
+      </Pressable>
       <Text numberOfLines={1} style={styles.productShop}>
         {product.shop}
       </Text>
       <View style={styles.priceRow}>
-        <Text style={styles.productPrice}>{product.price}</Text>
+        <Text style={styles.productPrice}>LKR {product.price.toLocaleString("en-LK")}</Text>
         <Text style={styles.productUnit}>{product.unit}</Text>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -518,6 +482,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
+  productImageTouch: { height: "100%", width: "100%" },
   productImage: { height: "100%", width: "100%" },
   productTag: {
     borderRadius: 5,
@@ -532,15 +497,16 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.ink,
     borderColor: colors.white,
-    borderRadius: 14,
+    borderRadius: 19,
     borderWidth: 2,
-    bottom: 6,
-    height: 28,
+    bottom: 5,
+    height: 38,
     justifyContent: "center",
     position: "absolute",
-    right: 6,
-    width: 28,
+    right: 5,
+    width: 38,
   },
+  addButtonDisabled: { opacity: 0.45 },
   productName: {
     color: colors.ink,
     fontSize: 11,

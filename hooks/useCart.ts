@@ -6,13 +6,17 @@ import { createOrder, loadOrders, setOrderStatus } from "@/services/orderService
 import { processDemoPayment } from "@/services/paymentService";
 import type { CartItem, CheckoutDraft, GroceryProduct, SubstitutePreference } from "@/types/cart";
 import type { Order, OrderStatus } from "@/types/order";
+import { addProductToCart } from "@/utils/ordering";
 
 type Store = {
   cart: CartItem[]; draft: CheckoutDraft; orders: Order[]; loading: boolean; error: string;
   submitting: boolean; totals: ReturnType<typeof cartTotals>;
+  cartSheetOpen: boolean;
+  openCartSheet: () => void;
+  closeCartSheet: () => void;
   setQuantity: (id: string, quantity: number) => void;
   removeItem: (id: string) => void;
-  addItem: (product: GroceryProduct) => void;
+  addItem: (product: GroceryProduct) => boolean;
   clearCart: () => void;
   setSubstitution: (id: string, value: SubstitutePreference) => void;
   updateDraft: (value: Partial<CheckoutDraft>) => void;
@@ -31,6 +35,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [cartSheetOpen, setCartSheetOpen] = useState(false);
   const lock = useRef(false);
   const ready = useRef(false);
 
@@ -54,7 +59,14 @@ export function OrderingProvider({ children }: PropsWithChildren) {
 
   const setQuantity = (id: string, quantity: number) => setCart(previous => previous.map(item => item.product.id === id ? { ...item, quantity: Math.max(1, quantity) } : item));
   const removeItem = (id: string) => setCart(previous => previous.filter(item => item.product.id !== id));
-  const addItem = (product: GroceryProduct) => setCart(previous => previous.some(item => item.product.id === product.id) ? previous.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item) : [...previous, { product, quantity: 1, substitution: { type: "call" } }]);
+  const addItem = (product: GroceryProduct) => {
+    if (!ready.current || loading) return false;
+    setCart(previous => addProductToCart(previous, product));
+    setCartSheetOpen(true);
+    return true;
+  };
+  const openCartSheet = () => setCartSheetOpen(true);
+  const closeCartSheet = () => setCartSheetOpen(false);
   const clearCart = () => setCart([]);
   const setSubstitution = (id: string, value: SubstitutePreference) => setCart(previous => previous.map(item => item.product.id === id ? { ...item, substitution: value } : item));
   const updateDraft = (value: Partial<CheckoutDraft>) => setDraft(previous => ({ ...previous, ...value }));
@@ -65,6 +77,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       await processDemoPayment(draft.paymentMethod);
       const order = await createOrder(cart, draft);
       setOrders(previous => [order, ...previous.filter(value => value.id !== order.id)]);
+      setCartSheetOpen(false);
       setCart([]); setDraft(previous => ({ ...initialDraft, checkoutId: newCheckoutId(), customerName: previous.customerName, phone: previous.phone }));
       return order;
     } finally { lock.current = false; setSubmitting(false); }
@@ -85,7 +98,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     setDraft(previous => ({ ...previous, pickupSlot: null }));
   };
   const totals = useMemo(() => cartTotals(cart), [cart]);
-  return createElement(Context.Provider, { value: { cart, draft, orders, loading, error, submitting, totals, setQuantity, removeItem, addItem, clearCart, setSubstitution, updateDraft, submitOrder, changeStatus, reorder, reload } }, children);
+  return createElement(Context.Provider, { value: { cart, draft, orders, loading, error, submitting, totals, cartSheetOpen, openCartSheet, closeCartSheet, setQuantity, removeItem, addItem, clearCart, setSubstitution, updateDraft, submitOrder, changeStatus, reorder, reload } }, children);
 }
 
 export function useCart() {

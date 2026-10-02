@@ -1,10 +1,11 @@
 import { colors } from "@/constants/colors";
+import { CartHeaderButton } from "@/components/CartHeaderButton";
 import { SHOP } from "@/services/cartService";
 import type { CartItem, GroceryProduct, PickupSlot, SubstitutePreference } from "@/types/cart";
 import type { OrderStatus } from "@/types/order";
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { router } from "expo-router";
+import { router, usePathname } from "expo-router";
 import type { ComponentProps, ReactNode } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -15,11 +16,12 @@ export const prettySlot = (slot: PickupSlot | null) => slot ? `${new Date(`${slo
 export const preferenceText = (value: SubstitutePreference, alternatives: GroceryProduct[] = []) => value.type === "call" ? "Call me before substituting" : value.type === "none" ? "Do not substitute" : alternatives.find(item => item.id === value.productId)?.name ?? "Selected alternative";
 
 export function OrderPage({ title, eyebrow, children, footer, back, nav = false }: { title: string; eyebrow?: string; children: ReactNode; footer?: ReactNode; back?: () => void; nav?: boolean }) {
+  const pathname = usePathname();
   return <SafeAreaView edges={["top", "bottom"]} style={styles.page}>
     <View style={styles.header}>
       {back ? <Pressable accessibilityLabel="Go back" accessibilityRole="button" onPress={back} style={styles.back}><FontAwesome name="angle-left" size={26} color={colors.ink} /></Pressable> : <View style={styles.mark}><FontAwesome name="shopping-basket" size={16} color={colors.mint} /></View>}
       <View style={styles.headerText}><Text style={styles.eyebrow}>{eyebrow ?? "GRAB & GO"}</Text><Text style={styles.title}>{title}</Text></View>
-      <Pressable accessibilityLabel="My orders" accessibilityRole="button" onPress={() => router.push("/(customer)/my-orders")} style={styles.headerAction}><FontAwesome name="list-alt" size={17} color={colors.ink} /></Pressable>
+      {pathname.endsWith("/cart") ? <Pressable accessibilityLabel="My orders" accessibilityRole="button" onPress={() => router.push("/(customer)/my-orders")} style={styles.headerAction}><FontAwesome name="list-alt" size={17} color={colors.ink} /></Pressable> : <CartHeaderButton />}
     </View>
     <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={[styles.content, nav && { paddingBottom: 110 }]} showsVerticalScrollIndicator={false}>{children}</ScrollView>
     {footer ? <View style={styles.footer}>{footer}</View> : null}

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { canTransition, cartTotals, isPickupSlotAvailable, isValidPhone } from "../utils/ordering.ts";
+import { addProductToCart, canTransition, cartTotals, isPickupSlotAvailable, isValidPhone } from "../utils/ordering.ts";
 
 test("cart totals use actual prices and quantities", () => {
   const items = [
@@ -8,6 +8,16 @@ test("cart totals use actual prices and quantities", () => {
     { product: { price: 420, regularPrice: 450 }, quantity: 1 },
   ];
   assert.deepEqual(cartTotals(items), { count: 2, units: 3, subtotal: 980, savings: 110 });
+});
+
+test("adding the same product increases its quantity without a duplicate row", () => {
+  const product = { id: "bananas", name: "Bananas", unit: "500 g", price: 280, regularPrice: 320, image: "photo" };
+  const once = addProductToCart([], product);
+  const twice = addProductToCart(once, product);
+  assert.equal(twice.length, 1);
+  assert.equal(twice[0].quantity, 2);
+  assert.equal(twice[0].substitution.type, "call");
+  assert.deepEqual(cartTotals(twice), { count: 1, units: 2, subtotal: 560, savings: 80 });
 });
 
 test("phone validation checks digit count and allowed characters", () => {
