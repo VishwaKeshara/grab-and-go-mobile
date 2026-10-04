@@ -69,6 +69,14 @@ npx --yes supabase db push
 
 The migrations create and secure user profiles, pickup hubs, notifications, admin user management policies, and active/suspended account status handling.
 
+Migration `005_catalog_reviews_favourites_search_reports.sql` adds the catalogue layer used by Search, Product Details, Shop Management, and Reports:
+
+- `shops` and `products` for listings, with `is_available` and `stock_quantity` driving the "in stock only" filter
+- `reviews` (one per user per product), `favourites`, and `search_history` for the customer screens
+- `reports` for generated shop reports, storing the aggregate snapshot in a `payload` jsonb column
+
+It also seeds three shops and six products so Search and Product Details have data immediately. Shop ownership is enforced with the `public.owns_shop()` helper, and every table has row level security enabled.
+
 Check migration synchronization with:
 
 ```bash
