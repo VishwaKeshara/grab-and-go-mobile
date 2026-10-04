@@ -1,173 +1,160 @@
-import React, { useState, useMemo } from "react";
+import { listMyShops } from "@/services/shopService";
+import { listProductsByShop, updateProduct } from "@/services/productService";
+import type { Product, StockStatus } from "@/types/product";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput, Switch, Pressable } from "react-native";
-import { router } from "expo-router";
-import { Product, InventoryItem, StockStatus } from "@/types/product";
 
-// --- Types & Mock Data ---
-interface ExtendedProduct extends Product {
-  sku: string;
-  comparisonNote?: string;
-}
-
-interface ExtendedInventoryItem extends Omit<InventoryItem, 'product'> {
-  product: ExtendedProduct;
-}
-
-const INITIAL_INVENTORY: ExtendedInventoryItem[] = [
-  {
-    id: "inv-1",
-    productId: "prod-1",
-    quantity: 14,
-    lowStockThreshold: 5,
-    stockStatus: "in_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-1",
-      shopId: "shop-1",
-      name: "Araliya Keeri Samba 5kg",
-      description: null,
-      price: 1480.00,
-      unitLabel: "5kg",
-      category: "Pantry",
-      imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
-      sku: "RCE-5014",
-      comparisonNote: "Lowest in Malabe",
-    }
-  },
-  {
-    id: "inv-2",
-    productId: "prod-2",
-    quantity: 4,
-    lowStockThreshold: 5,
-    stockStatus: "low_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-2",
-      shopId: "shop-1",
-      name: "Highland Fresh Milk 1L",
-      description: null,
-      price: 460.00,
-      unitLabel: "1L",
-      category: "Dairy & Chilled",
-      imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
-      sku: "MLK-1022",
-    }
-  },
-  {
-    id: "inv-3",
-    productId: "prod-3",
-    quantity: 0,
-    lowStockThreshold: 5,
-    stockStatus: "out_of_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-3",
-      shopId: "shop-1",
-      name: "Pelwatte Salted Butter 200g",
-      description: null,
-      price: 720.00,
-      unitLabel: "200g",
-      category: "Dairy & Chilled",
-      imageUrl: null,
-      isAvailable: false,
-      createdAt: "2026-10-02T10:00:00Z",
-      sku: "BTR-0881",
-    }
-  },
-  {
-    id: "inv-4",
-    productId: "prod-4",
-    quantity: 28,
-    lowStockThreshold: 10,
-    stockStatus: "in_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-4",
-      shopId: "shop-1",
-      name: "Ceylon Red Lentils 1kg",
-      description: null,
-      price: 410.00,
-      unitLabel: "1kg",
-      category: "Pantry Staples",
-      imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
-      sku: "DHAL-402",
-    }
-  },
-  {
-    id: "inv-5",
-    productId: "prod-5",
-    quantity: 12,
-    lowStockThreshold: 5,
-    stockStatus: "in_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-5",
-      shopId: "shop-1",
-      name: "Farm Fresh Brown Eggs 10",
-      description: null,
-      price: 410.00,
-      unitLabel: "10 pack",
-      category: "Fresh Foods",
-      imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
-      sku: "EGG-0091",
-    }
-  }
-];
+/**
+ * Stock counts live on products.stock_quantity / products.is_available.
+ * There is no separate inventory table, so the low-stock cutoff is one shared
+ * constant rather than a per-product threshold.
+ */
+const LOW_STOCK_THRESHOLD = 5;
 
 type FilterType = "All" | "Low Stock" | "Out of Stock";
 
+/**
+ * Adapts a product row to the shape the card markup expects, so the UI below
+ * reads the same as it did against the old mock array.
+ */
+type StockRow = {
+  id: string;
+  quantity: number;
+  stockStatus: StockStatus;
+  product: {
+    name: string;
+    category: string;
+    price: number;
+    unitLabel: string;
+    isAvailable: boolean;
+  };
+};
+
+function stockStatusFor(quantity: number): StockStatus {
+  if (quantity === 0) return "out_of_stock";
+  if (quantity <= LOW_STOCK_THRESHOLD) return "low_stock";
+  return "in_stock";
+}
+
+function toRow(product: Product): StockRow {
+  return {
+    id: product.id,
+    quantity: product.stock_quantity,
+    stockStatus: stockStatusFor(product.stock_quantity),
+    product: {
+      name: product.name,
+      category: product.category,
+      price: product.price,
+      unitLabel: product.unit,
+      isAvailable: product.is_available,
+    },
+  };
+}
+
 export default function StockUpdate() {
-  const [inventory, setInventory] = useState<ExtendedInventoryItem[]>(INITIAL_INVENTORY);
+  const [inventory, setInventory] = useState<StockRow[]>([]);
+  const [shopName, setShopName] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("All");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const fetchStock = useCallback(
+    (onDone?: () => void) =>
+      listMyShops()
+        .then((shops) => {
+          if (shops.length === 0) return [];
+          setShopName(shops[0].name);
+          return listProductsByShop(shops[0].id);
+        })
+        .then((products) => {
+          if (products) setInventory(products.map(toRow));
+        })
+        .catch((loadError: unknown) => {
+          setError(
+            loadError instanceof Error
+              ? loadError.message
+              : "We could not load your stock levels.",
+          );
+        })
+        .finally(() => {
+          setLoading(false);
+          onDone?.();
+        }),
+    [],
+  );
+
+  const reload = () => {
+    setLoading(true);
+    setError("");
+    fetchStock();
+  };
+
+  useEffect(() => {
+    // State is only touched inside the promise callbacks, never synchronously
+    // in the effect body, which would trigger a cascading render.
+    let active = true;
+    const timer = setTimeout(() => {
+      fetchStock(() => {
+        if (!active) return;
+      });
+    }, 0);
+
+    return () => {
+      active = false;
+      clearTimeout(timer);
+    };
+  }, [fetchStock]);
+
+  /**
+   * Applies the change locally first so the stepper feels instant, then
+   * persists. If the write fails the previous row is restored and the error
+   * is surfaced, so the UI never drifts from what is stored.
+   */
+  const commit = (id: string, quantity: number, isAvailable: boolean) => {
+    const snapshot = inventory.find((item) => item.id === id) ?? null;
+
+    setInventory((rows) =>
+      rows.map((item) =>
+        item.id === id
+          ? {
+              ...item,
+              quantity,
+              stockStatus: stockStatusFor(quantity),
+              product: { ...item.product, isAvailable },
+            }
+          : item,
+      ),
+    );
+
+    updateProduct(id, {
+      stock_quantity: quantity,
+      is_available: isAvailable,
+    }).catch((saveError: unknown) => {
+      if (snapshot) {
+        setInventory((rows) =>
+          rows.map((item) => (item.id === id ? snapshot : item)),
+        );
+      }
+      setError(
+        saveError instanceof Error
+          ? saveError.message
+          : "We could not save that stock change.",
+      );
+    });
+  };
 
   const updateQuantity = (id: string, newQty: number) => {
     if (newQty < 0) return;
-    
-    setInventory(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      let newStatus: StockStatus = "in_stock";
-      let newIsAvailable = item.product.isAvailable;
-
-      if (newQty === 0) {
-        newStatus = "out_of_stock";
-        newIsAvailable = false;
-      } else if (newQty <= item.lowStockThreshold) {
-        newStatus = "low_stock";
-      }
-
-      return {
-        ...item,
-        quantity: newQty,
-        stockStatus: newStatus,
-        product: {
-          ...item.product,
-          isAvailable: newIsAvailable
-        }
-      };
-    }));
+    const target = inventory.find((item) => item.id === id);
+    if (!target) return;
+    commit(id, newQty, newQty > 0);
   };
 
   const toggleAvailability = (id: string) => {
-    setInventory(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      return {
-        ...item,
-        product: {
-          ...item.product,
-          isAvailable: !item.product.isAvailable
-        }
-      };
-    }));
+    const target = inventory.find((item) => item.id === id);
+    if (!target) return;
+    commit(id, target.quantity, !target.product.isAvailable);
   };
 
   const filteredInventory = useMemo(() => {
@@ -176,12 +163,12 @@ export default function StockUpdate() {
       if (activeFilter === "Low Stock" && item.stockStatus !== "low_stock") return false;
       if (activeFilter === "Out of Stock" && item.stockStatus !== "out_of_stock") return false;
 
-      // 2. Search Query (Name or SKU)
+      // 2. Search Query (name or category)
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         if (
           !item.product.name.toLowerCase().includes(query) &&
-          !item.product.sku.toLowerCase().includes(query)
+          !item.product.category.toLowerCase().includes(query)
         ) {
           return false;
         }
@@ -204,7 +191,7 @@ export default function StockUpdate() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerBrand}>MALABE EXPRESS OUTLET</Text>
+          <Text style={styles.headerBrand}>{shopName ? shopName.toUpperCase() : "YOUR SHOP"}</Text>
           <Text style={styles.headerTitle}>Stock Update</Text>
         </View>
         <View style={styles.statusBadge}>
@@ -219,7 +206,7 @@ export default function StockUpdate() {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search 420 catalogued SKUs..."
+            placeholder={`Search ${counts.all} catalogued item${counts.all === 1 ? "" : "s"}...`}
             placeholderTextColor="#8A8A9E"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -264,7 +251,23 @@ export default function StockUpdate() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {filteredInventory.map((item) => {
+        {loading ? (
+          <Text style={styles.stateText}>Loading your stock levels...</Text>
+        ) : error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable onPress={reload}>
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
+        ) : filteredInventory.length === 0 ? (
+          <Text style={styles.stateText}>
+            {inventory.length === 0
+              ? "No listings yet. Add products in Shop Management to track stock here."
+              : "No items match your search or filter."}
+          </Text>
+        ) : (
+        filteredInventory.map((item) => {
           const isOut = item.stockStatus === "out_of_stock";
           const isLow = item.stockStatus === "low_stock";
           
@@ -273,7 +276,7 @@ export default function StockUpdate() {
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.productName}>{item.product.name}</Text>
-                  <Text style={styles.skuText}>SKU #{item.product.sku} • {item.product.category}</Text>
+                  <Text style={styles.skuText}>{item.product.category}</Text>
                 </View>
                 <View style={styles.availabilityToggle}>
                   <Text style={styles.toggleLabel}>
@@ -300,9 +303,6 @@ export default function StockUpdate() {
                     {isOut ? "OUT OF STOCK" : isLow ? "Low Stock" : "In Stock"} ({item.quantity} {item.quantity === 1 ? "unit" : item.product.unitLabel.includes("pack") || item.product.unitLabel.includes("carton") ? "units" : "units"})
                   </Text>
                 </View>
-                {item.product.comparisonNote && (
-                  <Text style={styles.comparisonNote}>★ {item.product.comparisonNote}</Text>
-                )}
               </View>
 
               <View style={styles.controlsRow}>
@@ -352,7 +352,8 @@ export default function StockUpdate() {
               )}
             </View>
           );
-        })}
+        })
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -504,6 +505,34 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1E2030",
     marginBottom: 4,
+  },
+  stateText: {
+    color: "#8A8A9E",
+    fontSize: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 32,
+    textAlign: "center",
+  },
+  errorBanner: {
+    alignItems: "center",
+    backgroundColor: "#FFF0ED",
+    borderRadius: 8,
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 12,
+  },
+  errorText: {
+    color: "#A33D2F",
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  retryText: {
+    color: "#A33D2F",
+    fontSize: 11,
+    fontWeight: "800",
+    paddingLeft: 12,
   },
   skuText: {
     fontSize: 12,
