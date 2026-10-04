@@ -1,0 +1,11 @@
+            </View>
+            <View style={styles.merchantCopy}>
+              <Text style={styles.merchantName}>{(shopProfile?.name || "...")}</Text>
+              <Text style={styles.merchantSub}>
+                Counter #{(shopProfile?.pickupCounter || "...")} · {"Hub"}
+              </Text>
+            </View>
+            <View style={styles.onlinePill}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.onlineText}>ONLINE</Text>
+            </View>

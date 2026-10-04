@@ -155,6 +155,24 @@ export default function ShopLogin() {
    *   • staffId must not be empty
    *   • pin must be exactly 4 digits
    */
+  const handleSignOut = async () => {
+    setLoading(true);
+    try {
+      await supabase.auth.signOut();
+      setShopProfile(null);
+      setShopEmail("");
+      setShopPassword("");
+      setStaffId("");
+      setPin("");
+      setError("");
+      setAuthStage("shop-auth");
+    } catch (e: any) {
+      console.error(e);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleLogin = async () => {
     setError("");
     if (!staffId.trim()) { setError("Please enter your Staff ID or mobile number."); return; }
@@ -221,26 +239,38 @@ export default function ShopLogin() {
               />
             </View>
             <View style={styles.merchantCopy}>
-              <Text style={styles.merchantName}>{(shopProfile?.name || "...")}</Text>
+              <Text style={styles.merchantName}>
+                {authStage === "shop-auth" ? "Merchant Account" : (shopProfile?.name || "...")}
+              </Text>
               <Text style={styles.merchantSub}>
-                Counter #{(shopProfile?.pickupCounter || "...")} · {"Hub"}
+                {authStage === "shop-auth" ? "Sign in to access your shop" : `Counter #${shopProfile?.pickupCounter || "..."} · Hub`}
               </Text>
             </View>
-            <View style={styles.onlinePill}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.onlineText}>ONLINE</Text>
-            </View>
+            {authStage !== "shop-auth" && (
+              <View style={styles.onlinePill}>
+                <View style={styles.onlineDot} />
+                <Text style={styles.onlineText}>ONLINE</Text>
+              </View>
+            )}
           </View>
+
+          {authStage === "staff-pin" && (
+            <Pressable onPress={handleSignOut} disabled={loading} style={{ alignSelf: 'flex-end', marginTop: -10, marginBottom: 16, padding: 4 }}>
+              <Text style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, textDecorationLine: 'underline' }}>
+                Sign Out / Switch Shop
+              </Text>
+            </Pressable>
+          )}
 
           {authStage === "loading" ? (
             <Text style={{color: 'white', textAlign: 'center', marginTop: 50}}>Loading...</Text>
           ) : authStage === "shop-auth" ? (
             <View>
-              <Text style={styles.fieldLabel}>Shop Email</Text>
+              <Text style={styles.fieldLabel}>Shop Owner Email</Text>
               <View style={styles.inputWrap}>
                 <TextInput
                   style={styles.input}
-                  placeholder="admin@shop.com"
+                  placeholder="shopowner@example.com"
                   placeholderTextColor="rgba(255,255,255,0.3)"
                   value={shopEmail}
                   onChangeText={(t) => {setError(""); setShopEmail(t);}}
@@ -425,7 +455,7 @@ export default function ShopLogin() {
             ]}
           >
             <Text style={styles.loginButtonText}>
-              {loading ? "Signing in…" : "Sign In to Shift →"}
+              {loading ? "Signing in…" : authStage === "staff-pin" ? "Sign In to Shift →" : "Sign In"}
             </Text>
           </Pressable>
         </View>
