@@ -35,6 +35,7 @@
  */
 
 import { supabase } from "@/lib/supabase";
+import { currentUserId } from "@/services/productService";
 import type {
   ShopOrderStatus,
   ShopOrder,
@@ -46,6 +47,9 @@ import type {
 } from "@/types/shopOrder";
 import type { InventoryItem } from "@/types/product";
 import type {
+  Shop,
+  ShopInput,
+  ShopUpdate,
   ShopDashboardSummary,
   ShopProfile,
   StaffLoginResult,
@@ -706,4 +710,88 @@ function mapItemRow(row: Record<string, unknown>): ShopOrderItem {
     isPacked:     (row.is_packed as boolean) ?? false,
     packedAt:     (row.packed_at as string | null) ?? null,
   };
+}
+
+const SHOP_COLUMNS =
+  "id, owner_id, name, description, category, address, phone, image_url, is_active, created_at, updated_at";
+
+function toShop(row: Record<string, unknown>): Shop {
+  return row as unknown as Shop;
+}
+
+/** Shops owned by the signed-in user, for the shop management screen. */
+export async function listMyShops(): Promise<Shop[]> {
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("shops")
+    .select(SHOP_COLUMNS)
+    .eq("owner_id", userId)
+    .order("created_at", { ascending: false });
+
+  if (error) throw error;
+  return (data ?? []).map(toShop);
+}
+
+/** All active shops, for browsing. */
+export async function listShops(): Promise<Shop[]> {
+  const { data, error } = await supabase
+    .from("shops")
+    .select(SHOP_COLUMNS)
+    .eq("is_active", true)
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map(toShop);
+}
+
+export async function getShop(id: string): Promise<Shop> {
+  const { data, error } = await supabase
+    .from("shops")
+    .select(SHOP_COLUMNS)
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+  return toShop(data);
+}
+
+export async function createShop(input: ShopInput): Promise<Shop> {
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("shops")
+    .insert({
+      owner_id: userId,
+      name: input.name.trim(),
+      description: input.description?.trim() ?? "",
+      category: input.category?.trim() || "Grocery",
+      address: input.address?.trim() ?? "",
+      phone: input.phone?.trim() || null,
+      image_url: input.image_url ?? null,
+      is_active: input.is_active ?? true,
+    })
+    .select(SHOP_COLUMNS)
+    .single();
+
+  if (error) throw error;
+  return toShop(data);
+}
+
+export async function updateShop(
+  id: string,
+  changes: ShopUpdate,
+): Promise<Shop> {
+  const { data, error } = await supabase
+    .from("shops")
+    .update(changes)
+    .eq("id", id)
+    .select(SHOP_COLUMNS)
+    .single();
+
+  if (error) throw error;
+  return toShop(data);
+}
+
+export async function deleteShop(id: string) {
+  const { error } = await supabase.from("shops").delete().eq("id", id);
+  if (error) throw error;
 }

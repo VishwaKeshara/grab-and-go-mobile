@@ -41,7 +41,7 @@ export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
  * Note: `description` and `category` are NOT columns in customer_products.
  * They were removed to match the confirmed migration 005 schema.
  */
-export interface Product {
+export interface InventoryProduct {
   id: string;
   shopId: string;
   name: string;
@@ -80,13 +80,75 @@ export interface InventoryItem {
   id: string;
   shopId: string;
   productId: string;
+  /** Populated via JOIN with products table. */
+  product: InventoryProduct;
   quantity: number;
   lowStockThreshold: number;
   /** Per-shop availability toggle (distinct from customer_products.active). */
   isAvailable: boolean;
   updatedAt: string;
-  /** Populated via JOIN with customer_products. Not a database column. */
-  product: Product;
   /** Computed client-side — not stored in the database. */
   stockStatus: StockStatus;
 }
+export type Product = {
+  id: string;
+  shop_id: string;
+  name: string;
+  description: string;
+  category: string;
+  unit: string;
+  price: number;
+  stock_quantity: number;
+  image_url: string | null;
+  is_available: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+/** A product joined with the minimal shop fields the UI needs to render. */
+export type ProductWithShop = Product & {
+  shop_name: string;
+};
+
+export type ProductInput = {
+  shop_id: string;
+  name: string;
+  description?: string;
+  category?: string;
+  unit?: string;
+  price: number;
+  stock_quantity?: number;
+  image_url?: string | null;
+  is_available?: boolean;
+};
+
+export type ProductUpdate = Partial<Omit<ProductInput, "shop_id">>;
+
+export type Review = {
+  id: string;
+  product_id: string;
+  user_id: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  author_name?: string | null;
+};
+
+export type ProductFilters = {
+  query?: string;
+  category?: string;
+  shopId?: string;
+  maxPrice?: number;
+  inStockOnly?: boolean;
+  sort?: ProductSort;
+};
+
+export type ProductSort = "relevance" | "price_asc" | "price_desc" | "name";
+
+export type SearchHistoryEntry = {
+  id: string;
+  user_id: string;
+  query: string;
+  result_count: number;
+  created_at: string;
+};

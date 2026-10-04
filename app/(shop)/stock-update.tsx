@@ -1,10 +1,12 @@
-import React, { useState, useMemo } from "react";
+import { supabase } from "@/lib/supabase";
+import { getShopByProfileId, getInventory, updateStock } from "@/services/shopService";
+import type { Product, StockStatus, InventoryItem, InventoryProduct } from "@/types/product";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput, Switch, Pressable } from "react-native";
 import { router } from "expo-router";
-import { Product, InventoryItem, StockStatus } from "@/types/product";
 
 // --- Types & Mock Data ---
-interface ExtendedProduct extends Product {
+interface ExtendedProduct extends InventoryProduct {
   sku: string;
   category: string;
   comparisonNote?: string;
@@ -13,10 +15,6 @@ interface ExtendedProduct extends Product {
 interface ExtendedInventoryItem extends Omit<InventoryItem, 'product'> {
   product: ExtendedProduct;
 }
-
-import { supabase } from "@/lib/supabase";
-import { getShopByProfileId, getInventory, updateStock } from "@/services/shopService";
-import { useEffect } from "react";
 
 type FilterType = "All" | "Low Stock" | "Out of Stock";
 
@@ -92,12 +90,12 @@ export default function StockUpdate() {
       if (activeFilter === "Low Stock" && item.stockStatus !== "low_stock") return false;
       if (activeFilter === "Out of Stock" && item.stockStatus !== "out_of_stock") return false;
 
-      // 2. Search Query (Name or SKU)
+      // 2. Search Query (name or category)
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
         if (
           !item.product.name.toLowerCase().includes(query) &&
-          !item.product.sku.toLowerCase().includes(query)
+          !item.product.category.toLowerCase().includes(query)
         ) {
           return false;
         }
@@ -143,7 +141,7 @@ export default function StockUpdate() {
           <Text style={styles.searchIcon}>🔍</Text>
           <TextInput
             style={styles.searchInput}
-            placeholder="Search 420 catalogued SKUs..."
+            placeholder={`Search ${counts.all} catalogued item${counts.all === 1 ? "" : "s"}...`}
             placeholderTextColor="#8A8A9E"
             value={searchQuery}
             onChangeText={setSearchQuery}
@@ -188,12 +186,21 @@ export default function StockUpdate() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {error ? (
-          <Text style={{ color: 'red', margin: 20 }}>{error}</Text>
-        ) : loading ? (
-          <Text style={{ color: '#4A4A68', margin: 20 }}>Loading inventory...</Text>
+        {loading ? (
+          <Text style={styles.stateText}>Loading your stock levels...</Text>
+        ) : error ? (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{error}</Text>
+            <Pressable onPress={checkSessionAndFetch}>
+              <Text style={styles.retryText}>Retry</Text>
+            </Pressable>
+          </View>
         ) : filteredInventory.length === 0 ? (
-          <Text style={{ color: '#4A4A68', margin: 20 }}>No items match your filter.</Text>
+          <Text style={styles.stateText}>
+            {inventory.length === 0
+              ? "No listings yet. Add products in Shop Management to track stock here."
+              : "No items match your search or filter."}
+          </Text>
         ) : (
           filteredInventory.map((item) => {
           const isOut = item.stockStatus === "out_of_stock";
@@ -204,7 +211,7 @@ export default function StockUpdate() {
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.productName}>{item.product.name}</Text>
-                  <Text style={styles.skuText}>SKU #{item.product.sku} • {item.product.category}</Text>
+                  <Text style={styles.skuText}>{item.product.category}</Text>
                 </View>
                 <View style={styles.availabilityToggle}>
                   <Text style={styles.toggleLabel}>
@@ -231,9 +238,6 @@ export default function StockUpdate() {
                     {isOut ? "OUT OF STOCK" : isLow ? "Low Stock" : "In Stock"} ({item.quantity} {item.product.unit.includes("pack") || item.product.unit.includes("carton") ? "units" : "units"})
                   </Text>
                 </View>
-                {item.product.comparisonNote && (
-                  <Text style={styles.comparisonNote}>★ {item.product.comparisonNote}</Text>
-                )}
               </View>
 
               <View style={styles.controlsRow}>
@@ -435,6 +439,34 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1E2030",
     marginBottom: 4,
+  },
+  stateText: {
+    color: "#8A8A9E",
+    fontSize: 13,
+    paddingHorizontal: 16,
+    paddingVertical: 32,
+    textAlign: "center",
+  },
+  errorBanner: {
+    alignItems: "center",
+    backgroundColor: "#FFF0ED",
+    borderRadius: 8,
+    flexDirection: "row",
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 12,
+  },
+  errorText: {
+    color: "#A33D2F",
+    flex: 1,
+    fontSize: 11,
+    lineHeight: 16,
+  },
+  retryText: {
+    color: "#A33D2F",
+    fontSize: 11,
+    fontWeight: "800",
+    paddingLeft: 12,
   },
   skuText: {
     fontSize: 12,
