@@ -1,54 +1,92 @@
 /**
  * Product and inventory TypeScript types for the shop module.
  *
- * ⚠️  DATABASE STATUS: No Supabase schema has been confirmed yet.
- *     Coordinate with PramudithaJayasena-product-shop on the final `products`
- *     and `inventory` table definitions before writing migrations.
+ * Maps to the following Supabase tables (applied in migrations 005 + 006):
+ *   customer_products — product catalog (migration 005)
+ *   shop_inventory    — per-shop stock quantities (migration 006)
  *
- * TODO (migration 005): maps to `products` and `inventory` tables.
+ * @see services/shopService.ts → getInventory(), updateStock()
+ * @see supabase/migrations/005_customer_ordering.sql
+ * @see supabase/migrations/006_shop_operations.sql
  */
 
+// ─────────────────────────────────────────────────────────────
+// StockStatus (computed client-side)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Computed stock availability level — derived client-side from
- * InventoryItem.quantity vs InventoryItem.lowStockThreshold.
- * Not stored in the database.
+ * Derived client-side from shop_inventory.quantity vs
+ * shop_inventory.low_stock_threshold. Never stored in the database.
  */
 export type StockStatus = "in_stock" | "low_stock" | "out_of_stock";
 
+// ─────────────────────────────────────────────────────────────
+// Product
+// Maps to: public.customer_products (migration 005)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * A product listed by a shop, available for customer purchase.
+ * A product listed by a shop in the customer catalog.
  *
- * TODO: maps to the `products` table.
+ * Column mapping:
+ *   id             → customer_products.id
+ *   shopId         → customer_products.shop_id
+ *   name           → customer_products.name
+ *   unit           → customer_products.unit        (e.g. "500 g", "1 L")
+ *   priceLkr       → customer_products.price_lkr
+ *   regularPriceLkr → customer_products.regular_price_lkr
+ *   imageUrl       → customer_products.image_url
+ *   active         → customer_products.active
+ *
+ * Note: `description` and `category` are NOT columns in customer_products.
+ * They were removed to match the confirmed migration 005 schema.
  */
 export interface Product {
   id: string;
   shopId: string;
   name: string;
-  description: string | null;
-  /** Price in LKR. */
-  price: number;
-  /** Human-readable price unit label, e.g. "per 500g", "each", "per kg". */
-  unitLabel: string;
-  category: string;
+  /** Human-readable unit label, e.g. "500 g", "1 L", "pack of 6". */
+  unit: string;
+  /** Current price in LKR (integer). */
+  priceLkr: number;
+  /** Pre-discount price in LKR (integer). Used to calculate savings. */
+  regularPriceLkr: number;
   imageUrl: string | null;
-  isAvailable: boolean;
-  createdAt: string;
+  /** Platform-level active flag — product is listed in the catalog. */
+  active: boolean;
 }
 
+// ─────────────────────────────────────────────────────────────
+// InventoryItem
+// Maps to: public.shop_inventory JOIN public.customer_products (006 + 005)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Inventory record for a product, combining stock quantity with the product details.
+ * A single inventory row joined with its product details.
+ * Returned by shopService.getInventory(shopId).
  *
- * TODO: maps to the `inventory` table joined with `products`.
- *       The `product` field is populated via a JOIN — it is not a column in `inventory`.
+ * Column mapping:
+ *   id                → shop_inventory.id
+ *   shopId            → shop_inventory.shop_id
+ *   productId         → shop_inventory.product_id
+ *   quantity          → shop_inventory.quantity
+ *   lowStockThreshold → shop_inventory.low_stock_threshold
+ *   isAvailable       → shop_inventory.is_available
+ *   updatedAt         → shop_inventory.updated_at
+ *   product           → joined from customer_products (not a column)
+ *   stockStatus       → computed client-side (not stored)
  */
 export interface InventoryItem {
   id: string;
+  shopId: string;
   productId: string;
-  /** Populated via JOIN with products table. */
-  product: Product;
   quantity: number;
   lowStockThreshold: number;
-  /** Computed client-side: out_of_stock if qty=0, low_stock if qty <= threshold. */
-  stockStatus: StockStatus;
+  /** Per-shop availability toggle (distinct from customer_products.active). */
+  isAvailable: boolean;
   updatedAt: string;
+  /** Populated via JOIN with customer_products. Not a database column. */
+  product: Product;
+  /** Computed client-side — not stored in the database. */
+  stockStatus: StockStatus;
 }

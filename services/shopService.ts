@@ -1,285 +1,709 @@
 /**
- * shopService.ts — Shop module service layer
+ * shopService.ts — Shop Operations & Administration service layer
  *
- * ⚠️  IMPORTANT — DATABASE STATUS:
- *     The Supabase tables required by this service
- *     (shops, shop_staff, products, inventory, orders, order_items, pickup_passes)
- *     have NOT yet been confirmed to exist in the live project.
- *     Migration 001 is empty. Migrations 002–004 only create:
- *       profiles, pickup_hubs, notifications.
+ * Member 4 — Reads from and writes to the shared customer_* tables
+ * defined in migration 005 and extended in migration 006.
  *
- *     All functions below are TYPED STUBS. They throw descriptive errors
- *     until the corresponding migration is applied and confirmed.
+ * DATABASE PREREQUISITE:
+ *   Apply migrations in order:
+ *     1. supabase/migrations/005_customer_ordering.sql
+ *     2. supabase/migrations/006_shop_operations.sql
  *
- *     DO NOT call these functions in production UI until the TODO comment
- *     for each function is resolved.
+ * TABLE MAPPING (no bare-name tables — all shared with customer side):
+ *   customer_shops         → shop identity + owner link
+ *   customer_products      → product catalog (read-only here)
+ *   customer_orders        → order queue; shop can READ + UPDATE status
+ *   customer_order_items   → line items; shop can READ + UPDATE is_packed
+ *   shop_staff             → staff members (006)
+ *   shop_inventory         → per-shop stock quantities (006)
+ *   pickup_verifications   → handover event log (006)
+ *   security_events        → admin monitoring feed (006)
  *
- *     DO NOT add fake/hardcoded return values here — use local mock
- *     constants inside the screen files for visual development instead.
+ * RPC FUNCTIONS (defined in migration 006):
+ *   verify_staff_pin(staff_code, pin_plain, shop_id) → jsonb
+ *   get_shop_dashboard_summary(shop_id)              → jsonb
+ *
+ * SECURITY:
+ *   - PIN hashes are NEVER returned to the client; verified via RPC only.
+ *   - All shop writes are guarded by is_shop_owner(shop_id) RLS.
+ *   - Admin writes are guarded by is_admin() RLS.
+ *   - Do NOT expose service-role keys in client code.
+ *
+ * DO NOT MODIFY:
+ *   services/orderService.ts, services/cartService.ts,
+ *   services/productService.ts — Member 2 / 3 files.
  */
 
 import { supabase } from "@/lib/supabase";
-import type { ShopOrderStatus, ShopOrder } from "@/types/shopOrder";
+import type {
+  ShopOrderStatus,
+  ShopOrder,
+  ShopOrderItem,
+  PickupVerification,
+  SecurityEvent,
+  SecurityEventType,
+  SecurityEventSeverity,
+} from "@/types/shopOrder";
 import type { InventoryItem } from "@/types/product";
-import type { ShopDashboardSummary, ShopProfile } from "@/types/shop";
+import type {
+  ShopDashboardSummary,
+  ShopProfile,
+  StaffLoginResult,
+} from "@/types/shop";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shop Profile
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────
 
 /**
- * Loads the shop profile linked to the currently authenticated user.
- *
- * TODO: Implement once migration 005 is applied.
- *
- * Implementation outline:
- *   const { data: userData } = await supabase.auth.getUser();
- *   if (!userData.user) return null;
- *   const { data, error } = await supabase
- *     .from('shops')
- *     .select('*')
- *     .eq('profile_id', userData.user.id)
- *     .single();
- *   if (error) throw error;
- *   return data as ShopProfile;
- *
- * Requires: migration 005 (shops table + RLS: authenticated users can read
- *           their own shop row; is_shop() RLS function).
+ * Computes SLA timestamp fields to include when updating order status.
+ * Only sets a timestamp once (null-guarded on the DB side via the trigger).
  */
-export async function getShopProfile(): Promise<ShopProfile | null> {
-  void supabase; // referenced to prevent unused-import lint warnings
-  throw new Error(
-    "getShopProfile: `shops` table not confirmed. Apply migration 005 first.",
-  );
+function slaTimestampFor(status: ShopOrderStatus): Record<string, string | null> {
+  const now = new Date().toISOString();
+  switch (status) {
+    case "accepted": return { accepted_at: now };
+    case "packing":  return { packing_started_at: now };
+    case "ready":    return { ready_at: now };
+    default:         return {};
+  }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Dashboard
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Shop Profile
+// ─────────────────────────────────────────────────────────────
 
 /**
- * Returns aggregated order counts and revenue metrics for the shop dashboard.
+ * Returns the shop profile linked to the given profile ID.
+ * Called after the shop owner signs in via Supabase Auth.
  *
- * TODO: Implement once migrations 005 & 006 are applied.
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner() or is_admin().
  *
- * Implementation outline:
- *   const { count: liveCount } = await supabase
- *     .from('orders')
- *     .select('*', { count: 'exact', head: true })
- *     .eq('shop_id', shopId)
- *     .in('status', ['new', 'accepted', 'packing', 'ready']);
- *   // ... additional queries for packing, ready, completed, revenue
+ * @param profileId - auth.users id of the signed-in shop owner.
+ */
+export async function getShopByProfileId(
+  profileId: string,
+): Promise<ShopProfile | null> {
+  const { data, error } = await supabase
+    .from("customer_shops")
+    .select(
+      "id, profile_id, hub_id, name, address, phone, pickup_counter, " +
+      "preparation_minutes, active, is_open, opened_at",
+    )
+    .eq("profile_id", profileId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as unknown as Record<string, unknown>;
+  return {
+    id:            row.id as string,
+    profileId:     (row.profile_id as string | null) ?? null,
+    hubId:         (row.hub_id as string | null) ?? null,
+    name:          row.name as string,
+    address:       row.address as string,
+    phone:         (row.phone as string | null) ?? null,
+    pickupCounter: row.pickup_counter as string,
+    prepMinutes:   row.preparation_minutes as number,
+    active:        row.active as boolean,
+    isOpen:        row.is_open as boolean,
+    openedAt:      (row.opened_at as string | null) ?? null,
+  } satisfies ShopProfile;
+}
+
+/**
+ * @deprecated Use getShopByProfileId() instead.
+ * Kept for backward compatibility during refactor.
+ */
+export async function getShopProfile(): Promise<ShopProfile | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return null;
+  return getShopByProfileId(userData.user.id);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Staff Authentication
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Verifies a staff PIN via the verify_staff_pin() Supabase RPC.
  *
- * Requires: migration 006 (orders, order_items tables).
+ * The RPC runs with SECURITY DEFINER — pin_hash is compared
+ * server-side and is NEVER sent to the client. Failed attempts
+ * are automatically logged to security_events by the RPC.
+ *
+ * Requires: migration 006 applied.
+ *
+ * @param staffCode - Human-readable staff ID, e.g. "KW-07".
+ * @param pin       - Raw 4-digit PIN (sent over TLS; never stored).
+ * @param shopId    - UUID of the shop this staff member belongs to.
+ * @returns StaffLoginResult on success, or null on invalid credentials.
+ */
+export async function verifyStaffPin(
+  staffCode: string,
+  pin: string,
+  shopId: string,
+): Promise<StaffLoginResult | null> {
+  const { data, error } = await supabase.rpc("verify_staff_pin", {
+    p_staff_code: staffCode,
+    p_pin_plain:  pin,
+    p_shop_id:    shopId,
+  });
+
+  if (error) throw error;
+
+  const result = data as {
+    success: boolean;
+    reason?: string;
+    staff_id?: string;
+    staff_code?: string;
+    full_name?: string;
+    role?: string;
+    shift?: string;
+  };
+
+  if (!result.success) return null;
+
+  return {
+    success:   true,
+    staffId:   result.staff_id!,
+    staffCode: result.staff_code!,
+    fullName:  result.full_name!,
+    role:      result.role as StaffLoginResult["role"],
+    shift:     result.shift as StaffLoginResult["shift"],
+  } satisfies StaffLoginResult;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dashboard
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns aggregated order counts and low-stock metrics for the
+ * shop dashboard. Calls the get_shop_dashboard_summary() RPC.
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: caller must be shop owner or admin.
+ *
+ * @param shopId - UUID of the shop.
  */
 export async function getShopDashboardSummary(
   shopId: string,
 ): Promise<ShopDashboardSummary> {
-  void shopId;
-  throw new Error(
-    "getShopDashboardSummary: `orders` table not confirmed. Apply migration 006 first.",
-  );
+  const { data, error } = await supabase.rpc("get_shop_dashboard_summary", {
+    p_shop_id: shopId,
+  });
+
+  if (error) throw error;
+
+  const d = data as {
+    liveOrderCount:      number;
+    pendingPackingCount: number;
+    readyForPickupCount: number;
+    completedToday:      number;
+    grossSalesToday:     number;
+    lowStockItemCount:   number;
+  };
+
+  return {
+    liveOrderCount:      d.liveOrderCount,
+    pendingPackingCount: d.pendingPackingCount,
+    readyForPickupCount: d.readyForPickupCount,
+    completedToday:      d.completedToday,
+    grossSalesToday:     d.grossSalesToday,
+    lowStockItemCount:   d.lowStockItemCount,
+  } satisfies ShopDashboardSummary;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Orders
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Orders — Read
+// ─────────────────────────────────────────────────────────────
 
 /**
- * Returns the list of orders for a shop, optionally filtered by status.
+ * Returns the list of orders for a shop, newest first.
+ * Optionally filtered to one or more statuses.
  *
- * TODO: Implement once migration 006 is applied.
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
  *
- * Implementation outline:
- *   let query = supabase
- *     .from('orders')
- *     .select('*, profiles!customer_id(full_name, phone)')
- *     .eq('shop_id', shopId)
- *     .order('created_at', { ascending: false });
- *   if (statusFilter?.length) query = query.in('status', statusFilter);
- *   const { data, error } = await query;
- *   if (error) throw error;
- *   return data as ShopOrder[];
- *
- * Requires: migration 006 (orders table + RLS allowing shop to read their orders).
+ * @param shopId       - UUID of the shop.
+ * @param statusFilter - Optional array of statuses to filter by.
  */
 export async function getIncomingOrders(
   shopId: string,
   statusFilter?: ShopOrderStatus[],
 ): Promise<ShopOrder[]> {
-  void shopId;
-  void statusFilter;
-  throw new Error(
-    "getIncomingOrders: `orders` table not confirmed. Apply migration 006 first.",
+  let query = supabase
+    .from("customer_orders")
+    .select(
+      "id, shop_id, customer_id, reference, pickup_pin, status, " +
+      "payment_method, payment_status, customer_name, customer_phone, " +
+      "packing_instructions, travel_method, pickup_start_at, pickup_end_at, " +
+      "subtotal_lkr, savings_lkr, service_fee_lkr, total_lkr, " +
+      "created_at, updated_at, accepted_at, packing_started_at, ready_at",
+    )
+    .eq("shop_id", shopId)
+    .order("created_at", { ascending: false });
+
+  if (statusFilter && statusFilter.length > 0) {
+    query = query.in("status", statusFilter);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return ((data as unknown as Record<string, unknown>[]) ?? []).map(
+    (row) => mapOrderRow(row),
   );
 }
 
 /**
- * Returns full details for a single order, including all order items.
+ * Returns full details for a single order, including all line items.
  *
- * TODO: Implement once migration 006 is applied.
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
  *
- * Implementation outline:
- *   const { data, error } = await supabase
- *     .from('orders')
- *     .select('*, order_items(*, products(name, unit_label)), profiles!customer_id(*)')
- *     .eq('id', orderId)
- *     .single();
- *   if (error) throw error;
- *   return data as ShopOrder;
- *
- * Requires: migration 006 (orders, order_items tables).
+ * @param orderId - UUID of the order.
  */
 export async function getShopOrderById(
   orderId: string,
 ): Promise<ShopOrder | null> {
-  void orderId;
-  throw new Error(
-    "getShopOrderById: `orders` table not confirmed. Apply migration 006 first.",
-  );
+  const { data, error } = await supabase
+    .from("customer_orders")
+    .select(
+      "id, shop_id, customer_id, reference, pickup_pin, status, " +
+      "payment_method, payment_status, customer_name, customer_phone, " +
+      "packing_instructions, travel_method, pickup_start_at, pickup_end_at, " +
+      "subtotal_lkr, savings_lkr, service_fee_lkr, total_lkr, " +
+      "created_at, updated_at, accepted_at, packing_started_at, ready_at, " +
+      "customer_order_items(id, order_id, product_id, product_name, " +
+      "product_unit, image_url, quantity, unit_price_lkr, substitution, " +
+      "is_packed, packed_at)",
+    )
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as unknown as Record<string, unknown>;
+  const rawItems = (row["customer_order_items"] as Record<string, unknown>[]) ?? [];
+  const items: ShopOrderItem[] = rawItems.map(mapItemRow);
+
+  return mapOrderRow(row, items);
 }
+
+// ─────────────────────────────────────────────────────────────
+// Orders — Update
+// ─────────────────────────────────────────────────────────────
 
 /**
  * Transitions an order to a new lifecycle status.
+ * Automatically sets the corresponding SLA timestamp.
  *
- * TODO: Implement once migration 006 is applied.
+ * Allowed transitions (enforced by canTransitionShopOrder()):
+ *   placed → accepted
+ *   accepted → packing
+ *   packing → ready
+ *   ready → collected
+ *   placed | accepted → cancelled
  *
- * Implementation outline:
- *   const { error } = await supabase
- *     .from('orders')
- *     .update({ status: newStatus, updated_at: new Date().toISOString() })
- *     .eq('id', orderId);
- *   if (error) throw error;
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
+ * Column grant: UPDATE (status, updated_at, accepted_at,
+ *               packing_started_at, ready_at) only.
  *
- * Requires: migration 006 + RLS policy allowing shop to UPDATE their own orders.
+ * @param orderId   - UUID of the order.
+ * @param newStatus - Target status.
  */
 export async function updateOrderStatus(
   orderId: string,
   newStatus: ShopOrderStatus,
 ): Promise<void> {
-  void orderId;
-  void newStatus;
-  throw new Error(
-    "updateOrderStatus: `orders` table not confirmed. Apply migration 006 first.",
-  );
+  const { error } = await supabase
+    .from("customer_orders")
+    .update({
+      status: newStatus,
+      ...slaTimestampFor(newStatus),
+    })
+    .eq("id", orderId);
+
+  if (error) throw error;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Packing
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Marks a single order item as packed (or unpacked).
+ * Writes to customer_order_items.is_packed and packed_at.
+ *
+ * Requires: migration 006 applied (is_packed, packed_at columns).
+ * RLS: shop owner can UPDATE is_packed / packed_at.
+ *
+ * @param itemId   - UUID of the customer_order_items row.
+ * @param isPacked - True to mark as packed; false to unmark.
+ */
+export async function updatePackingItem(
+  itemId: string,
+  isPacked: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from("customer_order_items")
+    .update({
+      is_packed: isPacked,
+      packed_at: isPacked ? new Date().toISOString() : null,
+    })
+    .eq("id", itemId);
+
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────
 // Inventory
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
 
 /**
  * Returns all inventory items for a shop, joined with product details.
  *
- * TODO: Implement once migration 005 is applied.
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
  *
- * Implementation outline:
- *   const { data, error } = await supabase
- *     .from('inventory')
- *     .select('*, products!product_id(*)')
- *     .eq('products.shop_id', shopId);
- *   if (error) throw error;
- *   return (data ?? []).map(row => ({
- *     ...row,
- *     stockStatus: computeStockStatus(row.quantity, row.low_stock_threshold),
- *   })) as InventoryItem[];
- *
- * Requires: migration 005 (products, inventory tables).
+ * @param shopId - UUID of the shop.
  */
 export async function getInventory(shopId: string): Promise<InventoryItem[]> {
-  void shopId;
-  throw new Error(
-    "getInventory: `inventory` table not confirmed. Apply migration 005 first.",
-  );
+  const { data, error } = await supabase
+    .from("shop_inventory")
+    .select(
+      "id, shop_id, product_id, quantity, low_stock_threshold, " +
+      "is_available, updated_at, " +
+      "customer_products(id, shop_id, name, unit, price_lkr, " +
+      "regular_price_lkr, image_url, active)",
+    )
+    .eq("shop_id", shopId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return ((data as unknown as Record<string, unknown>[]) ?? []).map((row) => {
+    const p = row.customer_products as Record<string, unknown> | null;
+    const qty = row.quantity as number;
+    const threshold = row.low_stock_threshold as number;
+
+    return {
+      id:                row.id as string,
+      shopId:            row.shop_id as string,
+      productId:         row.product_id as string,
+      quantity:          qty,
+      lowStockThreshold: threshold,
+      isAvailable:       row.is_available as boolean,
+      updatedAt:         row.updated_at as string,
+      product: p
+        ? {
+            id:              p.id as string,
+            shopId:          p.shop_id as string,
+            name:            p.name as string,
+            unit:            p.unit as string,
+            priceLkr:        p.price_lkr as number,
+            regularPriceLkr: p.regular_price_lkr as number,
+            imageUrl:        (p.image_url as string | null) ?? null,
+            active:          p.active as boolean,
+          }
+        : {
+            id: row.product_id as string, shopId, name: "Unknown product",
+            unit: "", priceLkr: 0, regularPriceLkr: 0,
+            imageUrl: null, active: false,
+          },
+      stockStatus:
+        qty === 0
+          ? "out_of_stock"
+          : qty <= threshold
+          ? "low_stock"
+          : "in_stock",
+    } satisfies InventoryItem;
+  });
 }
 
 /**
- * Updates stock quantity and availability toggle for a product.
+ * Updates the stock quantity and per-shop availability for a product.
  *
- * TODO: Implement once migration 005 is applied.
+ * Requires: migration 006 applied.
+ * RLS: is_shop_owner(shop_id).
+ * Column grant: UPDATE (quantity, is_available, updated_at) via shop policy.
  *
- * Implementation outline:
- *   const { error: invError } = await supabase
- *     .from('inventory')
- *     .update({ quantity, updated_at: new Date().toISOString() })
- *     .eq('product_id', productId);
- *   const { error: prodError } = await supabase
- *     .from('products')
- *     .update({ is_available: isAvailable })
- *     .eq('id', productId);
- *   if (invError) throw invError;
- *   if (prodError) throw prodError;
- *
- * Requires: migration 005 + RLS allowing shop to UPDATE their own inventory.
+ * @param shopId      - UUID of the shop.
+ * @param productId   - UUID of the customer_product.
+ * @param quantity    - New stock quantity (non-negative integer).
+ * @param isAvailable - Whether the product is available for ordering.
  */
 export async function updateStock(
+  shopId: string,
   productId: string,
   quantity: number,
   isAvailable: boolean,
 ): Promise<void> {
-  void productId;
-  void quantity;
-  void isAvailable;
-  throw new Error(
-    "updateStock: `inventory` table not confirmed. Apply migration 005 first.",
-  );
+  const { error } = await supabase
+    .from("shop_inventory")
+    .update({
+      quantity,
+      is_available: isAvailable,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId)
+    .eq("product_id", productId);
+
+  if (error) throw error;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// QR Pickup Verification
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// QR / PIN Pickup Verification
+// ─────────────────────────────────────────────────────────────
 
 /**
- * Validates a scanned QR token and marks the order as collected.
+ * Verifies a pickup PIN entered by the staff member on handover.
  *
- * TODO: Implement once migration 006 is applied.
+ * Looks up the order by orderId, checks that the provided PIN
+ * matches customer_orders.pickup_pin, then:
+ *   1. Updates the order status to 'collected'.
+ *   2. Writes a pickup_verifications record.
  *
- * Implementation outline:
- *   1. SELECT pickup_passes WHERE qr_token = token AND is_used = false
- *   2. Verify expires_at has not passed
- *   3. UPDATE pickup_passes SET is_used = true WHERE id = pass.id
- *   4. UPDATE orders SET status = 'completed' WHERE id = pass.order_id
- *   5. Return { orderId, customerName } for the confirmation screen
+ * Requires: migrations 005 + 006 applied.
+ * RLS: shop owner can UPDATE order status; INSERT pickup_verifications.
  *
- * Requires: migration 006 (pickup_passes, orders tables).
+ * @param orderId    - UUID of the order being handed over.
+ * @param pin        - 4-digit PIN entered by staff (from customer).
+ * @param staffId    - UUID of the shop_staff row performing the handover.
+ * @param method     - Verification method (default: 'pin').
+ * @returns The matched order's reference and customer name, or null if PIN invalid.
  */
 export async function verifyPickup(
-  qrToken: string,
-): Promise<{ orderId: string; customerName: string } | null> {
-  void qrToken;
-  throw new Error(
-    "verifyPickup: `pickup_passes` table not confirmed. Apply migration 006 first.",
-  );
+  orderId: string,
+  pin: string,
+  staffId?: string,
+  method: PickupVerification["verificationMethod"] = "pin",
+): Promise<{ orderId: string; reference: string; customerName: string } | null> {
+  // 1. Fetch order — confirm PIN matches
+  const { data: order, error: fetchError } = await supabase
+    .from("customer_orders")
+    .select("id, reference, customer_name, pickup_pin, status, shop_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  if (!order) return null;
+  if (order.pickup_pin !== pin) return null;
+  if (order.status === "collected" || order.status === "cancelled") return null;
+
+  // 2. Update order status to 'collected'
+  const { error: updateError } = await supabase
+    .from("customer_orders")
+    .update({ status: "collected", ...slaTimestampFor("collected") })
+    .eq("id", orderId);
+
+  if (updateError) throw updateError;
+
+  // 3. Write pickup verification record
+  const { error: verifyError } = await supabase
+    .from("pickup_verifications")
+    .insert({
+      order_id:            orderId,
+      verified_by:         staffId ?? null,
+      verification_method: method,
+      handover_status:     "completed",
+    });
+
+  if (verifyError) throw verifyError;
+
+  return {
+    orderId:      order.id,
+    reference:    order.reference,
+    customerName: order.customer_name,
+  };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Staff Authentication
-// ─────────────────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────
+// Security Events
+// ─────────────────────────────────────────────────────────────
 
 /**
- * Verifies a staff member's PIN for shop terminal login.
+ * Inserts a security event into the monitoring feed.
+ * Callable by any authenticated user (for client-side logging of
+ * failed logins before a session exists).
  *
- * TODO: Schema decision required before this can be implemented.
+ * Requires: migration 006 applied.
  *
- * Options (discuss with team):
- *   A. Dedicated `shop_staff` table with hashed PIN — verify via
- *      a Supabase Edge Function (never expose hashed PIN to client).
- *   B. Use Supabase Auth with per-staff accounts (email/phone + password),
- *      then verify profile.role === 'shop' after sign-in.
- *   C. Shared shop passcode in the `shops` table (simplest but least secure).
- *
- * ⚠️  NEVER log, store, or transmit the raw PIN. Hash server-side only.
- *
- * @param _staffId  - Human-readable staff identifier (e.g. "KW-07")
- * @param _pin      - 4-digit PIN — must not be logged
- * @param _shopId   - The shop this staff member belongs to
+ * @param event - Partial event payload (id, created_at auto-generated).
  */
-export async function verifyStaffPin(
-  _staffId: string,
-  _pin: string,
-  _shopId: string,
-): Promise<boolean> {
-  throw new Error(
-    "verifyStaffPin: Staff PIN schema not yet defined. See TODO comment for implementation options.",
-  );
+export async function logSecurityEvent(event: {
+  eventType: SecurityEventType;
+  severity: SecurityEventSeverity;
+  title: string;
+  description?: string;
+  userId?: string;
+  shopId?: string;
+  staffId?: string;
+}): Promise<void> {
+  const { error } = await supabase.from("security_events").insert({
+    event_type:  event.eventType,
+    severity:    event.severity,
+    title:       event.title,
+    description: event.description ?? null,
+    user_id:     event.userId ?? null,
+    shop_id:     event.shopId ?? null,
+    staff_id:    event.staffId ?? null,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Returns the most recent security events for the admin dashboard.
+ * Admin-only: enforced by RLS on security_events.
+ *
+ * Requires: migration 006 applied.
+ *
+ * @param limit - Maximum number of events to return (default 50).
+ */
+export async function getSecurityEvents(
+  limit = 50,
+): Promise<SecurityEvent[]> {
+  const { data, error } = await supabase
+    .from("security_events")
+    .select(
+      "id, event_type, severity, title, description, " +
+      "user_id, shop_id, staff_id, status, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return ((data as unknown as Record<string, unknown>[]) ?? []).map((row) => ({
+    id:          row.id as string,
+    eventType:   row.event_type as SecurityEventType,
+    severity:    row.severity as SecurityEventSeverity,
+    title:       row.title as string,
+    description: (row.description as string | null) ?? null,
+    userId:      (row.user_id as string | null) ?? null,
+    shopId:      (row.shop_id as string | null) ?? null,
+    staffId:     (row.staff_id as string | null) ?? null,
+    status:      row.status as SecurityEvent["status"],
+    createdAt:   row.created_at as string,
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin Dashboard
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns top-level admin dashboard metrics.
+ * Admin-only (is_admin() RLS enforced on aggregated tables).
+ *
+ * Requires: migrations 005 + 006 applied.
+ */
+export async function getAdminDashboardSummary(): Promise<{
+  activeShops: number;
+  activeUsers: number;
+  ordersToday: number;
+  openSecurityAlerts: number;
+}> {
+  const [shops, orders, alerts, profiles] = await Promise.all([
+    supabase
+      .from("customer_shops")
+      .select("id", { count: "exact", head: true })
+      .eq("active", true),
+    supabase
+      .from("customer_orders")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
+    supabase
+      .from("security_events")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open"),
+    supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active"),
+  ]);
+
+  if (shops.error)    throw shops.error;
+  if (orders.error)   throw orders.error;
+  if (alerts.error)   throw alerts.error;
+  if (profiles.error) throw profiles.error;
+
+  return {
+    activeShops:        shops.count   ?? 0,
+    activeUsers:        profiles.count ?? 0,
+    ordersToday:        orders.count   ?? 0,
+    openSecurityAlerts: alerts.count   ?? 0,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Internal row mappers
+// ─────────────────────────────────────────────────────────────
+
+function mapOrderRow(
+  row: Record<string, unknown>,
+  items?: ShopOrderItem[],
+): ShopOrder {
+  const order: ShopOrder = {
+    id:                  row.id as string,
+    shopId:              row.shop_id as string,
+    customerId:          row.customer_id as string,
+    reference:           row.reference as string,
+    pickupPin:           row.pickup_pin as string,
+    status:              row.status as ShopOrderStatus,
+    paymentMethod:       row.payment_method as ShopOrder["paymentMethod"],
+    paymentStatus:       row.payment_status as ShopOrder["paymentStatus"],
+    customerName:        row.customer_name as string,
+    customerPhone:       row.customer_phone as string,
+    packingInstructions: row.packing_instructions as string,
+    travelMethod:        row.travel_method as ShopOrder["travelMethod"],
+    pickupStartAt:       row.pickup_start_at as string,
+    pickupEndAt:         row.pickup_end_at as string,
+    subtotalLkr:         row.subtotal_lkr as number,
+    savingsLkr:          row.savings_lkr as number,
+    serviceFeeLkr:       row.service_fee_lkr as number,
+    totalLkr:            row.total_lkr as number,
+    createdAt:           row.created_at as string,
+    updatedAt:           (row.updated_at as string) ?? (row.created_at as string),
+    acceptedAt:          (row.accepted_at as string | null) ?? null,
+    packingStartedAt:    (row.packing_started_at as string | null) ?? null,
+    readyAt:             (row.ready_at as string | null) ?? null,
+  };
+
+  if (items) {
+    order.items = items;
+    const packed = items.filter((i) => i.isPacked).length;
+    order.packingStatus =
+      packed === 0
+        ? "unpacked"
+        : packed === items.length
+        ? "fully_packed"
+        : "partial";
+  }
+
+  return order;
+}
+
+function mapItemRow(row: Record<string, unknown>): ShopOrderItem {
+  return {
+    id:           row.id as string,
+    orderId:      row.order_id as string,
+    productId:    (row.product_id as string | null) ?? null,
+    productName:  row.product_name as string,
+    productUnit:  row.product_unit as string,
+    imageUrl:     (row.image_url as string | null) ?? null,
+    quantity:     row.quantity as number,
+    unitPriceLkr: row.unit_price_lkr as number,
+    substitution: (row.substitution as ShopOrderItem["substitution"]) ?? { type: "call" },
+    isPacked:     (row.is_packed as boolean) ?? false,
+    packedAt:     (row.packed_at as string | null) ?? null,
+  };
 }

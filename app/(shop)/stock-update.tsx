@@ -6,6 +6,7 @@ import { Product, InventoryItem, StockStatus } from "@/types/product";
 // --- Types & Mock Data ---
 interface ExtendedProduct extends Product {
   sku: string;
+  category: string;
   comparisonNote?: string;
 }
 
@@ -16,108 +17,113 @@ interface ExtendedInventoryItem extends Omit<InventoryItem, 'product'> {
 const INITIAL_INVENTORY: ExtendedInventoryItem[] = [
   {
     id: "inv-1",
+    shopId: "shop-1",
     productId: "prod-1",
     quantity: 14,
     lowStockThreshold: 5,
+    isAvailable: true,
     stockStatus: "in_stock",
     updatedAt: "2026-10-02T12:00:00Z",
     product: {
       id: "prod-1",
       shopId: "shop-1",
       name: "Araliya Keeri Samba 5kg",
-      description: null,
-      price: 1480.00,
-      unitLabel: "5kg",
-      category: "Pantry",
+      unit: "5kg",
+      priceLkr: 1480,
+      regularPriceLkr: 1550,
       imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
+      active: true,
       sku: "RCE-5014",
+      category: "Pantry",
       comparisonNote: "Lowest in Malabe",
     }
   },
   {
     id: "inv-2",
+    shopId: "shop-1",
     productId: "prod-2",
     quantity: 4,
     lowStockThreshold: 5,
+    isAvailable: true,
     stockStatus: "low_stock",
     updatedAt: "2026-10-02T12:00:00Z",
     product: {
       id: "prod-2",
       shopId: "shop-1",
       name: "Highland Fresh Milk 1L",
-      description: null,
-      price: 460.00,
-      unitLabel: "1L",
-      category: "Dairy & Chilled",
+      unit: "1L",
+      priceLkr: 460,
+      regularPriceLkr: 490,
       imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
+      active: true,
       sku: "MLK-1022",
+      category: "Dairy & Chilled",
     }
   },
   {
     id: "inv-3",
+    shopId: "shop-1",
     productId: "prod-3",
     quantity: 0,
     lowStockThreshold: 5,
+    isAvailable: false,
     stockStatus: "out_of_stock",
     updatedAt: "2026-10-02T12:00:00Z",
     product: {
       id: "prod-3",
       shopId: "shop-1",
       name: "Pelwatte Salted Butter 200g",
-      description: null,
-      price: 720.00,
-      unitLabel: "200g",
-      category: "Dairy & Chilled",
+      unit: "200g",
+      priceLkr: 720,
+      regularPriceLkr: 760,
       imageUrl: null,
-      isAvailable: false,
-      createdAt: "2026-10-02T10:00:00Z",
+      active: true,
       sku: "BTR-0881",
+      category: "Dairy & Chilled",
     }
   },
   {
     id: "inv-4",
+    shopId: "shop-1",
     productId: "prod-4",
     quantity: 28,
     lowStockThreshold: 10,
+    isAvailable: true,
     stockStatus: "in_stock",
     updatedAt: "2026-10-02T12:00:00Z",
     product: {
       id: "prod-4",
       shopId: "shop-1",
       name: "Ceylon Red Lentils 1kg",
-      description: null,
-      price: 410.00,
-      unitLabel: "1kg",
-      category: "Pantry Staples",
+      unit: "1kg",
+      priceLkr: 410,
+      regularPriceLkr: 440,
       imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
+      active: true,
       sku: "DHAL-402",
+      category: "Pantry Staples",
     }
   },
   {
     id: "inv-5",
+    shopId: "shop-1",
     productId: "prod-5",
     quantity: 12,
     lowStockThreshold: 5,
+    isAvailable: true,
     stockStatus: "in_stock",
     updatedAt: "2026-10-02T12:00:00Z",
     product: {
       id: "prod-5",
       shopId: "shop-1",
       name: "Farm Fresh Brown Eggs 10",
-      description: null,
-      price: 410.00,
-      unitLabel: "10 pack",
-      category: "Fresh Foods",
+      unit: "10 pack",
+      priceLkr: 410,
+      regularPriceLkr: 440,
       imageUrl: null,
-      isAvailable: true,
-      createdAt: "2026-10-02T10:00:00Z",
+      active: true,
       sku: "EGG-0091",
+      category: "Fresh Foods",
     }
   }
 ];
@@ -136,7 +142,7 @@ export default function StockUpdate() {
       if (item.id !== id) return item;
 
       let newStatus: StockStatus = "in_stock";
-      let newIsAvailable = item.product.isAvailable;
+      let newIsAvailable = item.isAvailable;
 
       if (newQty === 0) {
         newStatus = "out_of_stock";
@@ -148,11 +154,8 @@ export default function StockUpdate() {
       return {
         ...item,
         quantity: newQty,
+        isAvailable: newIsAvailable,
         stockStatus: newStatus,
-        product: {
-          ...item.product,
-          isAvailable: newIsAvailable
-        }
       };
     }));
   };
@@ -162,10 +165,7 @@ export default function StockUpdate() {
       if (item.id !== id) return item;
       return {
         ...item,
-        product: {
-          ...item.product,
-          isAvailable: !item.product.isAvailable
-        }
+        isAvailable: !item.isAvailable,
       };
     }));
   };
@@ -277,10 +277,10 @@ export default function StockUpdate() {
                 </View>
                 <View style={styles.availabilityToggle}>
                   <Text style={styles.toggleLabel}>
-                    {item.product.isAvailable ? "ON" : "OFF"}
+                    {item.isAvailable ? "ON" : "OFF"}
                   </Text>
                   <Switch
-                    value={item.product.isAvailable}
+                    value={item.isAvailable}
                     onValueChange={() => toggleAvailability(item.id)}
                     trackColor={{ false: "#E0E0EB", true: "#00A859" }}
                     thumbColor="#FFFFFF"
@@ -297,7 +297,7 @@ export default function StockUpdate() {
                     styles.stockBadgeText,
                     isOut ? styles.stockBadgeTextOut : isLow ? styles.stockBadgeTextLow : styles.stockBadgeTextIn
                   ]}>
-                    {isOut ? "OUT OF STOCK" : isLow ? "Low Stock" : "In Stock"} ({item.quantity} {item.quantity === 1 ? "unit" : item.product.unitLabel.includes("pack") || item.product.unitLabel.includes("carton") ? "units" : "units"})
+                    {isOut ? "OUT OF STOCK" : isLow ? "Low Stock" : "In Stock"} ({item.quantity} {item.product.unit.includes("pack") || item.product.unit.includes("carton") ? "units" : "units"})
                   </Text>
                 </View>
                 {item.product.comparisonNote && (
@@ -308,7 +308,7 @@ export default function StockUpdate() {
               <View style={styles.controlsRow}>
                 <View style={styles.priceContainer}>
                   <Text style={styles.priceLabel}>Current Price:</Text>
-                  <Text style={styles.priceValue}>LKR {item.product.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                  <Text style={styles.priceValue}>LKR {item.product.priceLkr.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
                 </View>
 
                 {isOut ? (

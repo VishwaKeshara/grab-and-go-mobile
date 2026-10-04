@@ -1,11 +1,12 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable, PressableStateCallbackType } from "react-native";
 import { router } from "expo-router";
-import { ShopOrder, ShopOrderStatus } from "@/types/shopOrder";
+import { ShopOrder, ShopOrderStatus, ShopOrderItem } from "@/types/shopOrder";
 
 // --- Mock Data ---
-interface ExtendedShopOrder extends ShopOrder {
-  // Extra fields just for mock display that aren't in the base type yet
+interface ExtendedShopOrder extends Omit<ShopOrder, 'items'> {
+  // Mock data includes an items array with missing items handled locally
+  items?: ShopOrderItem[];
   urgencyLabel?: string;
   timeLeft?: string;
   tier?: string;
@@ -22,16 +23,27 @@ const INITIAL_MOCK_ORDERS: ExtendedShopOrder[] = [
     id: "GNG-MLB-9042",
     shopId: "shop-1",
     customerId: "cust-1",
+    reference: "GG-2026-9042",
+    pickupPin: "5182",
     customerName: "Dinithi Perera",
     customerPhone: "0000000000",
-    status: "new",
+    status: "placed",
     packingStatus: "unpacked",
-    pickupStatus: "pending",
-    totalAmount: 3100,
-    itemCount: 5,
-    pickupScheduledAt: "2026-10-02T17:30:00+05:30",
+    totalLkr: 3100,
+    subtotalLkr: 3100,
+    savingsLkr: 0,
+    serviceFeeLkr: 0,
+    paymentMethod: "card",
+    paymentStatus: "paid",
+    packingInstructions: "",
+    travelMethod: "walking",
+    pickupStartAt: "2026-10-02T17:30:00+05:30",
+    pickupEndAt: "2026-10-02T18:00:00+05:30",
     createdAt: "2026-10-02T17:12:00+05:30",
     updatedAt: "2026-10-02T17:12:00+05:30",
+    acceptedAt: null,
+    packingStartedAt: null,
+    readyAt: null,
     urgencyLabel: "URGENT",
     timeLeft: "01:42",
     tier: "VIP Commuter Tier 3",
@@ -43,13 +55,20 @@ const INITIAL_MOCK_ORDERS: ExtendedShopOrder[] = [
     id: "GNG-MLB-9048",
     shopId: "shop-1",
     customerId: "cust-2",
+    reference: "GG-2026-9048",
+    pickupPin: "1111",
     customerName: "N/A",
     customerPhone: "0000000000",
-    status: "new",
+    status: "placed",
     packingStatus: "unpacked",
-    pickupStatus: "pending",
-    totalAmount: 1890,
-    itemCount: 2,
+    totalLkr: 1890,
+    subtotalLkr: 1890,
+    savingsLkr: 0,
+    serviceFeeLkr: 0,
+    paymentMethod: "card",
+    paymentStatus: "paid",
+    packingInstructions: "",
+    travelMethod: "walking",
     items: [
       {
         id: "item-1",
@@ -57,10 +76,12 @@ const INITIAL_MOCK_ORDERS: ExtendedShopOrder[] = [
         productId: "prod-1",
         productName: "Araliya Samba Rice 5kg",
         quantity: 1,
-        unitPrice: 1000,
-        unitLabel: "5kg",
+        unitPriceLkr: 1000,
+        productUnit: "5kg",
+        imageUrl: null,
+        substitution: { type: "call" },
         isPacked: false,
-        substituteProductId: null,
+        packedAt: null,
       },
       {
         id: "item-2",
@@ -68,31 +89,48 @@ const INITIAL_MOCK_ORDERS: ExtendedShopOrder[] = [
         productId: "prod-2",
         productName: "Premium Red Mysore Dhal 1kg",
         quantity: 1,
-        unitPrice: 890,
-        unitLabel: "1kg",
+        unitPriceLkr: 890,
+        productUnit: "1kg",
+        imageUrl: null,
+        substitution: { type: "call" },
         isPacked: false,
-        substituteProductId: null,
+        packedAt: null,
       },
     ],
-    pickupScheduledAt: "2026-10-02T18:15:00+05:30",
+    pickupStartAt: "2026-10-02T18:15:00+05:30",
+    pickupEndAt: "2026-10-02T18:30:00+05:30",
     createdAt: "2026-10-02T17:14:00+05:30",
     updatedAt: "2026-10-02T17:14:00+05:30",
+    acceptedAt: null,
+    packingStartedAt: null,
+    readyAt: null,
     urgencyLabel: "NEW INTAKE",
   },
   {
     id: "GNG-MLB-9039",
     shopId: "shop-1",
     customerId: "cust-3",
+    reference: "GG-2026-9039",
+    pickupPin: "9999",
     customerName: "R. Fernando",
     customerPhone: "0000000000",
     status: "ready",
     packingStatus: "fully_packed",
-    pickupStatus: "pending",
-    totalAmount: 4620,
-    itemCount: 3,
-    pickupScheduledAt: "2026-10-02T17:45:00+05:30",
+    totalLkr: 4620,
+    subtotalLkr: 4620,
+    savingsLkr: 0,
+    serviceFeeLkr: 0,
+    paymentMethod: "card",
+    paymentStatus: "paid",
+    packingInstructions: "",
+    travelMethod: "walking",
+    pickupStartAt: "2026-10-02T17:45:00+05:30",
+    pickupEndAt: "2026-10-02T18:00:00+05:30",
     createdAt: "2026-10-02T17:00:00+05:30",
     updatedAt: "2026-10-02T17:30:00+05:30",
+    acceptedAt: "2026-10-02T17:05:00+05:30",
+    packingStartedAt: "2026-10-02T17:10:00+05:30",
+    readyAt: "2026-10-02T17:30:00+05:30",
     stagingBay: "Staging Bay #B-01",
     proximity: "Within 500m - Proximity Ping Received",
     packingStateLabel: "Packed & Sealed in Thermal Bag",
@@ -120,7 +158,7 @@ export default function NewOrders() {
   };
 
   const filteredOrders = orders.filter((o) => {
-    if (activeTab === "All Incoming" && o.status !== "new") return false;
+    if (activeTab === "All Incoming" && o.status !== "placed") return false;
     if (activeTab === "Being Packed" && o.status !== "packing" && o.status !== "accepted") return false;
     if (activeTab === "Ready" && o.status !== "ready") return false;
 
@@ -133,7 +171,7 @@ export default function NewOrders() {
 
   const getTabCount = (tab: FilterTab) => {
     return orders.filter((o) => {
-      if (tab === "All Incoming") return o.status === "new";
+      if (tab === "All Incoming") return o.status === "placed";
       if (tab === "Being Packed") return o.status === "packing" || o.status === "accepted";
       if (tab === "Ready") return o.status === "ready";
       return false;
@@ -209,8 +247,8 @@ export default function NewOrders() {
             key={order.id}
             order={order}
             onAccept={() => handleStatusChange(order.id, "accepted")}
-            onReject={() => handleStatusChange(order.id, "rejected")}
-            onStage={() => handleStatusChange(order.id, "completed")}
+            onReject={() => handleStatusChange(order.id, "cancelled")}
+            onStage={() => handleStatusChange(order.id, "collected")}
           />
         ))}
 
@@ -267,13 +305,13 @@ function OrderCard({ order, onAccept, onReject, onStage }: { order: ExtendedShop
         </View>
       )}
 
-      {!order.items && order.itemCount > 0 && (
+      {!order.items && (
         <View style={styles.section}>
-          <Text style={styles.sectionText}>Items: {order.itemCount} items</Text>
+          <Text style={styles.sectionText}>Items: {(order as any).itemCount || 0} items</Text>
         </View>
       )}
 
-      <Text style={styles.totalText}>Total: LKR {order.totalAmount.toLocaleString()}</Text>
+      <Text style={styles.totalText}>Total: LKR {order.totalLkr.toLocaleString()}</Text>
 
       {/* Actions */}
       <View style={styles.actions}>
