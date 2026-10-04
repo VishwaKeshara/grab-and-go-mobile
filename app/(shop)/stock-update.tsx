@@ -14,160 +14,76 @@ interface ExtendedInventoryItem extends Omit<InventoryItem, 'product'> {
   product: ExtendedProduct;
 }
 
-const INITIAL_INVENTORY: ExtendedInventoryItem[] = [
-  {
-    id: "inv-1",
-    shopId: "shop-1",
-    productId: "prod-1",
-    quantity: 14,
-    lowStockThreshold: 5,
-    isAvailable: true,
-    stockStatus: "in_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-1",
-      shopId: "shop-1",
-      name: "Araliya Keeri Samba 5kg",
-      unit: "5kg",
-      priceLkr: 1480,
-      regularPriceLkr: 1550,
-      imageUrl: null,
-      active: true,
-      sku: "RCE-5014",
-      category: "Pantry",
-      comparisonNote: "Lowest in Malabe",
-    }
-  },
-  {
-    id: "inv-2",
-    shopId: "shop-1",
-    productId: "prod-2",
-    quantity: 4,
-    lowStockThreshold: 5,
-    isAvailable: true,
-    stockStatus: "low_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-2",
-      shopId: "shop-1",
-      name: "Highland Fresh Milk 1L",
-      unit: "1L",
-      priceLkr: 460,
-      regularPriceLkr: 490,
-      imageUrl: null,
-      active: true,
-      sku: "MLK-1022",
-      category: "Dairy & Chilled",
-    }
-  },
-  {
-    id: "inv-3",
-    shopId: "shop-1",
-    productId: "prod-3",
-    quantity: 0,
-    lowStockThreshold: 5,
-    isAvailable: false,
-    stockStatus: "out_of_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-3",
-      shopId: "shop-1",
-      name: "Pelwatte Salted Butter 200g",
-      unit: "200g",
-      priceLkr: 720,
-      regularPriceLkr: 760,
-      imageUrl: null,
-      active: true,
-      sku: "BTR-0881",
-      category: "Dairy & Chilled",
-    }
-  },
-  {
-    id: "inv-4",
-    shopId: "shop-1",
-    productId: "prod-4",
-    quantity: 28,
-    lowStockThreshold: 10,
-    isAvailable: true,
-    stockStatus: "in_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-4",
-      shopId: "shop-1",
-      name: "Ceylon Red Lentils 1kg",
-      unit: "1kg",
-      priceLkr: 410,
-      regularPriceLkr: 440,
-      imageUrl: null,
-      active: true,
-      sku: "DHAL-402",
-      category: "Pantry Staples",
-    }
-  },
-  {
-    id: "inv-5",
-    shopId: "shop-1",
-    productId: "prod-5",
-    quantity: 12,
-    lowStockThreshold: 5,
-    isAvailable: true,
-    stockStatus: "in_stock",
-    updatedAt: "2026-10-02T12:00:00Z",
-    product: {
-      id: "prod-5",
-      shopId: "shop-1",
-      name: "Farm Fresh Brown Eggs 10",
-      unit: "10 pack",
-      priceLkr: 410,
-      regularPriceLkr: 440,
-      imageUrl: null,
-      active: true,
-      sku: "EGG-0091",
-      category: "Fresh Foods",
-    }
-  }
-];
+import { supabase } from "@/lib/supabase";
+import { getShopByProfileId, getInventory, updateStock } from "@/services/shopService";
+import { useEffect } from "react";
 
 type FilterType = "All" | "Low Stock" | "Out of Stock";
 
 export default function StockUpdate() {
-  const [inventory, setInventory] = useState<ExtendedInventoryItem[]>(INITIAL_INVENTORY);
+  const [inventory, setInventory] = useState<ExtendedInventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("All");
+  
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [shopId, setShopId] = useState("");
 
-  const updateQuantity = (id: string, newQty: number) => {
-    if (newQty < 0) return;
-    
-    setInventory(prev => prev.map(item => {
-      if (item.id !== id) return item;
-
-      let newStatus: StockStatus = "in_stock";
-      let newIsAvailable = item.isAvailable;
-
-      if (newQty === 0) {
-        newStatus = "out_of_stock";
-        newIsAvailable = false;
-      } else if (newQty <= item.lowStockThreshold) {
-        newStatus = "low_stock";
-      }
-
-      return {
-        ...item,
-        quantity: newQty,
-        isAvailable: newIsAvailable,
-        stockStatus: newStatus,
-      };
-    }));
+  const fetchInventory = async (userId: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const shop = await getShopByProfileId(userId);
+      if (!shop) throw new Error("Shop not found");
+      setShopId(shop.id);
+      
+      const items = (await getInventory(shop.id)) as unknown as ExtendedInventoryItem[];
+      setInventory(items || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to load inventory");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const toggleAvailability = (id: string) => {
-    setInventory(prev => prev.map(item => {
-      if (item.id !== id) return item;
-      return {
-        ...item,
-        isAvailable: !item.isAvailable,
-      };
-    }));
+  const checkSessionAndFetch = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/(shop)/shop-login");
+        return;
+      }
+      setSessionChecked(true);
+      await fetchInventory(session.user.id);
+    } catch (err: any) {
+      setError("Session error. Please login again.");
+    }
+  };
+
+  useEffect(() => {
+    checkSessionAndFetch();
+  }, []);
+
+  const updateQuantity = async (id: string, newQty: number, productId: string, isAvailable: boolean) => {
+    if (newQty < 0) return;
+    try {
+      await updateStock(shopId, productId, newQty, isAvailable);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchInventory(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update stock");
+    }
+  };
+
+  const toggleAvailability = async (id: string, currentAvail: boolean, quantity: number, productId: string) => {
+    try {
+      await updateStock(shopId, productId, quantity, !currentAvail);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchInventory(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update availability");
+    }
   };
 
   const filteredInventory = useMemo(() => {
@@ -198,6 +114,14 @@ export default function StockUpdate() {
       out: inventory.filter(i => i.stockStatus === "out_of_stock").length,
     };
   }, [inventory]);
+
+  if (!sessionChecked) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#4A4A68' }}>Checking session...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -264,7 +188,14 @@ export default function StockUpdate() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {filteredInventory.map((item) => {
+        {error ? (
+          <Text style={{ color: 'red', margin: 20 }}>{error}</Text>
+        ) : loading ? (
+          <Text style={{ color: '#4A4A68', margin: 20 }}>Loading inventory...</Text>
+        ) : filteredInventory.length === 0 ? (
+          <Text style={{ color: '#4A4A68', margin: 20 }}>No items match your filter.</Text>
+        ) : (
+          filteredInventory.map((item) => {
           const isOut = item.stockStatus === "out_of_stock";
           const isLow = item.stockStatus === "low_stock";
           
@@ -281,7 +212,7 @@ export default function StockUpdate() {
                   </Text>
                   <Switch
                     value={item.isAvailable}
-                    onValueChange={() => toggleAvailability(item.id)}
+                    onValueChange={() => toggleAvailability(item.id, item.isAvailable, item.quantity, item.product.id)}
                     trackColor={{ false: "#E0E0EB", true: "#00A859" }}
                     thumbColor="#FFFFFF"
                   />
@@ -315,7 +246,7 @@ export default function StockUpdate() {
                   <View style={styles.outActions}>
                     <Pressable 
                       style={({ pressed }: { pressed: boolean }) => [styles.btnRestock, pressed && styles.btnPressed]}
-                      onPress={() => updateQuantity(item.id, 10)}
+                      onPress={() => updateQuantity(item.id, 10, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.btnRestockText}>Restock +10</Text>
                     </Pressable>
@@ -324,14 +255,14 @@ export default function StockUpdate() {
                   <View style={styles.qtyControls}>
                     <TouchableOpacity 
                       style={styles.qtyBtn} 
-                      onPress={() => updateQuantity(item.id, item.quantity - 1)}
+                      onPress={() => updateQuantity(item.id, item.quantity - 1, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.qtyBtnText}>-</Text>
                     </TouchableOpacity>
                     <Text style={styles.qtyValue}>{item.quantity}</Text>
                     <TouchableOpacity 
                       style={styles.qtyBtn}
-                      onPress={() => updateQuantity(item.id, item.quantity + 1)}
+                      onPress={() => updateQuantity(item.id, item.quantity + 1, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.qtyBtnText}>+</Text>
                     </TouchableOpacity>
@@ -341,7 +272,7 @@ export default function StockUpdate() {
               
               {!isOut && (
                  <View style={styles.soldOutContainer}>
-                   <TouchableOpacity onPress={() => updateQuantity(item.id, 0)}>
+                   <TouchableOpacity onPress={() => updateQuantity(item.id, 0, item.product.id, item.isAvailable)}>
                      <Text style={styles.soldOutText}>Mark Sold Out</Text>
                    </TouchableOpacity>
                  </View>
@@ -352,7 +283,7 @@ export default function StockUpdate() {
               )}
             </View>
           );
-        })}
+        }))}
       </ScrollView>
     </SafeAreaView>
   );

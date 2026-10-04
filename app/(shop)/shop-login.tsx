@@ -24,7 +24,7 @@ import type { ShopRole, ShiftType } from "@/types/shop";
 import { FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   KeyboardAvoidingView,
   Platform,
@@ -36,6 +36,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { signIn, getProfile } from "@/services/authService";
+import { getShopByProfileId, verifyStaffPin } from "@/services/shopService";
+import { supabase } from "@/lib/supabase";
+import { ShopProfile } from "@/types/shop";
 
 // ─── MOCK DATA ───────────────────────────────────────────────────────────────
 // Visual development data only. Replace with getShopProfile() once
@@ -76,6 +80,56 @@ export default function ShopLogin() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  const [authStage, setAuthStage] = useState<"loading" | "shop-auth" | "staff-pin">("loading");
+  const [shopEmail, setShopEmail] = useState("");
+  const [shopPassword, setShopPassword] = useState("");
+  const [shopProfile, setShopProfile] = useState<ShopProfile | null>(null);
+
+  const checkSession = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user) {
+        const profile = await getProfile();
+        if (profile?.role === "shop") {
+          const shop = await getShopByProfileId(session.user.id);
+          if (shop) {
+            setShopProfile(shop);
+            setAuthStage("staff-pin");
+            return;
+          }
+        }
+      }
+      setAuthStage("shop-auth");
+    } catch (err) {
+      setAuthStage("shop-auth");
+    }
+  };
+
+  useEffect(() => { checkSession(); }, []);
+
+  const handleShopLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await signIn(shopEmail, shopPassword);
+      const profile = await getProfile();
+      if (profile?.role !== "shop") {
+        await supabase.auth.signOut();
+        throw new Error("Access Denied: This account is not a Shop Owner.");
+      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Session failed.");
+      const shop = await getShopByProfileId(session.user.id);
+      if (!shop) throw new Error("No shop found for this account.");
+      setShopProfile(shop);
+      setAuthStage("staff-pin");
+    } catch (err: any) {
+      setError(err.message || "Failed to sign in.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const appendDigit = (digit: string) => {
     setError("");
     if (pin.length < 4) setPin((prev) => prev + digit);
@@ -103,29 +157,19 @@ export default function ShopLogin() {
    */
   const handleLogin = async () => {
     setError("");
-
-    if (!staffId.trim()) {
-      setError("Please enter your Staff ID or mobile number.");
-      return;
-    }
-    if (pin.length !== 4) {
-      setError("Enter all 4 PIN digits to continue.");
-      return;
-    }
+    if (!staffId.trim()) { setError("Please enter your Staff ID or mobile number."); return; }
+    if (pin.length !== 4) { setError("Enter all 4 PIN digits to continue."); return; }
+    if (!shopProfile) return;
 
     setLoading(true);
     try {
-      // TODO: Replace with actual Supabase PIN verification.
-      // await shopService.verifyStaffPin(staffId.trim(), pin, MOCK_SHOP.id);
-      // Current behaviour: simulate async call and navigate on success.
-      await new Promise<void>((resolve) => setTimeout(resolve, 800));
-      router.replace("/(shop)/shop-dashboard");
-    } catch (loginError) {
-      setError(
-        loginError instanceof Error
-          ? loginError.message
-          : "Login failed. Please try again.",
-      );
+      const staff = await verifyStaffPin(staffId.trim(), pin, shopProfile.id);
+      if (!staff) {
+        throw new Error("Invalid Staff ID or PIN.");
+      }
+      router.replace("/(shop)/new-orders");
+    } catch (loginError: any) {
+      setError(loginError.message || "Login failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -177,9 +221,9 @@ export default function ShopLogin() {
               />
             </View>
             <View style={styles.merchantCopy}>
-              <Text style={styles.merchantName}>{MOCK_SHOP.name}</Text>
+              <Text style={styles.merchantName}>{(shopProfile?.name || "...")}</Text>
               <Text style={styles.merchantSub}>
-                Counter #{MOCK_SHOP.counterNumber} · {MOCK_SHOP.hubName}
+                Counter #{(shopProfile?.pickupCounter || "...")} · {"Hub"}
               </Text>
             </View>
             <View style={styles.onlinePill}>
@@ -188,6 +232,37 @@ export default function ShopLogin() {
             </View>
           </View>
 
+          {authStage === "loading" ? (
+            <Text style={{color: 'white', textAlign: 'center', marginTop: 50}}>Loading...</Text>
+          ) : authStage === "shop-auth" ? (
+            <View>
+              <Text style={styles.fieldLabel}>Shop Email</Text>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="admin@shop.com"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  value={shopEmail}
+                  onChangeText={(t) => {setError(""); setShopEmail(t);}}
+                  autoCapitalize="none"
+                  editable={!loading}
+                />
+              </View>
+              <Text style={styles.fieldLabel}>Password</Text>
+              <View style={styles.inputWrap}>
+                <TextInput
+                  style={styles.input}
+                  placeholder="••••••••"
+                  placeholderTextColor="rgba(255,255,255,0.3)"
+                  value={shopPassword}
+                  onChangeText={(t) => {setError(""); setShopPassword(t);}}
+                  secureTextEntry
+                  editable={!loading}
+                />
+              </View>
+            </View>
+          ) : (
+            <>
           {/* Role selector */}
           <Text style={styles.fieldLabel}>Your Role</Text>
           <View style={styles.segmented}>
@@ -220,7 +295,7 @@ export default function ShopLogin() {
               size={13}
               style={styles.hardwareIcon}
             />
-            <Text style={styles.terminalCode}>{MOCK_SHOP.terminalCode}</Text>
+            <Text style={styles.terminalCode}>{"POS-01"}</Text>
             <View style={styles.readyPill}>
               <View style={styles.readyDot} />
               <Text style={styles.readyText}>READY</Text>
@@ -312,6 +387,9 @@ export default function ShopLogin() {
             })}
           </View>
 
+          </>
+          )}
+
           {/* Error banner */}
           {error ? (
             <View style={styles.errorBanner}>
@@ -328,16 +406,18 @@ export default function ShopLogin() {
 
         {/* ── Fixed bottom: keypad + login button ───────────── */}
         <View style={styles.keypadSection}>
-          <PinKeypad
-            disabled={loading}
-            onBiometric={handleBiometric}
-            onDelete={deleteDigit}
-            onDigit={appendDigit}
-          />
+          {authStage === "staff-pin" ? (
+            <PinKeypad
+              disabled={loading}
+              onBiometric={handleBiometric}
+              onDelete={deleteDigit}
+              onDigit={appendDigit}
+            />
+          ) : null}
 
           <Pressable
-            disabled={!isLoginEnabled}
-            onPress={handleLogin}
+            disabled={authStage === "staff-pin" ? !isLoginEnabled : (!shopEmail || !shopPassword || loading)}
+            onPress={authStage === "staff-pin" ? handleLogin : handleShopLogin}
             style={({ pressed }) => [
               styles.loginButton,
               !isLoginEnabled && styles.loginButtonDisabled,

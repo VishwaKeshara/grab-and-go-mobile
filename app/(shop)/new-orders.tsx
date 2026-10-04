@@ -2,6 +2,9 @@ import React, { useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable, PressableStateCallbackType } from "react-native";
 import { router } from "expo-router";
 import { ShopOrder, ShopOrderStatus, ShopOrderItem } from "@/types/shopOrder";
+import { supabase } from "@/lib/supabase";
+import { getShopByProfileId, getIncomingOrders, updateOrderStatus } from "@/services/shopService";
+import { useEffect } from "react";
 
 // --- Mock Data ---
 interface ExtendedShopOrder extends Omit<ShopOrder, 'items'> {
@@ -18,137 +21,60 @@ interface ExtendedShopOrder extends Omit<ShopOrder, 'items'> {
   packingStateLabel?: string;
 }
 
-const INITIAL_MOCK_ORDERS: ExtendedShopOrder[] = [
-  {
-    id: "GNG-MLB-9042",
-    shopId: "shop-1",
-    customerId: "cust-1",
-    reference: "GG-2026-9042",
-    pickupPin: "5182",
-    customerName: "Dinithi Perera",
-    customerPhone: "0000000000",
-    status: "placed",
-    packingStatus: "unpacked",
-    totalLkr: 3100,
-    subtotalLkr: 3100,
-    savingsLkr: 0,
-    serviceFeeLkr: 0,
-    paymentMethod: "card",
-    paymentStatus: "paid",
-    packingInstructions: "",
-    travelMethod: "walking",
-    pickupStartAt: "2026-10-02T17:30:00+05:30",
-    pickupEndAt: "2026-10-02T18:00:00+05:30",
-    createdAt: "2026-10-02T17:12:00+05:30",
-    updatedAt: "2026-10-02T17:12:00+05:30",
-    acceptedAt: null,
-    packingStartedAt: null,
-    readyAt: null,
-    urgencyLabel: "URGENT",
-    timeLeft: "01:42",
-    tier: "VIP Commuter Tier 3",
-    orderCount: 28,
-    transport: "Motorcycle Commute",
-    payment: "LankaQR PAID",
-  },
-  {
-    id: "GNG-MLB-9048",
-    shopId: "shop-1",
-    customerId: "cust-2",
-    reference: "GG-2026-9048",
-    pickupPin: "1111",
-    customerName: "N/A",
-    customerPhone: "0000000000",
-    status: "placed",
-    packingStatus: "unpacked",
-    totalLkr: 1890,
-    subtotalLkr: 1890,
-    savingsLkr: 0,
-    serviceFeeLkr: 0,
-    paymentMethod: "card",
-    paymentStatus: "paid",
-    packingInstructions: "",
-    travelMethod: "walking",
-    items: [
-      {
-        id: "item-1",
-        orderId: "GNG-MLB-9048",
-        productId: "prod-1",
-        productName: "Araliya Samba Rice 5kg",
-        quantity: 1,
-        unitPriceLkr: 1000,
-        productUnit: "5kg",
-        imageUrl: null,
-        substitution: { type: "call" },
-        isPacked: false,
-        packedAt: null,
-      },
-      {
-        id: "item-2",
-        orderId: "GNG-MLB-9048",
-        productId: "prod-2",
-        productName: "Premium Red Mysore Dhal 1kg",
-        quantity: 1,
-        unitPriceLkr: 890,
-        productUnit: "1kg",
-        imageUrl: null,
-        substitution: { type: "call" },
-        isPacked: false,
-        packedAt: null,
-      },
-    ],
-    pickupStartAt: "2026-10-02T18:15:00+05:30",
-    pickupEndAt: "2026-10-02T18:30:00+05:30",
-    createdAt: "2026-10-02T17:14:00+05:30",
-    updatedAt: "2026-10-02T17:14:00+05:30",
-    acceptedAt: null,
-    packingStartedAt: null,
-    readyAt: null,
-    urgencyLabel: "NEW INTAKE",
-  },
-  {
-    id: "GNG-MLB-9039",
-    shopId: "shop-1",
-    customerId: "cust-3",
-    reference: "GG-2026-9039",
-    pickupPin: "9999",
-    customerName: "R. Fernando",
-    customerPhone: "0000000000",
-    status: "ready",
-    packingStatus: "fully_packed",
-    totalLkr: 4620,
-    subtotalLkr: 4620,
-    savingsLkr: 0,
-    serviceFeeLkr: 0,
-    paymentMethod: "card",
-    paymentStatus: "paid",
-    packingInstructions: "",
-    travelMethod: "walking",
-    pickupStartAt: "2026-10-02T17:45:00+05:30",
-    pickupEndAt: "2026-10-02T18:00:00+05:30",
-    createdAt: "2026-10-02T17:00:00+05:30",
-    updatedAt: "2026-10-02T17:30:00+05:30",
-    acceptedAt: "2026-10-02T17:05:00+05:30",
-    packingStartedAt: "2026-10-02T17:10:00+05:30",
-    readyAt: "2026-10-02T17:30:00+05:30",
-    stagingBay: "Staging Bay #B-01",
-    proximity: "Within 500m - Proximity Ping Received",
-    packingStateLabel: "Packed & Sealed in Thermal Bag",
-  },
-];
+
 
 type FilterTab = "All Incoming" | "Being Packed" | "Ready";
 type FilterChip = "Pickup <20 Mins" | "Motorcycle Pickup";
 
 export default function NewOrders() {
-  const [orders, setOrders] = useState<ExtendedShopOrder[]>(INITIAL_MOCK_ORDERS);
+  const [orders, setOrders] = useState<ExtendedShopOrder[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>("All Incoming");
   const [selectedChips, setSelectedChips] = useState<FilterChip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
 
-  const handleStatusChange = (orderId: string, newStatus: ShopOrderStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
+  const fetchOrders = async (userId: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const shop = await getShopByProfileId(userId);
+      if (!shop) throw new Error("Shop not found");
+      const incoming = (await getIncomingOrders(shop.id)) as ExtendedShopOrder[];
+      setOrders(incoming || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to load orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSessionAndFetch = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/(shop)/shop-login");
+        return;
+      }
+      setSessionChecked(true);
+      await fetchOrders(session.user.id);
+    } catch (err: any) {
+      setError("Session error. Please login again.");
+    }
+  };
+
+  useEffect(() => {
+    checkSessionAndFetch();
+  }, []);
+
+  const handleStatusChange = async (orderId: string, newStatus: ShopOrderStatus) => {
+    try {
+      await updateOrderStatus(orderId, newStatus);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchOrders(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update status");
+    }
   };
 
   const toggleChip = (chip: FilterChip) => {
@@ -177,6 +103,14 @@ export default function NewOrders() {
       return false;
     }).length;
   };
+
+  if (!sessionChecked) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#4A4A68' }}>Checking session...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -242,15 +176,23 @@ export default function NewOrders() {
         </ScrollView>
 
         {/* Order Cards */}
-        {filteredOrders.map((order) => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            onAccept={() => handleStatusChange(order.id, "accepted")}
-            onReject={() => handleStatusChange(order.id, "cancelled")}
-            onStage={() => handleStatusChange(order.id, "collected")}
-          />
-        ))}
+        {error ? (
+          <Text style={{ color: 'red', margin: 20 }}>{error}</Text>
+        ) : loading ? (
+          <Text style={{ color: '#4A4A68', margin: 20 }}>Loading live orders...</Text>
+        ) : filteredOrders.length === 0 ? (
+          <Text style={{ color: '#4A4A68', margin: 20 }}>No orders match this filter.</Text>
+        ) : (
+          filteredOrders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              onAccept={() => handleStatusChange(order.id, "accepted")}
+              onReject={() => handleStatusChange(order.id, "cancelled")}
+              onStage={() => handleStatusChange(order.id, "collected")}
+            />
+          ))
+        )}
 
       </ScrollView>
     </SafeAreaView>
