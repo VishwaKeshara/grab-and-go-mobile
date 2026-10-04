@@ -17,16 +17,27 @@ const MOCK_VERIFIED_ORDER: VerifiedOrder = {
   id: "GNG-MLB-9042",
   shopId: "shop-1",
   customerId: "cust-1",
+  reference: "GG-2026-9042",
+  pickupPin: "5182",
   customerName: "Dinithi Perera",
   customerPhone: "0771234567",
   status: "ready",
   packingStatus: "fully_packed",
-  pickupStatus: "pending",
-  totalAmount: 3100,
-  itemCount: 4,
-  pickupScheduledAt: "2026-10-02T17:30:00+05:30",
+  totalLkr: 3100,
+  subtotalLkr: 3100,
+  savingsLkr: 0,
+  serviceFeeLkr: 0,
+  paymentMethod: "card",
+  paymentStatus: "paid",
+  packingInstructions: "",
+  travelMethod: "walking",
+  pickupStartAt: "2026-10-02T17:30:00+05:30",
+  pickupEndAt: "2026-10-02T18:00:00+05:30",
   createdAt: "2026-10-02T17:12:00+05:30",
   updatedAt: "2026-10-02T17:35:00+05:30",
+  acceptedAt: "2026-10-02T17:15:00+05:30",
+  packingStartedAt: "2026-10-02T17:15:30+05:30",
+  readyAt: "2026-10-02T17:30:00+05:30",
   tier: "VIP Commuter",
   stagingBay: "BAY #B-02",
   crate: "CRATE 04",
@@ -192,9 +203,9 @@ export default function QrVerification() {
               </View>
 
               <View style={styles.divider} />
-              <Text style={styles.detailValRow}>• {MOCK_VERIFIED_ORDER.itemCount} items</Text>
+              <Text style={styles.detailValRow}>• {MOCK_VERIFIED_ORDER.items?.length || 4} items</Text>
               <Text style={styles.detailValRow}>• {MOCK_VERIFIED_ORDER.bagType}</Text>
-              <Text style={styles.detailValRow}>• LKR {MOCK_VERIFIED_ORDER.totalAmount.toLocaleString()} - {MOCK_VERIFIED_ORDER.paymentState}</Text>
+              <Text style={styles.detailValRow}>• LKR {MOCK_VERIFIED_ORDER.totalLkr.toLocaleString()} - {MOCK_VERIFIED_ORDER.paymentState}</Text>
               {MOCK_VERIFIED_ORDER.lankaQrRef && (
                 <Text style={styles.detailValRow}>• Ref: {MOCK_VERIFIED_ORDER.lankaQrRef}</Text>
               )}

@@ -1,160 +1,87 @@
-import { listMyShops } from "@/services/shopService";
-import { listProductsByShop, updateProduct } from "@/services/productService";
-import type { Product, StockStatus } from "@/types/product";
+import { supabase } from "@/lib/supabase";
+import { getShopByProfileId, getInventory, updateStock } from "@/services/shopService";
+import type { Product, StockStatus, InventoryItem, InventoryProduct } from "@/types/product";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput, Switch, Pressable } from "react-native";
+import { router } from "expo-router";
 
-/**
- * Stock counts live on products.stock_quantity / products.is_available.
- * There is no separate inventory table, so the low-stock cutoff is one shared
- * constant rather than a per-product threshold.
- */
-const LOW_STOCK_THRESHOLD = 5;
+// --- Types & Mock Data ---
+interface ExtendedProduct extends InventoryProduct {
+  sku: string;
+  category: string;
+  comparisonNote?: string;
+}
+
+interface ExtendedInventoryItem extends Omit<InventoryItem, 'product'> {
+  product: ExtendedProduct;
+}
 
 type FilterType = "All" | "Low Stock" | "Out of Stock";
 
-/**
- * Adapts a product row to the shape the card markup expects, so the UI below
- * reads the same as it did against the old mock array.
- */
-type StockRow = {
-  id: string;
-  quantity: number;
-  stockStatus: StockStatus;
-  product: {
-    name: string;
-    category: string;
-    price: number;
-    unitLabel: string;
-    isAvailable: boolean;
-  };
-};
-
-function stockStatusFor(quantity: number): StockStatus {
-  if (quantity === 0) return "out_of_stock";
-  if (quantity <= LOW_STOCK_THRESHOLD) return "low_stock";
-  return "in_stock";
-}
-
-function toRow(product: Product): StockRow {
-  return {
-    id: product.id,
-    quantity: product.stock_quantity,
-    stockStatus: stockStatusFor(product.stock_quantity),
-    product: {
-      name: product.name,
-      category: product.category,
-      price: product.price,
-      unitLabel: product.unit,
-      isAvailable: product.is_available,
-    },
-  };
-}
-
 export default function StockUpdate() {
-  const [inventory, setInventory] = useState<StockRow[]>([]);
-  const [shopName, setShopName] = useState("");
+  const [inventory, setInventory] = useState<ExtendedInventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("All");
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [shopId, setShopId] = useState("");
 
-  const fetchStock = useCallback(
-    (onDone?: () => void) =>
-      listMyShops()
-        .then((shops) => {
-          if (shops.length === 0) return [];
-          setShopName(shops[0].name);
-          return listProductsByShop(shops[0].id);
-        })
-        .then((products) => {
-          if (products) setInventory(products.map(toRow));
-        })
-        .catch((loadError: unknown) => {
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "We could not load your stock levels.",
-          );
-        })
-        .finally(() => {
-          setLoading(false);
-          onDone?.();
-        }),
-    [],
-  );
-
-  const reload = () => {
+  const fetchInventory = async (userId: string) => {
     setLoading(true);
     setError("");
-    fetchStock();
+    try {
+      const shop = await getShopByProfileId(userId);
+      if (!shop) throw new Error("Shop not found");
+      setShopId(shop.id);
+      
+      const items = (await getInventory(shop.id)) as unknown as ExtendedInventoryItem[];
+      setInventory(items || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to load inventory");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSessionAndFetch = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/(shop)/shop-login");
+        return;
+      }
+      setSessionChecked(true);
+      await fetchInventory(session.user.id);
+    } catch (err: any) {
+      setError("Session error. Please login again.");
+    }
   };
 
   useEffect(() => {
-    // State is only touched inside the promise callbacks, never synchronously
-    // in the effect body, which would trigger a cascading render.
-    let active = true;
-    const timer = setTimeout(() => {
-      fetchStock(() => {
-        if (!active) return;
-      });
-    }, 0);
+    checkSessionAndFetch();
+  }, []);
 
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [fetchStock]);
-
-  /**
-   * Applies the change locally first so the stepper feels instant, then
-   * persists. If the write fails the previous row is restored and the error
-   * is surfaced, so the UI never drifts from what is stored.
-   */
-  const commit = (id: string, quantity: number, isAvailable: boolean) => {
-    const snapshot = inventory.find((item) => item.id === id) ?? null;
-
-    setInventory((rows) =>
-      rows.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              quantity,
-              stockStatus: stockStatusFor(quantity),
-              product: { ...item.product, isAvailable },
-            }
-          : item,
-      ),
-    );
-
-    updateProduct(id, {
-      stock_quantity: quantity,
-      is_available: isAvailable,
-    }).catch((saveError: unknown) => {
-      if (snapshot) {
-        setInventory((rows) =>
-          rows.map((item) => (item.id === id ? snapshot : item)),
-        );
-      }
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "We could not save that stock change.",
-      );
-    });
-  };
-
-  const updateQuantity = (id: string, newQty: number) => {
+  const updateQuantity = async (id: string, newQty: number, productId: string, isAvailable: boolean) => {
     if (newQty < 0) return;
-    const target = inventory.find((item) => item.id === id);
-    if (!target) return;
-    commit(id, newQty, newQty > 0);
+    try {
+      await updateStock(shopId, productId, newQty, isAvailable);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchInventory(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update stock");
+    }
   };
 
-  const toggleAvailability = (id: string) => {
-    const target = inventory.find((item) => item.id === id);
-    if (!target) return;
-    commit(id, target.quantity, !target.product.isAvailable);
+  const toggleAvailability = async (id: string, currentAvail: boolean, quantity: number, productId: string) => {
+    try {
+      await updateStock(shopId, productId, quantity, !currentAvail);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchInventory(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update availability");
+    }
   };
 
   const filteredInventory = useMemo(() => {
@@ -186,12 +113,20 @@ export default function StockUpdate() {
     };
   }, [inventory]);
 
+  if (!sessionChecked) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#4A4A68' }}>Checking session...</Text>
+      </View>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerBrand}>{shopName ? shopName.toUpperCase() : "YOUR SHOP"}</Text>
+          <Text style={styles.headerBrand}>MALABE EXPRESS OUTLET</Text>
           <Text style={styles.headerTitle}>Stock Update</Text>
         </View>
         <View style={styles.statusBadge}>
@@ -256,7 +191,7 @@ export default function StockUpdate() {
         ) : error ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{error}</Text>
-            <Pressable onPress={reload}>
+            <Pressable onPress={checkSessionAndFetch}>
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
@@ -267,7 +202,7 @@ export default function StockUpdate() {
               : "No items match your search or filter."}
           </Text>
         ) : (
-        filteredInventory.map((item) => {
+          filteredInventory.map((item) => {
           const isOut = item.stockStatus === "out_of_stock";
           const isLow = item.stockStatus === "low_stock";
           
@@ -280,11 +215,11 @@ export default function StockUpdate() {
                 </View>
                 <View style={styles.availabilityToggle}>
                   <Text style={styles.toggleLabel}>
-                    {item.product.isAvailable ? "ON" : "OFF"}
+                    {item.isAvailable ? "ON" : "OFF"}
                   </Text>
                   <Switch
-                    value={item.product.isAvailable}
-                    onValueChange={() => toggleAvailability(item.id)}
+                    value={item.isAvailable}
+                    onValueChange={() => toggleAvailability(item.id, item.isAvailable, item.quantity, item.product.id)}
                     trackColor={{ false: "#E0E0EB", true: "#00A859" }}
                     thumbColor="#FFFFFF"
                   />
@@ -300,7 +235,7 @@ export default function StockUpdate() {
                     styles.stockBadgeText,
                     isOut ? styles.stockBadgeTextOut : isLow ? styles.stockBadgeTextLow : styles.stockBadgeTextIn
                   ]}>
-                    {isOut ? "OUT OF STOCK" : isLow ? "Low Stock" : "In Stock"} ({item.quantity} {item.quantity === 1 ? "unit" : item.product.unitLabel.includes("pack") || item.product.unitLabel.includes("carton") ? "units" : "units"})
+                    {isOut ? "OUT OF STOCK" : isLow ? "Low Stock" : "In Stock"} ({item.quantity} {item.product.unit.includes("pack") || item.product.unit.includes("carton") ? "units" : "units"})
                   </Text>
                 </View>
               </View>
@@ -308,14 +243,14 @@ export default function StockUpdate() {
               <View style={styles.controlsRow}>
                 <View style={styles.priceContainer}>
                   <Text style={styles.priceLabel}>Current Price:</Text>
-                  <Text style={styles.priceValue}>LKR {item.product.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                  <Text style={styles.priceValue}>LKR {item.product.priceLkr.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
                 </View>
 
                 {isOut ? (
                   <View style={styles.outActions}>
                     <Pressable 
                       style={({ pressed }: { pressed: boolean }) => [styles.btnRestock, pressed && styles.btnPressed]}
-                      onPress={() => updateQuantity(item.id, 10)}
+                      onPress={() => updateQuantity(item.id, 10, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.btnRestockText}>Restock +10</Text>
                     </Pressable>
@@ -324,14 +259,14 @@ export default function StockUpdate() {
                   <View style={styles.qtyControls}>
                     <TouchableOpacity 
                       style={styles.qtyBtn} 
-                      onPress={() => updateQuantity(item.id, item.quantity - 1)}
+                      onPress={() => updateQuantity(item.id, item.quantity - 1, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.qtyBtnText}>-</Text>
                     </TouchableOpacity>
                     <Text style={styles.qtyValue}>{item.quantity}</Text>
                     <TouchableOpacity 
                       style={styles.qtyBtn}
-                      onPress={() => updateQuantity(item.id, item.quantity + 1)}
+                      onPress={() => updateQuantity(item.id, item.quantity + 1, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.qtyBtnText}>+</Text>
                     </TouchableOpacity>
@@ -341,7 +276,7 @@ export default function StockUpdate() {
               
               {!isOut && (
                  <View style={styles.soldOutContainer}>
-                   <TouchableOpacity onPress={() => updateQuantity(item.id, 0)}>
+                   <TouchableOpacity onPress={() => updateQuantity(item.id, 0, item.product.id, item.isAvailable)}>
                      <Text style={styles.soldOutText}>Mark Sold Out</Text>
                    </TouchableOpacity>
                  </View>
@@ -352,8 +287,7 @@ export default function StockUpdate() {
               )}
             </View>
           );
-        })
-        )}
+        }))}
       </ScrollView>
     </SafeAreaView>
   );

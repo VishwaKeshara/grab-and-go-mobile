@@ -1,11 +1,15 @@
 import React, { useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable, PressableStateCallbackType } from "react-native";
 import { router } from "expo-router";
-import { ShopOrder, ShopOrderStatus } from "@/types/shopOrder";
+import { ShopOrder, ShopOrderStatus, ShopOrderItem } from "@/types/shopOrder";
+import { supabase } from "@/lib/supabase";
+import { getShopByProfileId, getIncomingOrders, updateOrderStatus } from "@/services/shopService";
+import { useEffect } from "react";
 
 // --- Mock Data ---
-interface ExtendedShopOrder extends ShopOrder {
-  // Extra fields just for mock display that aren't in the base type yet
+interface ExtendedShopOrder extends Omit<ShopOrder, 'items'> {
+  // Mock data includes an items array with missing items handled locally
+  items?: ShopOrderItem[];
   urgencyLabel?: string;
   timeLeft?: string;
   tier?: string;
@@ -17,100 +21,60 @@ interface ExtendedShopOrder extends ShopOrder {
   packingStateLabel?: string;
 }
 
-const INITIAL_MOCK_ORDERS: ExtendedShopOrder[] = [
-  {
-    id: "GNG-MLB-9042",
-    shopId: "shop-1",
-    customerId: "cust-1",
-    customerName: "Dinithi Perera",
-    customerPhone: "0000000000",
-    status: "new",
-    packingStatus: "unpacked",
-    pickupStatus: "pending",
-    totalAmount: 3100,
-    itemCount: 5,
-    pickupScheduledAt: "2026-10-02T17:30:00+05:30",
-    createdAt: "2026-10-02T17:12:00+05:30",
-    updatedAt: "2026-10-02T17:12:00+05:30",
-    urgencyLabel: "URGENT",
-    timeLeft: "01:42",
-    tier: "VIP Commuter Tier 3",
-    orderCount: 28,
-    transport: "Motorcycle Commute",
-    payment: "LankaQR PAID",
-  },
-  {
-    id: "GNG-MLB-9048",
-    shopId: "shop-1",
-    customerId: "cust-2",
-    customerName: "N/A",
-    customerPhone: "0000000000",
-    status: "new",
-    packingStatus: "unpacked",
-    pickupStatus: "pending",
-    totalAmount: 1890,
-    itemCount: 2,
-    items: [
-      {
-        id: "item-1",
-        orderId: "GNG-MLB-9048",
-        productId: "prod-1",
-        productName: "Araliya Samba Rice 5kg",
-        quantity: 1,
-        unitPrice: 1000,
-        unitLabel: "5kg",
-        isPacked: false,
-        substituteProductId: null,
-      },
-      {
-        id: "item-2",
-        orderId: "GNG-MLB-9048",
-        productId: "prod-2",
-        productName: "Premium Red Mysore Dhal 1kg",
-        quantity: 1,
-        unitPrice: 890,
-        unitLabel: "1kg",
-        isPacked: false,
-        substituteProductId: null,
-      },
-    ],
-    pickupScheduledAt: "2026-10-02T18:15:00+05:30",
-    createdAt: "2026-10-02T17:14:00+05:30",
-    updatedAt: "2026-10-02T17:14:00+05:30",
-    urgencyLabel: "NEW INTAKE",
-  },
-  {
-    id: "GNG-MLB-9039",
-    shopId: "shop-1",
-    customerId: "cust-3",
-    customerName: "R. Fernando",
-    customerPhone: "0000000000",
-    status: "ready",
-    packingStatus: "fully_packed",
-    pickupStatus: "pending",
-    totalAmount: 4620,
-    itemCount: 3,
-    pickupScheduledAt: "2026-10-02T17:45:00+05:30",
-    createdAt: "2026-10-02T17:00:00+05:30",
-    updatedAt: "2026-10-02T17:30:00+05:30",
-    stagingBay: "Staging Bay #B-01",
-    proximity: "Within 500m - Proximity Ping Received",
-    packingStateLabel: "Packed & Sealed in Thermal Bag",
-  },
-];
+
 
 type FilterTab = "All Incoming" | "Being Packed" | "Ready";
 type FilterChip = "Pickup <20 Mins" | "Motorcycle Pickup";
 
 export default function NewOrders() {
-  const [orders, setOrders] = useState<ExtendedShopOrder[]>(INITIAL_MOCK_ORDERS);
+  const [orders, setOrders] = useState<ExtendedShopOrder[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>("All Incoming");
   const [selectedChips, setSelectedChips] = useState<FilterChip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
 
-  const handleStatusChange = (orderId: string, newStatus: ShopOrderStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
+  const fetchOrders = async (userId: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const shop = await getShopByProfileId(userId);
+      if (!shop) throw new Error("Shop not found");
+      const incoming = (await getIncomingOrders(shop.id)) as ExtendedShopOrder[];
+      setOrders(incoming || []);
+    } catch (err: any) {
+      setError(err.message || "Failed to load orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSessionAndFetch = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/(shop)/shop-login");
+        return;
+      }
+      setSessionChecked(true);
+      await fetchOrders(session.user.id);
+    } catch (err: any) {
+      setError("Session error. Please login again.");
+    }
+  };
+
+  useEffect(() => {
+    checkSessionAndFetch();
+  }, []);
+
+  const handleStatusChange = async (orderId: string, newStatus: ShopOrderStatus) => {
+    try {
+      await updateOrderStatus(orderId, newStatus);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchOrders(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update status");
+    }
   };
 
   const toggleChip = (chip: FilterChip) => {
@@ -120,7 +84,7 @@ export default function NewOrders() {
   };
 
   const filteredOrders = orders.filter((o) => {
-    if (activeTab === "All Incoming" && o.status !== "new") return false;
+    if (activeTab === "All Incoming" && o.status !== "placed") return false;
     if (activeTab === "Being Packed" && o.status !== "packing" && o.status !== "accepted") return false;
     if (activeTab === "Ready" && o.status !== "ready") return false;
 
@@ -133,12 +97,20 @@ export default function NewOrders() {
 
   const getTabCount = (tab: FilterTab) => {
     return orders.filter((o) => {
-      if (tab === "All Incoming") return o.status === "new";
+      if (tab === "All Incoming") return o.status === "placed";
       if (tab === "Being Packed") return o.status === "packing" || o.status === "accepted";
       if (tab === "Ready") return o.status === "ready";
       return false;
     }).length;
   };
+
+  if (!sessionChecked) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#4A4A68' }}>Checking session...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -204,15 +176,23 @@ export default function NewOrders() {
         </ScrollView>
 
         {/* Order Cards */}
-        {filteredOrders.map((order) => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            onAccept={() => handleStatusChange(order.id, "accepted")}
-            onReject={() => handleStatusChange(order.id, "rejected")}
-            onStage={() => handleStatusChange(order.id, "completed")}
-          />
-        ))}
+        {error ? (
+          <Text style={{ color: 'red', margin: 20 }}>{error}</Text>
+        ) : loading ? (
+          <Text style={{ color: '#4A4A68', margin: 20 }}>Loading live orders...</Text>
+        ) : filteredOrders.length === 0 ? (
+          <Text style={{ color: '#4A4A68', margin: 20 }}>No orders match this filter.</Text>
+        ) : (
+          filteredOrders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              onAccept={() => handleStatusChange(order.id, "accepted")}
+              onReject={() => handleStatusChange(order.id, "cancelled")}
+              onStage={() => handleStatusChange(order.id, "collected")}
+            />
+          ))
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -267,13 +247,13 @@ function OrderCard({ order, onAccept, onReject, onStage }: { order: ExtendedShop
         </View>
       )}
 
-      {!order.items && order.itemCount > 0 && (
+      {!order.items && (
         <View style={styles.section}>
-          <Text style={styles.sectionText}>Items: {order.itemCount} items</Text>
+          <Text style={styles.sectionText}>Items: {(order as any).itemCount || 0} items</Text>
         </View>
       )}
 
-      <Text style={styles.totalText}>Total: LKR {order.totalAmount.toLocaleString()}</Text>
+      <Text style={styles.totalText}>Total: LKR {order.totalLkr.toLocaleString()}</Text>
 
       {/* Actions */}
       <View style={styles.actions}>
