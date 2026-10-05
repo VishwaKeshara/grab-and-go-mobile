@@ -58,10 +58,7 @@ export default function Signup() {
       if (result.session) {
         router.replace("/(customer)/home");
       } else {
-        router.push({
-          pathname: "/(auth)/otp-verification",
-          params: { email, mode: "signup" },
-        });
+        router.replace("/(auth)/login");
       }
     } catch (submitError) {
       setError(
@@ -171,7 +168,7 @@ export default function Signup() {
         </Text>
       </Pressable>
       <PrimaryButton loading={loading} onPress={submit}>
-        Create Account &amp; Get OTP →
+        Create Account →
       </PrimaryButton>
       <View style={styles.footer}>
         <Text style={styles.footerText}>Already a member? </Text>

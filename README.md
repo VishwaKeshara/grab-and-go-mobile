@@ -85,9 +85,9 @@ npx --yes supabase migration list
 
 ## Authentication Providers
 
-### Email OTP
+### Email confirmation
 
-In Supabase, open **Authentication → Providers → Email** and enable the email provider. The app expects an 8-digit email OTP, matching the project configuration.
+In Supabase, open **Authentication → Providers → Email** and enable the email provider. New accounts use the standard email confirmation link, followed by email-and-password login.
 
 For reliable delivery, configure a transactional SMTP provider under **Authentication → SMTP Settings**. Example Brevo settings:
 
@@ -99,10 +99,6 @@ Password: your Brevo SMTP key
 Sender email: a verified sender address
 Sender name: Grab & Go
 ```
-
-### Phone OTP
-
-Phone OTP requires a provider such as Twilio under **Authentication → Providers → Phone**. The app uses phone OTP for the phone login flow.
 
 ### Google and Apple OAuth
 
@@ -152,7 +148,7 @@ npx tsc --noEmit
 
 Routes are stored in `app/` and grouped by role:
 
-- `app/(auth)/` - splash, onboarding, login, signup, OTP, and password reset
+- `app/(auth)/` - splash, onboarding, login, signup, and password reset
 - `app/(customer)/` - customer ordering, profile, notifications, and tracking
 - `app/(shop)/` - shop operations and order packing
 - `app/(admin)/` - admin dashboard, user management, and security monitoring
