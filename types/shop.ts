@@ -1,97 +1,131 @@
 /**
  * TypeScript models for the Grab & Go Shop / Merchant module.
  *
- * ⚠️  DATABASE STATUS: These interfaces define the CLIENT-SIDE data shape only.
- *     The Supabase tables (shops, shop_staff, terminals) have NOT yet been
- *     confirmed in the live project. Connect services once migration 005+ is
- *     applied and verified.
+ * Maps to the following Supabase tables (applied in migrations 005 + 006):
+ *   customer_shops     — shop identity (005 + 006 extension)
+ *   shop_staff         — staff members with bcrypt-hashed PINs (006)
  *
- * @see services/shopService.ts for pending Supabase integration TODOs.
+ * @see services/shopService.ts for all Supabase integration.
+ * @see supabase/migrations/006_shop_operations.sql for schema.
  */
 
-/** Role of the staff member currently operating the terminal. */
+// ─────────────────────────────────────────────────────────────
+// Enums / union types
+// ─────────────────────────────────────────────────────────────
+
+/** Role of the staff member operating the shop terminal. */
 export type ShopRole = "clerk" | "manager";
 
-/** Active work shift period. */
+/** Work shift period. */
 export type ShiftType = "morning" | "evening";
 
+// ─────────────────────────────────────────────────────────────
+// ShopProfile
+// Maps to: public.customer_shops (with 006 additions)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * Core shop / merchant profile.
- * In Supabase this links to a `profiles` row where `role = 'shop'`.
+ * Core shop profile returned by getShopByProfileId().
  *
- * TODO (migration 005): maps to the `shops` table.
+ * Column mapping:
+ *   id             → customer_shops.id
+ *   profileId      → customer_shops.profile_id (FK → profiles.id)
+ *   hubId          → customer_shops.hub_id     (FK → pickup_hubs.id)
+ *   name           → customer_shops.name
+ *   address        → customer_shops.address
+ *   phone          → customer_shops.phone
+ *   pickupCounter  → customer_shops.pickup_counter
+ *   prepMinutes    → customer_shops.preparation_minutes
+ *   active         → customer_shops.active
+ *   isOpen         → customer_shops.is_open
+ *   openedAt       → customer_shops.opened_at
  */
 export interface ShopProfile {
   id: string;
-  /** FK → profiles.id where profiles.role = 'shop' */
-  profileId: string;
+  /** FK → profiles.id where profiles.role = 'shop'. */
+  profileId: string | null;
+  /** FK → pickup_hubs.id. */
+  hubId: string | null;
   name: string;
-  counterNumber: string;
-  hubName: string;
-  hubId: string;
-  terminalId: string;
-  isActive: boolean;
+  address: string;
+  phone: string | null;
+  pickupCounter: string;
+  prepMinutes: number;
+  active: boolean;
+  /** Real-time open/closed flag toggled per shift. */
+  isOpen: boolean;
   openedAt: string | null;
-  createdAt: string;
 }
 
+// ─────────────────────────────────────────────────────────────
+// ShopStaff
+// Maps to: public.shop_staff (006)
+// ─────────────────────────────────────────────────────────────
+
 /**
- * A staff member assigned to operate a shop terminal.
+ * A staff member returned from verifyStaffPin() RPC on success.
+ * pin_hash is NEVER included — the RPC does not expose it.
  *
- * TODO (migration 005): maps to the `shop_staff` table.
+ * Column mapping:
+ *   id        → shop_staff.id
+ *   shopId    → shop_staff.shop_id
+ *   staffCode → shop_staff.staff_code
+ *   fullName  → shop_staff.full_name
+ *   phone     → shop_staff.phone
+ *   role      → shop_staff.role
+ *   shift     → shop_staff.shift
+ *   isActive  → shop_staff.is_active
  */
 export interface ShopStaff {
   id: string;
   shopId: string;
-  /** Human-readable staff code displayed on shift summaries, e.g. "KW-07". */
+  /** Human-readable staff code, e.g. "KW-07". */
   staffCode: string;
   fullName: string;
-  phone: string;
+  phone: string | null;
   role: ShopRole;
+  shift: ShiftType;
   isActive: boolean;
 }
 
-/** Shift definition for display and scheduling purposes. */
-export interface Shift {
-  type: ShiftType;
-  label: string;
-  /** 24-hour format, e.g. "07:00" */
-  startTime: string;
-  /** 24-hour format, e.g. "14:00" */
-  endTime: string;
+/**
+ * Payload returned by the verify_staff_pin() Supabase RPC on success.
+ * This is the only staff data the client ever receives from the RPC.
+ */
+export interface StaffLoginResult {
+  success: true;
+  staffId: string;
+  staffCode: string;
+  fullName: string;
+  role: ShopRole;
+  shift: ShiftType;
 }
 
-/**
- * A POS terminal assigned to a shop counter.
- *
- * TODO (migration 005): maps to the `terminals` table.
- */
-export interface Terminal {
-  id: string;
-  /** Human-readable terminal code, e.g. "MLB-B02-POS". */
-  terminalCode: string;
-  shopId: string;
-  isReady: boolean;
-}
+// ─────────────────────────────────────────────────────────────
+// ShopDashboardSummary
+// Populated by get_shop_dashboard_summary() RPC (006)
+// ─────────────────────────────────────────────────────────────
 
 /**
  * Aggregated metrics snapshot for the shop dashboard.
- * All counts represent the current calendar day unless stated otherwise.
+ * All counts are for the current calendar day unless noted.
  *
- * TODO: populate via shopService.getShopDashboardSummary() once
- *       migrations 005 & 006 are confirmed applied.
+ * Sourced from:
+ *   liveOrderCount      → COUNT customer_orders WHERE status IN ('placed','accepted')
+ *   pendingPackingCount → COUNT customer_orders WHERE status = 'packing'
+ *   readyForPickupCount → COUNT customer_orders WHERE status = 'ready'
+ *   completedToday      → COUNT customer_orders WHERE status = 'collected' AND today
+ *   grossSalesToday     → SUM total_lkr WHERE status != 'cancelled' AND today
+ *   lowStockItemCount   → COUNT shop_inventory WHERE quantity <= low_stock_threshold
  */
 export interface ShopDashboardSummary {
   liveOrderCount: number;
   pendingPackingCount: number;
   readyForPickupCount: number;
   completedToday: number;
-  /** Total gross revenue today in LKR (cents or decimal as agreed). */
+  /** Gross revenue today in LKR (integer cents stored, display as LKR). */
   grossSalesToday: number;
-  queueLength: number;
-  handoversToday: number;
   lowStockItemCount: number;
-  activeShift: ShiftType | null;
 }
 export type Shop = {
   id: string;

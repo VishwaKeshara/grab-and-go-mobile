@@ -27,16 +27,27 @@ const MOCK_ORDER: ExtendedShopOrder = {
   id: "MLB-8821",
   shopId: "shop-1",
   customerId: "cust-1",
+  reference: "GG-2026-882100",
+  pickupPin: "5182",
   customerName: "Dinithi Perera",
   customerPhone: "0771234567",
-  status: "completed",
+  status: "collected",
   packingStatus: "fully_packed",
-  pickupStatus: "collected",
-  totalAmount: 3450,
-  itemCount: 4,
-  pickupScheduledAt: "2026-10-02T17:30:00+05:30",
+  totalLkr: 3450,
+  subtotalLkr: 3450,
+  savingsLkr: 0,
+  serviceFeeLkr: 0,
+  paymentMethod: "card",
+  paymentStatus: "paid",
+  packingInstructions: "Customer requested double bagging for heavy items.",
+  travelMethod: "motorcycle",
+  pickupStartAt: "2026-10-02T17:30:00+05:30",
+  pickupEndAt: "2026-10-02T18:00:00+05:30",
   createdAt: "2026-10-02T17:12:00+05:30",
   updatedAt: "2026-10-02T17:15:00+05:30",
+  acceptedAt: "2026-10-02T17:13:00+05:30",
+  packingStartedAt: "2026-10-02T17:14:00+05:30",
+  readyAt: "2026-10-02T17:20:00+05:30",
   velocityLabel: "34 seconds",
   velocityRank: "Top 5% Express",
   merchantName: "Sumanadasa Stores",
@@ -53,11 +64,13 @@ const MOCK_ORDER: ExtendedShopOrder = {
       orderId: "MLB-8821",
       productId: "prod-1",
       productName: "Araliya Keeri Samba 5kg",
+      productUnit: "5kg",
+      imageUrl: null,
       quantity: 1,
-      unitPrice: 1490.00,
-      unitLabel: "5kg",
+      unitPriceLkr: 1490,
+      substitution: { type: "call" },
       isPacked: true,
-      substituteProductId: "sub-1",
+      packedAt: "2026-10-02T17:18:00+05:30",
       substitutionNote: "Substitution accepted by customer",
     },
     {
@@ -65,22 +78,26 @@ const MOCK_ORDER: ExtendedShopOrder = {
       orderId: "MLB-8821",
       productId: "prod-2",
       productName: "Anchor Milk Powder",
+      productUnit: "400g",
+      imageUrl: null,
       quantity: 2,
-      unitPrice: 550.00, // per item amount
-      unitLabel: "400g",
+      unitPriceLkr: 550,
+      substitution: { type: "none" },
       isPacked: true,
-      substituteProductId: null,
+      packedAt: "2026-10-02T17:18:30+05:30",
     },
     {
       id: "item-3",
       orderId: "MLB-8821",
       productId: "prod-3",
       productName: "Farm Fresh Brown Eggs",
+      productUnit: "10 pack",
+      imageUrl: null,
       quantity: 1,
-      unitPrice: 440.00,
-      unitLabel: "10 pack",
+      unitPriceLkr: 440,
+      substitution: { type: "none" },
       isPacked: true,
-      substituteProductId: null,
+      packedAt: "2026-10-02T17:19:00+05:30",
       packingNote: "Packed in protective crate",
     },
     {
@@ -88,11 +105,13 @@ const MOCK_ORDER: ExtendedShopOrder = {
       orderId: "MLB-8821",
       productId: "prod-4",
       productName: "Mysore Dhal Red Lentils",
+      productUnit: "1kg",
+      imageUrl: null,
       quantity: 1,
-      unitPrice: 420.00,
-      unitLabel: "1kg",
+      unitPriceLkr: 420,
+      substitution: { type: "none" },
       isPacked: true,
-      substituteProductId: null,
+      packedAt: "2026-10-02T17:19:30+05:30",
     },
   ],
 };
@@ -158,7 +177,7 @@ export default function ShopOrderDetails() {
           <View style={styles.basketHeader}>
             <Text style={styles.sectionTitle}>Basket Items</Text>
             <View style={styles.itemCountBadge}>
-              <Text style={styles.itemCountText}>{order.itemCount}</Text>
+              <Text style={styles.itemCountText}>{order.items.length}</Text>
             </View>
           </View>
 
@@ -169,7 +188,7 @@ export default function ShopOrderDetails() {
                 <Text style={styles.itemName}>{item.productName}</Text>
                 <Text style={styles.itemSubText}>Qty: {item.quantity}</Text>
                 {item.quantity > 1 && (
-                  <Text style={styles.itemSubText}>LKR {item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })} each</Text>
+                  <Text style={styles.itemSubText}>LKR {item.unitPriceLkr.toLocaleString(undefined, { minimumFractionDigits: 2 })} each</Text>
                 )}
                 {item.substitutionNote && (
                   <Text style={styles.noteText}>{item.substitutionNote}</Text>
@@ -179,7 +198,7 @@ export default function ShopOrderDetails() {
                 )}
               </View>
               <Text style={styles.itemPrice}>
-                LKR {(item.unitPrice * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                LKR {(item.unitPriceLkr * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </Text>
             </View>
           ))}
@@ -195,7 +214,7 @@ export default function ShopOrderDetails() {
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Pickup Time:</Text>
             <Text style={styles.detailValue}>
-              {order.pickupScheduledAt ? new Date(order.pickupScheduledAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "N/A"}
+              {new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </Text>
           </View>
           <View style={styles.detailRow}>

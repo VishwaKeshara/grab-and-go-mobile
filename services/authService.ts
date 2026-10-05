@@ -30,42 +30,6 @@ export async function signUp(input: SignUpInput) {
   return data;
 }
 
-export async function verifySignupOtp(email: string, token: string) {
-  const { data, error } = await supabase.auth.verifyOtp({
-    email: email.trim().toLowerCase(),
-    token: token.trim(),
-    type: "signup",
-  });
-
-  if (error) throw error;
-  return data;
-}
-
-export async function resendSignupOtp(email: string) {
-  const { error } = await supabase.auth.resend({
-    email: email.trim().toLowerCase(),
-    type: "signup",
-  });
-
-  if (error) throw error;
-}
-
-export async function sendPhoneOtp(phone: string) {
-  const { error } = await supabase.auth.signInWithOtp({ phone: phone.trim() });
-  if (error) throw error;
-}
-
-export async function verifyPhoneOtp(phone: string, token: string) {
-  const { data, error } = await supabase.auth.verifyOtp({
-    phone: phone.trim(),
-    token: token.trim(),
-    type: "sms",
-  });
-
-  if (error) throw error;
-  return data;
-}
-
 export async function listPickupHubs() {
   const { data, error } = await supabase
     .from("pickup_hubs")
@@ -80,7 +44,7 @@ export async function listPickupHubs() {
 export async function signIn(email: string, password: string) {
   const { data, error } = await supabase.auth.signInWithPassword({
     email: email.trim().toLowerCase(),
-    password,
+    password: password.trim(),
   });
 
   if (error) throw error;

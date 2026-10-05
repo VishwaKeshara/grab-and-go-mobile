@@ -1,116 +1,79 @@
-import React, { useState } from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable, PressableStateCallbackType } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable } from "react-native";
 import { router } from "expo-router";
-import { ShopOrder, ShopOrderStatus } from "@/types/shopOrder";
+import { ShopOrder, ShopOrderStatus, ShopOrderItem } from "@/types/shopOrder";
+import { supabase } from "@/lib/supabase";
+import { getShopByProfileId, getIncomingOrders, updateOrderStatus } from "@/services/shopService";
+import { FontAwesome } from "@expo/vector-icons";
 
-// --- Mock Data ---
-interface ExtendedShopOrder extends ShopOrder {
-  // Extra fields just for mock display that aren't in the base type yet
-  urgencyLabel?: string;
-  timeLeft?: string;
-  tier?: string;
-  orderCount?: number;
-  transport?: string;
-  payment?: string;
-  stagingBay?: string;
-  proximity?: string;
-  packingStateLabel?: string;
+// --- Types ---
+interface ExtendedShopOrder extends Omit<ShopOrder, 'items'> {
+  items?: ShopOrderItem[];
 }
-
-const INITIAL_MOCK_ORDERS: ExtendedShopOrder[] = [
-  {
-    id: "GNG-MLB-9042",
-    shopId: "shop-1",
-    customerId: "cust-1",
-    customerName: "Dinithi Perera",
-    customerPhone: "0000000000",
-    status: "new",
-    packingStatus: "unpacked",
-    pickupStatus: "pending",
-    totalAmount: 3100,
-    itemCount: 5,
-    pickupScheduledAt: "2026-10-02T17:30:00+05:30",
-    createdAt: "2026-10-02T17:12:00+05:30",
-    updatedAt: "2026-10-02T17:12:00+05:30",
-    urgencyLabel: "URGENT",
-    timeLeft: "01:42",
-    tier: "VIP Commuter Tier 3",
-    orderCount: 28,
-    transport: "Motorcycle Commute",
-    payment: "LankaQR PAID",
-  },
-  {
-    id: "GNG-MLB-9048",
-    shopId: "shop-1",
-    customerId: "cust-2",
-    customerName: "N/A",
-    customerPhone: "0000000000",
-    status: "new",
-    packingStatus: "unpacked",
-    pickupStatus: "pending",
-    totalAmount: 1890,
-    itemCount: 2,
-    items: [
-      {
-        id: "item-1",
-        orderId: "GNG-MLB-9048",
-        productId: "prod-1",
-        productName: "Araliya Samba Rice 5kg",
-        quantity: 1,
-        unitPrice: 1000,
-        unitLabel: "5kg",
-        isPacked: false,
-        substituteProductId: null,
-      },
-      {
-        id: "item-2",
-        orderId: "GNG-MLB-9048",
-        productId: "prod-2",
-        productName: "Premium Red Mysore Dhal 1kg",
-        quantity: 1,
-        unitPrice: 890,
-        unitLabel: "1kg",
-        isPacked: false,
-        substituteProductId: null,
-      },
-    ],
-    pickupScheduledAt: "2026-10-02T18:15:00+05:30",
-    createdAt: "2026-10-02T17:14:00+05:30",
-    updatedAt: "2026-10-02T17:14:00+05:30",
-    urgencyLabel: "NEW INTAKE",
-  },
-  {
-    id: "GNG-MLB-9039",
-    shopId: "shop-1",
-    customerId: "cust-3",
-    customerName: "R. Fernando",
-    customerPhone: "0000000000",
-    status: "ready",
-    packingStatus: "fully_packed",
-    pickupStatus: "pending",
-    totalAmount: 4620,
-    itemCount: 3,
-    pickupScheduledAt: "2026-10-02T17:45:00+05:30",
-    createdAt: "2026-10-02T17:00:00+05:30",
-    updatedAt: "2026-10-02T17:30:00+05:30",
-    stagingBay: "Staging Bay #B-01",
-    proximity: "Within 500m - Proximity Ping Received",
-    packingStateLabel: "Packed & Sealed in Thermal Bag",
-  },
-];
 
 type FilterTab = "All Incoming" | "Being Packed" | "Ready";
 type FilterChip = "Pickup <20 Mins" | "Motorcycle Pickup";
 
 export default function NewOrders() {
-  const [orders, setOrders] = useState<ExtendedShopOrder[]>(INITIAL_MOCK_ORDERS);
+  const [orders, setOrders] = useState<ExtendedShopOrder[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>("All Incoming");
   const [selectedChips, setSelectedChips] = useState<FilterChip[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [shopName, setShopName] = useState("");
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
-  const handleStatusChange = (orderId: string, newStatus: ShopOrderStatus) => {
-    setOrders((prev) =>
-      prev.map((o) => (o.id === orderId ? { ...o, status: newStatus } : o))
-    );
+  const fetchOrders = async (userId: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const shop = await getShopByProfileId(userId);
+      if (!shop) throw new Error("Shop not found");
+      setShopName(shop.name);
+      const incoming = (await getIncomingOrders(shop.id)) as ExtendedShopOrder[];
+      setOrders(incoming || []);
+      setLastSyncedAt(new Date());
+    } catch (err: any) {
+      setError(err.message || "Failed to load orders");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSessionAndFetch = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/(shop)/shop-login");
+        return;
+      }
+      setSessionChecked(true);
+      await fetchOrders(session.user.id);
+    } catch (err: any) {
+      setError("Session error. Please login again.");
+    }
+  };
+
+  useEffect(() => {
+    checkSessionAndFetch();
+  }, []);
+
+  const handleRefresh = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      await fetchOrders(session.user.id);
+    }
+  };
+
+  const handleStatusChange = async (orderId: string, newStatus: ShopOrderStatus) => {
+    try {
+      await updateOrderStatus(orderId, newStatus);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchOrders(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update status");
+    }
   };
 
   const toggleChip = (chip: FilterChip) => {
@@ -120,24 +83,61 @@ export default function NewOrders() {
   };
 
   const filteredOrders = orders.filter((o) => {
-    if (activeTab === "All Incoming" && o.status !== "new") return false;
+    if (activeTab === "All Incoming" && o.status !== "placed") return false;
     if (activeTab === "Being Packed" && o.status !== "packing" && o.status !== "accepted") return false;
     if (activeTab === "Ready" && o.status !== "ready") return false;
 
-    // simplistic chip filtering just for visual mock demo
-    if (selectedChips.includes("Pickup <20 Mins") && o.urgencyLabel !== "URGENT") return false;
-    if (selectedChips.includes("Motorcycle Pickup") && o.transport !== "Motorcycle Commute") return false;
+    if (selectedChips.includes("Motorcycle Pickup") && o.travelMethod !== "motorcycle") return false;
+    
+    if (selectedChips.includes("Pickup <20 Mins")) {
+      if (!o.pickupStartAt) return false;
+      const pickupTime = new Date(o.pickupStartAt).getTime();
+      const now = new Date().getTime();
+      const diffMins = (pickupTime - now) / 1000 / 60;
+      if (diffMins > 20 || diffMins < -60) return false;
+    }
 
     return true;
   });
 
   const getTabCount = (tab: FilterTab) => {
     return orders.filter((o) => {
-      if (tab === "All Incoming") return o.status === "new";
+      if (tab === "All Incoming") return o.status === "placed";
       if (tab === "Being Packed") return o.status === "packing" || o.status === "accepted";
       if (tab === "Ready") return o.status === "ready";
       return false;
     }).length;
+  };
+
+  if (!sessionChecked) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#4A4A68' }}>Checking session...</Text>
+      </View>
+    );
+  }
+
+  const renderEmptyState = () => {
+    let title = "";
+    let subtitle = "";
+    if (activeTab === "All Incoming") {
+      title = "No incoming orders";
+      subtitle = "You're all caught up for now.";
+    } else if (activeTab === "Being Packed") {
+      title = "No orders being packed";
+      subtitle = "Accepted orders will appear here.";
+    } else {
+      title = "No orders ready for pickup";
+      subtitle = "Completed packing orders will appear here.";
+    }
+
+    return (
+      <View style={styles.emptyStateCard}>
+        <FontAwesome name="inbox" size={32} color="#D0D0E0" style={{ marginBottom: 12 }} />
+        <Text style={styles.emptyStateTitle}>{title}</Text>
+        <Text style={styles.emptyStateSubtitle}>{subtitle}</Text>
+      </View>
+    );
   };
 
   return (
@@ -145,8 +145,9 @@ export default function NewOrders() {
       {/* Header */}
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerBrand}>MALABE EXPRESS</Text>
+          <Text style={styles.headerBrand}>{shopName ? shopName.toUpperCase() : "YOUR SHOP"}</Text>
           <Text style={styles.headerTitle}>New Orders</Text>
+          <Text style={styles.headerSubtitle}>Manage incoming and active shop orders</Text>
           <View style={styles.statusBadge}>
             <Text style={styles.statusBadgeText}>OPEN</Text>
           </View>
@@ -155,13 +156,6 @@ export default function NewOrders() {
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* SLA Card */}
-        <View style={styles.slaCard}>
-          <Text style={styles.slaTitle}>COUNTER QUEUE SLA</Text>
-          <Text style={styles.slaSubtitle}>Express Queue: Normal Flow</Text>
-          <Text style={styles.slaTime}>~ 38s</Text>
-        </View>
-
         {/* Filter Tabs */}
         <View style={styles.tabsContainer}>
           {(["All Incoming", "Being Packed", "Ready"] as FilterTab[]).map((tab) => {
@@ -185,6 +179,17 @@ export default function NewOrders() {
           })}
         </View>
 
+        {/* Sync Status Row */}
+        <View style={styles.syncRow}>
+          <Text style={styles.syncText}>
+            {loading ? "Syncing..." : lastSyncedAt ? "Last synced just now" : "Not synced"}
+          </Text>
+          <Pressable onPress={handleRefresh} style={styles.refreshBtn}>
+            <FontAwesome name="refresh" size={12} color="#8A8A9E" />
+            <Text style={styles.refreshText}>Refresh</Text>
+          </Pressable>
+        </View>
+
         {/* Filter Chips */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll}>
           {(["Pickup <20 Mins", "Motorcycle Pickup"] as FilterChip[]).map((chip) => {
@@ -204,15 +209,23 @@ export default function NewOrders() {
         </ScrollView>
 
         {/* Order Cards */}
-        {filteredOrders.map((order) => (
-          <OrderCard
-            key={order.id}
-            order={order}
-            onAccept={() => handleStatusChange(order.id, "accepted")}
-            onReject={() => handleStatusChange(order.id, "rejected")}
-            onStage={() => handleStatusChange(order.id, "completed")}
-          />
-        ))}
+        {error ? (
+          <Text style={{ color: 'red', margin: 20 }}>{error}</Text>
+        ) : loading && orders.length === 0 ? (
+          <Text style={{ color: '#4A4A68', margin: 20 }}>Loading live orders...</Text>
+        ) : filteredOrders.length === 0 ? (
+          renderEmptyState()
+        ) : (
+          filteredOrders.map((order) => (
+            <OrderCard
+              key={order.id}
+              order={order}
+              onAccept={() => handleStatusChange(order.id, "accepted")}
+              onReject={() => handleStatusChange(order.id, "cancelled")}
+              onStage={() => handleStatusChange(order.id, "collected")}
+            />
+          ))
+        )}
 
       </ScrollView>
     </SafeAreaView>
@@ -221,104 +234,78 @@ export default function NewOrders() {
 
 function OrderCard({ order, onAccept, onReject, onStage }: { order: ExtendedShopOrder, onAccept: () => void, onReject: () => void, onStage: () => void }) {
   const isReady = order.status === "ready";
+  const isPlaced = order.status === "placed";
+
+  const getStatusBadge = () => {
+    switch (order.status) {
+      case "placed": return { text: "NEW", color: "#0052CC", bg: "#DEEBFF" };
+      case "accepted": return { text: "ACCEPTED", color: "#00A859", bg: "#E6F7ED" };
+      case "packing": return { text: "PACKING", color: "#F5A623", bg: "#FFF5E6" };
+      case "ready": return { text: "READY", color: "#00A859", bg: "#E6F7ED" };
+      case "collected": return { text: "COMPLETED", color: "#1E2030", bg: "#E0E0EB" };
+      case "cancelled": return { text: "CANCELLED", color: "#D0021B", bg: "#FFEBEB" };
+      default: return { text: String(order.status).toUpperCase(), color: "#4A4A68", bg: "#F0F0F5" };
+    }
+  };
+  const badge = getStatusBadge();
 
   return (
     <View style={styles.card}>
       <View style={styles.cardHeader}>
-        <Text style={styles.orderId}>#{order.id}</Text>
-        {order.urgencyLabel && (
-          <Text style={[styles.urgency, order.urgencyLabel === "URGENT" && styles.urgencyRed]}>
-            {order.urgencyLabel}
+        <Text style={styles.orderId}>#{order.reference || order.id.substring(0, 8)}</Text>
+        <Text style={[styles.urgency, { color: badge.color, backgroundColor: badge.bg }]}>
+          {badge.text}
+        </Text>
+      </View>
+
+      <View style={styles.section}>
+        <Text style={styles.customerName}>{order.customerName}</Text>
+        
+        {(order.pickupStartAt || order.travelMethod) && (
+          <Text style={styles.pickupInfo}>
+            Pickup: {order.pickupStartAt ? new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "ASAP"}
+            {order.travelMethod ? ` • ${order.travelMethod.charAt(0).toUpperCase() + order.travelMethod.slice(1)}` : ""}
+          </Text>
+        )}
+
+        {order.paymentStatus && (
+          <Text style={styles.paymentInfo}>
+            {order.paymentStatus === 'paid' ? 'Paid' : order.paymentStatus === 'pay_at_pickup' ? 'Pay at Pickup' : 'Failed'} • LKR {order.totalLkr.toLocaleString()}
           </Text>
         )}
       </View>
 
-      <Text style={styles.receivedTime}>
-        Received {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-      </Text>
-
-      {order.timeLeft && (
-        <Text style={styles.timeLeft}>{order.timeLeft} left</Text>
-      )}
-
-      {/* Customer Info */}
-      {(order.customerName !== "N/A" || order.tier) && (
-        <View style={styles.section}>
-          <Text style={styles.sectionText}>Customer: {order.customerName}</Text>
-          {order.tier && <Text style={styles.sectionText}>{order.tier} • {order.orderCount} orders</Text>}
-        </View>
-      )}
-
-      {/* Delivery / Pickup Info */}
-      <View style={styles.section}>
-        {order.transport && <Text style={styles.sectionText}>Transport: {order.transport}</Text>}
-        {order.payment && <Text style={styles.sectionText}>Payment: {order.payment}</Text>}
-        {order.stagingBay && <Text style={styles.sectionText}>{order.stagingBay}</Text>}
-        {order.proximity && <Text style={styles.proximityText}>{order.proximity}</Text>}
-        {order.packingStateLabel && <Text style={styles.sectionText}>{order.packingStateLabel}</Text>}
-      </View>
-
-      {/* Items list if available */}
-      {order.items && order.items.length > 0 && (
-        <View style={styles.section}>
-          {order.items.map(item => (
-            <Text key={item.id} style={styles.sectionText}>- {item.productName}</Text>
-          ))}
-        </View>
-      )}
-
-      {!order.items && order.itemCount > 0 && (
-        <View style={styles.section}>
-          <Text style={styles.sectionText}>Items: {order.itemCount} items</Text>
-        </View>
-      )}
-
-      <Text style={styles.totalText}>Total: LKR {order.totalAmount.toLocaleString()}</Text>
-
-      {/* Actions */}
       <View style={styles.actions}>
-        {!isReady && (
+        {isPlaced && (
           <>
             <Pressable 
-              style={({ pressed }: { pressed: boolean }) => [styles.btnSecondary, pressed && styles.btnPressed]}
+              style={({ pressed }) => [styles.btnSecondary, pressed && styles.btnPressed]}
               onPress={onReject}
             >
               <Text style={styles.btnSecondaryText}>Reject</Text>
             </Pressable>
             
-            {order.id === "GNG-MLB-9042" ? (
-              <Pressable 
-                style={({ pressed }: { pressed: boolean }) => [styles.btnPrimary, pressed && styles.btnPressed]}
-                onPress={() => {
-                  onAccept();
-                  router.push("/(shop)/packing");
-                }}
-              >
-                <Text style={styles.btnPrimaryText}>Accept & Start Packing</Text>
-              </Pressable>
-            ) : (
-              <Pressable 
-                style={({ pressed }: { pressed: boolean }) => [styles.btnPrimary, pressed && styles.btnPressed]}
-                onPress={onAccept}
-              >
-                <Text style={styles.btnPrimaryText}>Accept</Text>
-              </Pressable>
-            )}
-            
             <Pressable 
-              style={({ pressed }: { pressed: boolean }) => [styles.btnSecondary, pressed && styles.btnPressed]}
-              onPress={() => router.push("/(shop)/shop-order-details")}
+              style={({ pressed }) => [styles.btnPrimary, pressed && styles.btnPressed]}
+              onPress={onAccept}
             >
-              <Text style={styles.btnSecondaryText}>
-                {order.id === "GNG-MLB-9048" ? "Review Basket" : "Order Details"}
-              </Text>
+              <Text style={styles.btnPrimaryText}>Accept</Text>
             </Pressable>
           </>
         )}
+        
+        <Pressable 
+          style={({ pressed }) => [styles.btnSecondary, pressed && styles.btnPressed, !isPlaced && { flexGrow: 1 }]}
+          onPress={() => router.push("/(shop)/shop-order-details")}
+        >
+          <Text style={styles.btnSecondaryText}>
+            Order Details
+          </Text>
+        </Pressable>
 
         {isReady && (
           <Pressable 
-            style={({ pressed }: { pressed: boolean }) => [styles.btnPrimary, pressed && styles.btnPressed, { width: '100%' }]}
+            style={({ pressed }) => [styles.btnPrimary, pressed && styles.btnPressed, { width: '100%' }]}
             onPress={onStage}
           >
             <Text style={styles.btnPrimaryText}>Stage to Counter Ledge</Text>
@@ -332,11 +319,11 @@ function OrderCard({ order, onAccept, onReject, onStage }: { order: ExtendedShop
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F8FC", // light lavender/off-white
+    backgroundColor: "#F8F8FC",
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 100, // padding for ShopNavbar
+    paddingBottom: 100,
   },
   header: {
     flexDirection: "row",
@@ -355,7 +342,12 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: "#1E2030", // dark navy
+    color: "#1E2030",
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "#8A8A9E",
     marginBottom: 8,
   },
   statusBadge: {
@@ -366,7 +358,7 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
   },
   statusBadgeText: {
-    color: "#00A859", // mint accent
+    color: "#00A859",
     fontWeight: "700",
     fontSize: 12,
   },
@@ -376,36 +368,11 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: "#D0D0E0",
   },
-  slaCard: {
-    backgroundColor: "#1E2030", // dark navy card
-    padding: 16,
-    borderRadius: 12,
-    marginBottom: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-  slaTitle: {
-    color: "#A0A0B8",
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  slaSubtitle: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "500",
-    marginTop: 4,
-  },
-  slaTime: {
-    color: "#00A859", // mint accent
-    fontSize: 24,
-    fontWeight: "bold",
-  },
   tabsContainer: {
     flexDirection: "row",
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0EB",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   tab: {
     flex: 1,
@@ -444,6 +411,29 @@ const styles = StyleSheet.create({
   tabBadgeTextActive: {
     color: "#FFFFFF",
   },
+  syncRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 16,
+    paddingHorizontal: 4,
+  },
+  syncText: {
+    fontSize: 12,
+    color: "#8A8A9E",
+  },
+  refreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  refreshText: {
+    fontSize: 12,
+    color: "#8A8A9E",
+    fontWeight: "600",
+  },
   chipsScroll: {
     marginBottom: 16,
     flexDirection: "row",
@@ -471,6 +461,28 @@ const styles = StyleSheet.create({
   chipTextSelected: {
     color: "#FFFFFF",
   },
+  emptyStateCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E0E0EB",
+    marginTop: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1E2030",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    color: "#8A8A9E",
+    textAlign: "center",
+  },
   card: {
     backgroundColor: "#FFFFFF",
     borderRadius: 16,
@@ -481,64 +493,49 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F0F0F5",
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 4,
+    marginBottom: 12,
   },
   orderId: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
     color: "#1E2030",
   },
   urgency: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#F5A623", // amber warning
-    backgroundColor: "#FFF5E6",
+    fontSize: 11,
+    fontWeight: "800",
     paddingHorizontal: 8,
     paddingVertical: 4,
-    borderRadius: 4,
-  },
-  urgencyRed: {
-    color: "#D0021B", // red/coral accent
-    backgroundColor: "#FFEBEB",
-  },
-  receivedTime: {
-    fontSize: 13,
-    color: "#8A8A9E",
-    marginBottom: 4,
-  },
-  timeLeft: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#D0021B",
-    marginBottom: 12,
+    borderRadius: 6,
+    letterSpacing: 0.5,
   },
   section: {
-    marginTop: 12,
+    marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: "#F0F0F5",
   },
-  sectionText: {
+  customerName: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1E2030",
+    marginBottom: 6,
+  },
+  pickupInfo: {
     fontSize: 14,
     color: "#4A4A68",
     marginBottom: 4,
   },
-  proximityText: {
+  paymentInfo: {
     fontSize: 14,
-    color: "#F5A623",
-    fontWeight: "600",
-    marginBottom: 4,
-  },
-  totalText: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1E2030",
-    marginTop: 16,
+    color: "#8A8A9E",
+    fontWeight: "500",
   },
   actions: {
     flexDirection: "row",

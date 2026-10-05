@@ -1,175 +1,98 @@
-import { listMyShops } from "@/services/shopService";
-import { listProductsByShop, updateProduct } from "@/services/productService";
-import type { Product, StockStatus } from "@/types/product";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
+import { getShopByProfileId, getInventory, updateStock } from "@/services/shopService";
+import type { InventoryItem } from "@/types/product";
+import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput, Switch, Pressable } from "react-native";
-
-/**
- * Stock counts live on products.stock_quantity / products.is_available.
- * There is no separate inventory table, so the low-stock cutoff is one shared
- * constant rather than a per-product threshold.
- */
-const LOW_STOCK_THRESHOLD = 5;
+import { router } from "expo-router";
+import { FontAwesome } from "@expo/vector-icons";
 
 type FilterType = "All" | "Low Stock" | "Out of Stock";
 
-/**
- * Adapts a product row to the shape the card markup expects, so the UI below
- * reads the same as it did against the old mock array.
- */
-type StockRow = {
-  id: string;
-  quantity: number;
-  stockStatus: StockStatus;
-  product: {
-    name: string;
-    category: string;
-    price: number;
-    unitLabel: string;
-    isAvailable: boolean;
-  };
-};
-
-function stockStatusFor(quantity: number): StockStatus {
-  if (quantity === 0) return "out_of_stock";
-  if (quantity <= LOW_STOCK_THRESHOLD) return "low_stock";
-  return "in_stock";
-}
-
-function toRow(product: Product): StockRow {
-  return {
-    id: product.id,
-    quantity: product.stock_quantity,
-    stockStatus: stockStatusFor(product.stock_quantity),
-    product: {
-      name: product.name,
-      category: product.category,
-      price: product.price,
-      unitLabel: product.unit,
-      isAvailable: product.is_available,
-    },
-  };
-}
-
 export default function StockUpdate() {
-  const [inventory, setInventory] = useState<StockRow[]>([]);
-  const [shopName, setShopName] = useState("");
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState<FilterType>("All");
+  
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [sessionChecked, setSessionChecked] = useState(false);
+  const [shopId, setShopId] = useState("");
+  const [shopName, setShopName] = useState("");
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
 
-  const fetchStock = useCallback(
-    (onDone?: () => void) =>
-      listMyShops()
-        .then((shops) => {
-          if (shops.length === 0) return [];
-          setShopName(shops[0].name);
-          return listProductsByShop(shops[0].id);
-        })
-        .then((products) => {
-          if (products) setInventory(products.map(toRow));
-        })
-        .catch((loadError: unknown) => {
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "We could not load your stock levels.",
-          );
-        })
-        .finally(() => {
-          setLoading(false);
-          onDone?.();
-        }),
-    [],
-  );
-
-  const reload = () => {
+  const fetchInventory = async (userId: string) => {
     setLoading(true);
     setError("");
-    fetchStock();
+    try {
+      const shop = await getShopByProfileId(userId);
+      if (!shop) throw new Error("Shop not found");
+      setShopId(shop.id);
+      setShopName(shop.name);
+      
+      const items = await getInventory(shop.id);
+      setInventory(items || []);
+      setLastSyncedAt(new Date());
+    } catch (err: any) {
+      setError(err.message || "Failed to load inventory");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const checkSessionAndFetch = async () => {
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.replace("/(shop)/shop-login");
+        return;
+      }
+      setSessionChecked(true);
+      await fetchInventory(session.user.id);
+    } catch (err: any) {
+      setError("Session error. Please login again.");
+    }
   };
 
   useEffect(() => {
-    // State is only touched inside the promise callbacks, never synchronously
-    // in the effect body, which would trigger a cascading render.
-    let active = true;
-    const timer = setTimeout(() => {
-      fetchStock(() => {
-        if (!active) return;
-      });
-    }, 0);
+    checkSessionAndFetch();
+  }, []);
 
-    return () => {
-      active = false;
-      clearTimeout(timer);
-    };
-  }, [fetchStock]);
-
-  /**
-   * Applies the change locally first so the stepper feels instant, then
-   * persists. If the write fails the previous row is restored and the error
-   * is surfaced, so the UI never drifts from what is stored.
-   */
-  const commit = (id: string, quantity: number, isAvailable: boolean) => {
-    const snapshot = inventory.find((item) => item.id === id) ?? null;
-
-    setInventory((rows) =>
-      rows.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              quantity,
-              stockStatus: stockStatusFor(quantity),
-              product: { ...item.product, isAvailable },
-            }
-          : item,
-      ),
-    );
-
-    updateProduct(id, {
-      stock_quantity: quantity,
-      is_available: isAvailable,
-    }).catch((saveError: unknown) => {
-      if (snapshot) {
-        setInventory((rows) =>
-          rows.map((item) => (item.id === id ? snapshot : item)),
-        );
-      }
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "We could not save that stock change.",
-      );
-    });
+  const handleRefresh = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      await fetchInventory(session.user.id);
+    }
   };
 
-  const updateQuantity = (id: string, newQty: number) => {
+  const handleQuantityUpdate = async (newQty: number, productId: string, isAvailable: boolean) => {
     if (newQty < 0) return;
-    const target = inventory.find((item) => item.id === id);
-    if (!target) return;
-    commit(id, newQty, newQty > 0);
+    try {
+      await updateStock(shopId, productId, newQty, isAvailable);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchInventory(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update stock");
+    }
   };
 
-  const toggleAvailability = (id: string) => {
-    const target = inventory.find((item) => item.id === id);
-    if (!target) return;
-    commit(id, target.quantity, !target.product.isAvailable);
+  const toggleAvailability = async (currentAvail: boolean, quantity: number, productId: string) => {
+    try {
+      await updateStock(shopId, productId, quantity, !currentAvail);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) await fetchInventory(session.user.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to update availability");
+    }
   };
 
   const filteredInventory = useMemo(() => {
     return inventory.filter(item => {
-      // 1. Filter Tab
-      if (activeFilter === "Low Stock" && item.stockStatus !== "low_stock") return false;
-      if (activeFilter === "Out of Stock" && item.stockStatus !== "out_of_stock") return false;
+      if (activeFilter === "Low Stock" && (item.quantity === 0 || item.quantity > item.lowStockThreshold)) return false;
+      if (activeFilter === "Out of Stock" && item.quantity > 0) return false;
 
-      // 2. Search Query (name or category)
       if (searchQuery) {
         const query = searchQuery.toLowerCase();
-        if (
-          !item.product.name.toLowerCase().includes(query) &&
-          !item.product.category.toLowerCase().includes(query)
-        ) {
+        if (!item.product.name.toLowerCase().includes(query)) {
           return false;
         }
       }
@@ -181,10 +104,41 @@ export default function StockUpdate() {
   const counts = useMemo(() => {
     return {
       all: inventory.length,
-      low: inventory.filter(i => i.stockStatus === "low_stock").length,
-      out: inventory.filter(i => i.stockStatus === "out_of_stock").length,
+      low: inventory.filter(i => i.quantity > 0 && i.quantity <= i.lowStockThreshold).length,
+      out: inventory.filter(i => i.quantity === 0).length,
     };
   }, [inventory]);
+
+  if (!sessionChecked) {
+    return (
+      <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
+        <Text style={{ color: '#4A4A68' }}>Checking session...</Text>
+      </View>
+    );
+  }
+
+  const renderEmptyState = () => {
+    let title = "";
+    let subtitle = "";
+    if (activeFilter === "All") {
+      title = "No inventory items";
+      subtitle = "Products assigned to this shop will appear here.";
+    } else if (activeFilter === "Low Stock") {
+      title = "No low-stock items";
+      subtitle = "Stock levels are currently healthy.";
+    } else {
+      title = "No out-of-stock items";
+      subtitle = "All available products currently have stock.";
+    }
+
+    return (
+      <View style={styles.emptyStateCard}>
+        <FontAwesome name="inbox" size={32} color="#D0D0E0" style={{ marginBottom: 12 }} />
+        <Text style={styles.emptyStateTitle}>{title}</Text>
+        <Text style={styles.emptyStateSubtitle}>{subtitle}</Text>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -193,6 +147,7 @@ export default function StockUpdate() {
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerBrand}>{shopName ? shopName.toUpperCase() : "YOUR SHOP"}</Text>
           <Text style={styles.headerTitle}>Stock Update</Text>
+          <Text style={styles.headerSubtitle}>Manage product availability and stock</Text>
         </View>
         <View style={styles.statusBadge}>
           <Text style={styles.statusBadgeText}>OPEN</Text>
@@ -200,25 +155,28 @@ export default function StockUpdate() {
         <View style={styles.profileBadge} />
       </View>
 
+      {/* Sync Status Row */}
+      <View style={styles.syncRow}>
+        <Text style={styles.syncText}>
+          {loading ? "Syncing..." : lastSyncedAt ? "Last synced just now" : "Not synced"}
+        </Text>
+        <Pressable onPress={handleRefresh} style={styles.refreshBtn}>
+          <FontAwesome name="refresh" size={12} color="#8A8A9E" />
+          <Text style={styles.refreshText}>Refresh</Text>
+        </Pressable>
+      </View>
+
       {/* Toolbar */}
       <View style={styles.toolbar}>
         <View style={styles.searchBar}>
-          <Text style={styles.searchIcon}>🔍</Text>
+          <FontAwesome name="search" size={14} color="#8A8A9E" style={styles.searchIcon} />
           <TextInput
             style={styles.searchInput}
-            placeholder={`Search ${counts.all} catalogued item${counts.all === 1 ? "" : "s"}...`}
+            placeholder="Search inventory..."
             placeholderTextColor="#8A8A9E"
             value={searchQuery}
             onChangeText={setSearchQuery}
           />
-          <TouchableOpacity style={styles.scanAction}>
-            <Text style={styles.scanActionText}>[-]</Text>
-          </TouchableOpacity>
-        </View>
-        <View style={styles.utilityActions}>
-          <TouchableOpacity style={styles.utilBtn}><Text style={styles.utilBtnText}> Bulk Price</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.utilBtn}><Text style={styles.utilBtnText}> Shelf Tags</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.utilBtn}><Text style={styles.utilBtnText}> Sync Radar</Text></TouchableOpacity>
         </View>
       </View>
 
@@ -237,7 +195,7 @@ export default function StockUpdate() {
           onPress={() => setActiveFilter("Low Stock")}
         >
           <Text style={[styles.filterChipText, activeFilter === "Low Stock" && styles.filterChipTextActive]}>
-            Low Stock {counts.low > 0 ? `<${counts.low + 1}` : 0}
+            Low Stock {counts.low}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity 
@@ -245,77 +203,68 @@ export default function StockUpdate() {
           onPress={() => setActiveFilter("Out of Stock")}
         >
           <Text style={[styles.filterChipText, activeFilter === "Out of Stock" && styles.filterChipTextActive]}>
-            Out of Stock
+            Out of Stock {counts.out}
           </Text>
         </TouchableOpacity>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {loading ? (
-          <Text style={styles.stateText}>Loading your stock levels...</Text>
-        ) : error ? (
+        {error ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorText}>{error}</Text>
-            <Pressable onPress={reload}>
+            <Pressable onPress={checkSessionAndFetch}>
               <Text style={styles.retryText}>Retry</Text>
             </Pressable>
           </View>
+        ) : loading && inventory.length === 0 ? (
+          <Text style={styles.stateText}>Loading your stock levels...</Text>
         ) : filteredInventory.length === 0 ? (
-          <Text style={styles.stateText}>
-            {inventory.length === 0
-              ? "No listings yet. Add products in Shop Management to track stock here."
-              : "No items match your search or filter."}
-          </Text>
+          renderEmptyState()
         ) : (
-        filteredInventory.map((item) => {
-          const isOut = item.stockStatus === "out_of_stock";
-          const isLow = item.stockStatus === "low_stock";
+          filteredInventory.map((item) => {
+          const isOut = item.quantity === 0;
+          const isLow = item.quantity > 0 && item.quantity <= item.lowStockThreshold;
           
           return (
             <View key={item.id} style={styles.card}>
               <View style={styles.cardHeader}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.productName}>{item.product.name}</Text>
-                  <Text style={styles.skuText}>{item.product.category}</Text>
+                  <View style={[
+                    styles.stockBadge,
+                    isOut ? styles.stockBadgeOut : isLow ? styles.stockBadgeLow : styles.stockBadgeIn
+                  ]}>
+                    <Text style={[
+                      styles.stockBadgeText,
+                      isOut ? styles.stockBadgeTextOut : isLow ? styles.stockBadgeTextLow : styles.stockBadgeTextIn
+                    ]}>
+                      {isOut ? "OUT OF STOCK" : isLow ? "LOW STOCK" : "IN STOCK"}
+                    </Text>
+                  </View>
                 </View>
                 <View style={styles.availabilityToggle}>
                   <Text style={styles.toggleLabel}>
-                    {item.product.isAvailable ? "ON" : "OFF"}
+                    {item.isAvailable ? "ON" : "OFF"}
                   </Text>
                   <Switch
-                    value={item.product.isAvailable}
-                    onValueChange={() => toggleAvailability(item.id)}
+                    value={item.isAvailable}
+                    onValueChange={() => toggleAvailability(item.isAvailable, item.quantity, item.product.id)}
                     trackColor={{ false: "#E0E0EB", true: "#00A859" }}
                     thumbColor="#FFFFFF"
                   />
                 </View>
               </View>
 
-              <View style={styles.statusRow}>
-                <View style={[
-                  styles.stockBadge,
-                  isOut ? styles.stockBadgeOut : isLow ? styles.stockBadgeLow : styles.stockBadgeIn
-                ]}>
-                  <Text style={[
-                    styles.stockBadgeText,
-                    isOut ? styles.stockBadgeTextOut : isLow ? styles.stockBadgeTextLow : styles.stockBadgeTextIn
-                  ]}>
-                    {isOut ? "OUT OF STOCK" : isLow ? "Low Stock" : "In Stock"} ({item.quantity} {item.quantity === 1 ? "unit" : item.product.unitLabel.includes("pack") || item.product.unitLabel.includes("carton") ? "units" : "units"})
-                  </Text>
-                </View>
-              </View>
-
               <View style={styles.controlsRow}>
                 <View style={styles.priceContainer}>
-                  <Text style={styles.priceLabel}>Current Price:</Text>
-                  <Text style={styles.priceValue}>LKR {item.product.price.toLocaleString(undefined, { minimumFractionDigits: 2 })}</Text>
+                  <Text style={styles.priceValue}>LKR {item.product.priceLkr.toFixed(2)}</Text>
                 </View>
 
                 {isOut ? (
                   <View style={styles.outActions}>
                     <Pressable 
-                      style={({ pressed }: { pressed: boolean }) => [styles.btnRestock, pressed && styles.btnPressed]}
-                      onPress={() => updateQuantity(item.id, 10)}
+                      style={({ pressed }) => [styles.btnRestock, pressed && styles.btnPressed]}
+                      onPress={() => handleQuantityUpdate(10, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.btnRestockText}>Restock +10</Text>
                     </Pressable>
@@ -324,14 +273,14 @@ export default function StockUpdate() {
                   <View style={styles.qtyControls}>
                     <TouchableOpacity 
                       style={styles.qtyBtn} 
-                      onPress={() => updateQuantity(item.id, item.quantity - 1)}
+                      onPress={() => handleQuantityUpdate(item.quantity - 1, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.qtyBtnText}>-</Text>
                     </TouchableOpacity>
                     <Text style={styles.qtyValue}>{item.quantity}</Text>
                     <TouchableOpacity 
                       style={styles.qtyBtn}
-                      onPress={() => updateQuantity(item.id, item.quantity + 1)}
+                      onPress={() => handleQuantityUpdate(item.quantity + 1, item.product.id, item.isAvailable)}
                     >
                       <Text style={styles.qtyBtnText}>+</Text>
                     </TouchableOpacity>
@@ -341,19 +290,14 @@ export default function StockUpdate() {
               
               {!isOut && (
                  <View style={styles.soldOutContainer}>
-                   <TouchableOpacity onPress={() => updateQuantity(item.id, 0)}>
+                   <TouchableOpacity onPress={() => handleQuantityUpdate(0, item.product.id, item.isAvailable)}>
                      <Text style={styles.soldOutText}>Mark Sold Out</Text>
                    </TouchableOpacity>
                  </View>
               )}
-
-              {isOut && (
-                <Text style={styles.hiddenNote}>⚠️ Item is hidden from live search until restocked</Text>
-              )}
             </View>
           );
-        })
-        )}
+        }))}
       </ScrollView>
     </SafeAreaView>
   );
@@ -366,26 +310,31 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: "#FFFFFF",
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0EB",
+    paddingTop: 16,
+    paddingBottom: 8,
   },
   headerTitleContainer: {
     flex: 1,
   },
   headerBrand: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#8A8A9E",
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#4A4A68",
+    marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 24,
+    fontWeight: "800",
     color: "#1E2030",
+    marginBottom: 2,
+  },
+  headerSubtitle: {
+    fontSize: 13,
+    color: "#8A8A9E",
+    marginBottom: 8,
   },
   statusBadge: {
     backgroundColor: "#E6F7ED",
@@ -397,73 +346,72 @@ const styles = StyleSheet.create({
   statusBadgeText: {
     color: "#00A859",
     fontWeight: "700",
-    fontSize: 10,
+    fontSize: 12,
   },
   profileBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: "#D0D0E0",
   },
+  syncRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 20,
+    marginBottom: 8,
+  },
+  syncText: {
+    fontSize: 12,
+    color: "#8A8A9E",
+  },
+  refreshBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  refreshText: {
+    fontSize: 12,
+    color: "#8A8A9E",
+    fontWeight: "600",
+  },
   toolbar: {
-    backgroundColor: "#FFFFFF",
     paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "#E0E0EB",
+    paddingVertical: 4,
   },
   searchBar: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0F0F5",
+    backgroundColor: "#FFFFFF",
     borderRadius: 8,
     paddingHorizontal: 12,
-    height: 40,
-    marginBottom: 12,
+    height: 44,
+    borderWidth: 1,
+    borderColor: "#E0E0EB",
   },
   searchIcon: {
     marginRight: 8,
-    fontSize: 14,
   },
   searchInput: {
     flex: 1,
     fontSize: 14,
     color: "#1E2030",
   },
-  scanAction: {
-    marginLeft: 8,
-  },
-  scanActionText: {
-    fontSize: 14,
-    color: "#4A4A68",
-    fontWeight: "700",
-  },
-  utilityActions: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  utilBtn: {
-    backgroundColor: "#E0E0EB",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 4,
-  },
-  utilBtnText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4A4A68",
-  },
   filtersContainer: {
     flexDirection: "row",
     paddingHorizontal: 16,
     paddingVertical: 12,
     gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: "#E0E0EB",
   },
   filterChip: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
     borderColor: "#E0E0EB",
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 20,
   },
@@ -485,111 +433,80 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F0F0F5",
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.03,
+    shadowRadius: 6,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    marginBottom: 12,
+    marginBottom: 16,
   },
   productName: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1E2030",
-    marginBottom: 4,
+    marginBottom: 8,
   },
-  stateText: {
-    color: "#8A8A9E",
-    fontSize: 13,
-    paddingHorizontal: 16,
-    paddingVertical: 32,
-    textAlign: "center",
+  stockBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
   },
-  errorBanner: {
-    alignItems: "center",
-    backgroundColor: "#FFF0ED",
-    borderRadius: 8,
-    flexDirection: "row",
-    marginHorizontal: 16,
-    marginTop: 16,
-    padding: 12,
+  stockBadgeIn: {
+    backgroundColor: "#E6F7ED",
   },
-  errorText: {
-    color: "#A33D2F",
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
+  stockBadgeLow: {
+    backgroundColor: "#FFF5E6",
   },
-  retryText: {
-    color: "#A33D2F",
+  stockBadgeOut: {
+    backgroundColor: "#FFEBEB",
+  },
+  stockBadgeText: {
     fontSize: 11,
     fontWeight: "800",
-    paddingLeft: 12,
+    letterSpacing: 0.5,
   },
-  skuText: {
-    fontSize: 12,
-    color: "#8A8A9E",
+  stockBadgeTextIn: {
+    color: "#00A859",
+  },
+  stockBadgeTextLow: {
+    color: "#F5A623",
+  },
+  stockBadgeTextOut: {
+    color: "#D0021B",
   },
   availabilityToggle: {
-    flexDirection: "row",
     alignItems: "center",
   },
   toggleLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "700",
-    color: "#4A4A68",
-    marginRight: 6,
-  },
-  statusRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 16,
-  },
-  stockBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-    marginRight: 8,
-  },
-  stockBadgeIn: { backgroundColor: "#E6F7ED" },
-  stockBadgeLow: { backgroundColor: "#FFF5E6" },
-  stockBadgeOut: { backgroundColor: "#FFEBEB" },
-  stockBadgeText: {
-    fontSize: 12,
-    fontWeight: "700",
-  },
-  stockBadgeTextIn: { color: "#00A859" },
-  stockBadgeTextLow: { color: "#F5A623" },
-  stockBadgeTextOut: { color: "#D0021B" },
-  comparisonNote: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#00A859",
+    color: "#8A8A9E",
+    marginBottom: 2,
   },
   controlsRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
+    paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: "#F0F0F5",
-    paddingTop: 16,
   },
-  priceContainer: {},
-  priceLabel: {
-    fontSize: 12,
-    color: "#8A8A9E",
-    marginBottom: 2,
+  priceContainer: {
+    flex: 1,
   },
   priceValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
     color: "#1E2030",
   },
@@ -602,53 +519,92 @@ const styles = StyleSheet.create({
     borderColor: "#E0E0EB",
   },
   qtyBtn: {
-    width: 36,
-    height: 36,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
   qtyBtnText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "600",
-    color: "#1E2030",
+    color: "#4A4A68",
   },
   qtyValue: {
     fontSize: 16,
     fontWeight: "700",
     color: "#1E2030",
-    minWidth: 28,
+    minWidth: 30,
     textAlign: "center",
   },
   outActions: {
     flexDirection: "row",
   },
   btnRestock: {
-    backgroundColor: "#00A859",
+    backgroundColor: "#1E2030",
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingVertical: 12,
+    borderRadius: 8,
   },
   btnRestockText: {
     color: "#FFFFFF",
+    fontSize: 13,
     fontWeight: "700",
-    fontSize: 14,
   },
   btnPressed: {
     opacity: 0.8,
   },
   soldOutContainer: {
-    alignItems: "flex-end",
-    marginTop: 8,
+    marginTop: 16,
+    alignItems: "center",
   },
   soldOutText: {
+    color: "#8A8A9E",
     fontSize: 13,
     fontWeight: "600",
-    color: "#D0021B",
   },
-  hiddenNote: {
-    marginTop: 12,
-    fontSize: 12,
-    fontStyle: "italic",
+  emptyStateCard: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 32,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1,
+    borderColor: "#E0E0EB",
+    marginTop: 20,
+  },
+  emptyStateTitle: {
+    fontSize: 16,
+    fontWeight: "700",
+    color: "#1E2030",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
     color: "#8A8A9E",
+    textAlign: "center",
+  },
+  stateText: {
+    color: "#8A8A9E",
+    fontSize: 14,
+    padding: 32,
+    textAlign: "center",
+  },
+  errorBanner: {
+    backgroundColor: "#FFEBEB",
+    padding: 16,
+    borderRadius: 12,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+  },
+  errorText: {
+    color: "#D0021B",
+    fontSize: 14,
+    flex: 1,
+  },
+  retryText: {
+    color: "#1E2030",
+    fontWeight: "700",
+    fontSize: 14,
+    marginLeft: 16,
   },
 });

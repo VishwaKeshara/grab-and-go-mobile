@@ -7,7 +7,6 @@ import {
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
 import {
-    sendPhoneOtp,
     signIn,
     signInWithApple,
     signInWithGoogle,
@@ -24,8 +23,6 @@ import {
 } from "react-native";
 
 export default function Login() {
-  const [mode, setMode] = useState<"phone" | "email">("phone");
-  const [phone, setPhone] = useState("+94 ");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -37,16 +34,8 @@ export default function Login() {
     setError("");
     setLoading(true);
     try {
-      if (mode === "phone") {
-        await sendPhoneOtp(phone);
-        router.push({
-          pathname: "/(auth)/otp-verification",
-          params: { mode: "phone", phone },
-        });
-      } else {
-        await signIn(email, password);
-        router.replace("/(customer)/home");
-      }
+      await signIn(email, password);
+      router.replace("/(customer)/home");
     } catch (submitError) {
       setError(
         submitError instanceof Error
@@ -105,76 +94,26 @@ export default function Login() {
         <Text style={styles.trustText}>FAST LOCAL PICKUP • MALABE EXPRESS</Text>
       </View>
       {error ? <ErrorBanner message={error} /> : null}
-      <View style={styles.segmented}>
-        <Pressable
-          onPress={() => setMode("phone")}
-          style={[styles.segment, mode === "phone" && styles.segmentActive]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              mode === "phone" && styles.segmentTextActive,
-            ]}
-          >
-            Phone Number
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setMode("email")}
-          style={[styles.segment, mode === "email" && styles.segmentActive]}
-        >
-          <Text
-            style={[
-              styles.segmentText,
-              mode === "email" && styles.segmentTextActive,
-            ]}
-          >
-            Email Address
-          </Text>
-        </Pressable>
-      </View>
-      {mode === "phone" ? (
-        <>
-          <Field
-            autoCapitalize="none"
-            keyboardType="phone-pad"
-            label="Mobile Number"
-            onChangeText={setPhone}
-            value={phone}
-          />
-          <Pressable onPress={() => setMode("email")}>
-            <Text style={styles.forgotLink}>
-              Use email and password instead
-            </Text>
-          </Pressable>
-          <PrimaryButton loading={loading} onPress={submit}>
-            Send Login OTP →
-          </PrimaryButton>
-        </>
-      ) : (
-        <>
-          <Field
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            label="Email Address"
-            onChangeText={setEmail}
-            value={email}
-          />
-          <Field
-            label="Password"
-            onChangeText={setPassword}
-            secureTextEntry
-            value={password}
-          />
-          <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
-            <Text style={styles.forgotLink}>Forgot Password?</Text>
-          </Pressable>
-          <PrimaryButton loading={loading} onPress={submit}>
-            Log In →
-          </PrimaryButton>
-        </>
-      )}
+      <Field
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        label="Email Address"
+        onChangeText={setEmail}
+        value={email}
+      />
+      <Field
+        label="Password"
+        onChangeText={setPassword}
+        secureTextEntry
+        value={password}
+      />
+      <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
+        <Text style={styles.forgotLink}>Forgot Password?</Text>
+      </Pressable>
+      <PrimaryButton loading={loading} onPress={submit}>
+        Log In →
+      </PrimaryButton>
       <View style={styles.divider}>
         <View style={styles.dividerLine} />
         <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
