@@ -130,7 +130,10 @@ export default function AdminDashboard() {
           >
             <Text style={styles.actionBtnText}>Security Monitoring</Text>
           </Pressable>
-          <Pressable style={({ pressed }) => [styles.actionBtn, pressed && styles.pressedState]}>
+          <Pressable
+            style={({ pressed }) => [styles.actionBtn, pressed && styles.pressedState]}
+            onPress={() => router.push("/(admin)/user-management")}
+          >
             <Text style={styles.actionBtnText}>User Management</Text>
           </Pressable>
           <Pressable style={({ pressed }) => [styles.actionBtn, pressed && styles.pressedState]}>

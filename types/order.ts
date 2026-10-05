@@ -1,4 +1,4 @@
-import type { CartItem, CheckoutDraft } from "@/types/cart";
+import type { CartItem, CheckoutDraft, GroceryShop } from "@/types/cart";
 
 export type OrderStatus = "placed" | "accepted" | "packing" | "ready" | "collected" | "cancelled";
 
@@ -8,7 +8,8 @@ export type Order = {
   pin: string;
   createdAt: string;
   status: OrderStatus;
-  paymentStatus: "paid_demo" | "pay_at_pickup";
+  paymentStatus: "paid" | "pay_at_pickup" | "failed" | "demo_unpaid";
+  shop: GroceryShop;
   items: CartItem[];
   draft: CheckoutDraft;
   subtotal: number;

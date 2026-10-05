@@ -71,9 +71,7 @@ export default function ForgotPassword() {
               Need quick access for active pickup?
             </Text>
             <Text style={styles.tipText}>
-              You can log in directly via{" "}
-              <Text style={styles.link}>OTP verification</Text> without
-              resetting your password.
+              You can return to the login screen and use your password instead.
             </Text>
           </View>
           <PrimaryButton loading={loading} onPress={submit}>

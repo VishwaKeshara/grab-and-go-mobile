@@ -5,6 +5,7 @@ import {
   Field,
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
+import { supabase } from "@/lib/supabase";
 import {
   signIn,
   signInWithApple,
@@ -25,12 +26,18 @@ import {
   TextInput,
   View,
 } from "react-native";
-import { supabase } from "@/lib/supabase";
 
 export default function Login() {
-  const params = useLocalSearchParams<{ accountType?: "customer" | "shop", shopMode?: "owner" | "staff" }>();
-  const [accountType, setAccountType] = useState<"customer" | "shop">(params.accountType || "customer");
-  const [shopRole, setShopRole] = useState<"owner" | "staff">(params.shopMode || "owner");
+  const params = useLocalSearchParams<{
+    accountType?: "customer" | "shop";
+    shopMode?: "owner" | "staff";
+  }>();
+
+  const [accountType, setAccountType] =
+    useState<"customer" | "shop">(params.accountType || "customer");
+
+  const [shopRole, setShopRole] =
+    useState<"owner" | "staff">(params.shopMode || "owner");
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,42 +73,60 @@ export default function Login() {
   const handleAuth = async () => {
     setError("");
     setLoading(true);
+
     try {
       if (accountType === "customer") {
         await signIn(email.trim(), password);
+
         const profile = await getProfile();
+
         if (profile?.role === "customer") {
           router.replace("/(customer)/home");
         } else {
           await supabase.auth.signOut();
           throw new Error("This account is not a customer account.");
         }
-      } else if (accountType === "shop") {
-        if (shopRole === "owner") {
-          await signIn(email.trim(), password);
-          const profile = await getProfile();
-          if (profile?.role === "shop") {
-            const shop = await getShopByProfileId(profile.id);
-            if (shop) {
-              router.replace("/(shop)/shop-dashboard");
-            } else {
-              throw new Error("No shop found. Please complete shop setup.");
-            }
-          } else {
-            await supabase.auth.signOut();
-            throw new Error("This account does not have merchant access.");
-          }
-        } else if (shopRole === "staff") {
-          // As per STAFF BACKEND SAFETY AUDIT:
-          // Direct staff login requires an active shop owner session due to RLS on verify_staff_pin.
-          // The current DB architecture throws an error if unauthenticated.
-          const staff = await verifyStaffPin(staffId.trim(), pin, selectedShopId);
-          if (!staff) throw new Error("Invalid Staff ID or PIN.");
-          router.replace("/(shop)/new-orders");
-        }
+
+        return;
       }
-    } catch (e: any) {
-      setError(e.message || "Authentication failed. Please try again.");
+
+      if (shopRole === "owner") {
+        await signIn(email.trim(), password);
+
+        const profile = await getProfile();
+
+        if (profile?.role !== "shop") {
+          await supabase.auth.signOut();
+          throw new Error("This account does not have merchant access.");
+        }
+
+        const shop = await getShopByProfileId(profile.id);
+
+        if (!shop) {
+          throw new Error("No shop found. Please complete shop setup.");
+        }
+
+        router.replace("/(shop)/shop-dashboard");
+        return;
+      }
+
+      const staff = await verifyStaffPin(
+        staffId.trim(),
+        pin,
+        selectedShopId
+      );
+
+      if (!staff) {
+        throw new Error("Invalid Staff ID or PIN.");
+      }
+
+      router.replace("/(shop)/new-orders");
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "We could not sign you in. Please try again."
+      );
     } finally {
       setLoading(false);
     }
@@ -110,14 +135,23 @@ export default function Login() {
   const continueWithGoogle = async () => {
     setError("");
     setGoogleLoading(true);
+
     try {
       await signInWithGoogle();
-      router.replace("/(customer)/home");
+
+      const profile = await getProfile();
+
+      if (profile?.role === "customer") {
+        router.replace("/(customer)/home");
+      } else {
+        await supabase.auth.signOut();
+        throw new Error("Google sign-in is currently available for customer accounts.");
+      }
     } catch (googleError) {
       setError(
         googleError instanceof Error
           ? googleError.message
-          : "Google sign-in could not be completed.",
+          : "Google sign-in could not be completed."
       );
     } finally {
       setGoogleLoading(false);
@@ -127,14 +161,23 @@ export default function Login() {
   const continueWithApple = async () => {
     setError("");
     setAppleLoading(true);
+
     try {
       await signInWithApple();
-      router.replace("/(customer)/home");
+
+      const profile = await getProfile();
+
+      if (profile?.role === "customer") {
+        router.replace("/(customer)/home");
+      } else {
+        await supabase.auth.signOut();
+        throw new Error("Apple sign-in is currently available for customer accounts.");
+      }
     } catch (appleError) {
       setError(
         appleError instanceof Error
           ? appleError.message
-          : "Apple sign-in could not be completed.",
+          : "Apple sign-in could not be completed."
       );
     } finally {
       setAppleLoading(false);
@@ -174,7 +217,11 @@ export default function Login() {
 
   return (
     <AuthFrame>
-      <AuthHeader title="Welcome" eyebrow="GRAB & GO" />
+      <AuthHeader
+        title="Welcome"
+        eyebrow="GRAB & GO"
+        subtitle="Choose how you want to continue"
+      />
       
       <Text style={styles.fieldLabel}>Choose account type:</Text>
       <View style={styles.segmented}>
@@ -216,6 +263,10 @@ export default function Login() {
             secureTextEntry
             value={password}
           />
+
+          <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
+            <Text style={styles.forgotLink}>Forgot Password?</Text>
+          </Pressable>
 
           {renderSubmitButton()}
 
@@ -285,6 +336,10 @@ export default function Login() {
                 value={password}
               />
               
+              <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
+                <Text style={styles.forgotLink}>Forgot Password?</Text>
+              </Pressable>
+
               {renderSubmitButton()}
 
               <View style={styles.signupRow}>
@@ -480,6 +535,15 @@ const styles = StyleSheet.create({
   },
   submitBtnTextDisabled: {
     color: "#9A98AA",
+  },
+
+  forgotLink: {
+    alignSelf: "flex-end",
+    color: "#07856A",
+    fontSize: 12,
+    fontWeight: "800",
+    marginBottom: 4,
+    marginTop: -4,
   },
 
   signupRow: {
