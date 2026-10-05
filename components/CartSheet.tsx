@@ -1,7 +1,6 @@
 import { money } from "@/components/OrderUI";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
-import { SHOP } from "@/services/cartService";
 import type { CartItem } from "@/types/cart";
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -10,7 +9,7 @@ import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, Vi
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 export function CartSheet() {
-  const { cart, totals, loading, cartSheetOpen, closeCartSheet, setQuantity, removeItem } = useCart();
+  const { cart, totals, loading, shop, cartSheetOpen, closeCartSheet, setQuantity, removeItem } = useCart();
   const { height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
@@ -39,7 +38,7 @@ export function CartSheet() {
           <View style={styles.handle} />
           <View style={styles.heading}>
             <View style={styles.headingCopy}>
-              <Text style={styles.eyebrow}>YOUR BASKET · {SHOP.name.toUpperCase()}</Text>
+              <Text style={styles.eyebrow}>YOUR BASKET · {(shop?.name ?? "GRAB & GO").toUpperCase()}</Text>
               <Text style={styles.title}>Cart preview</Text>
               <Text style={styles.count}>{totals.units} {totals.units === 1 ? "item" : "items"} · {totals.count} {totals.count === 1 ? "product" : "products"}</Text>
             </View>

@@ -1,13 +1,12 @@
 import { ActionButton, Card, Choice, ErrorText, OrderPage, ProductLine, SectionTitle, money } from "@/components/OrderUI";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
-import { alternatives } from "@/services/cartService";
 import type { SubstitutePreference } from "@/types/cart";
 import { router } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function SubstituteSelection() {
-  const { cart, setSubstitution, error } = useCart();
+  const { cart, alternatives, setSubstitution, error } = useCart();
   const applyAll = (value: SubstitutePreference) => cart.forEach(item => setSubstitution(item.product.id, value));
   return <OrderPage title="Substitutions" eyebrow="MAKE IT YOURS" back={() => router.back()} footer={<ActionButton label="Continue to checkout" icon="arrow-right" disabled={!cart.length} onPress={() => router.push("/(customer)/checkout")} />}>
     <ErrorText message={error} />

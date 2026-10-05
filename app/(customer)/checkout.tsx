@@ -1,25 +1,33 @@
 import { ActionButton, Card, Choice, ErrorText, InfoRow, OrderPage, PriceSummary, ProductLine, SectionTitle, ShopCard, money, preferenceText, prettySlot } from "@/components/OrderUI";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
-import { SHOP, alternatives, isValidPhone } from "@/services/cartService";
-import { isPickupSlotAvailable } from "@/utils/ordering";
+import { isValidPhone } from "@/services/cartService";
+import { hasPickupSlot, loadPickupSlots } from "@/services/pickupService";
 import { router } from "expo-router";
 import { useState } from "react";
 import { StyleSheet, Text, TextInput, View } from "react-native";
 
 export default function Checkout() {
-  const { cart, draft, totals, updateDraft, error } = useCart();
+  const { cart, draft, totals, shop, alternatives, updateDraft, error } = useCart();
   const [validation, setValidation] = useState("");
-  const continueToPayment = () => {
+  const continueToPayment = async () => {
     if (!draft.customerName.trim()) return setValidation("Enter your name to continue.");
     if (!isValidPhone(draft.phone)) return setValidation("Enter a valid phone number with at least 9 digits.");
-    if (!draft.pickupSlot || !isPickupSlotAvailable(draft.pickupSlot, SHOP.prepMinutes)) return setValidation("Choose an available pickup time.");
+    if (!shop || !draft.pickupSlot?.id) return setValidation("Choose an available pickup time.");
     if (!cart.length) return setValidation("Your cart is empty.");
+    try {
+      const availability = await loadPickupSlots(shop.id);
+      if (!hasPickupSlot(availability, draft.pickupSlot)) {
+        return setValidation("That pickup time is no longer available. Choose another.");
+      }
+    } catch (cause) {
+      return setValidation(cause instanceof Error ? cause.message : "Could not check pickup availability.");
+    }
     setValidation(""); router.push("/(customer)/payment");
   };
   return <OrderPage title="Checkout" eyebrow="ALMOST THERE" back={() => router.back()} footer={<><View style={styles.footerRow}><Text style={styles.footerLabel}>Amount to pay</Text><Text style={styles.footerTotal}>{money(totals.subtotal)}</Text></View><ActionButton label="Continue to payment" icon="arrow-right" disabled={!cart.length} onPress={continueToPayment} /></>}>
     <ErrorText message={validation || error} />
-    <ShopCard />
+    <ShopCard shop={shop} />
     <SectionTitle title="Pickup time" action="Edit" onAction={() => router.push("/(customer)/pickup-schedule")} />
     <Card><InfoRow icon="calendar" label="Selected window" value={prettySlot(draft.pickupSlot)} /><ActionButton label={draft.pickupSlot ? "Change pickup time" : "Choose pickup time"} light icon="arrow-right" onPress={() => router.push("/(customer)/pickup-schedule")} /></Card>
     <SectionTitle title="Contact details" />

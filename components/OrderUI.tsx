@@ -1,7 +1,6 @@
 import { colors } from "@/constants/colors";
 import { CartHeaderButton } from "@/components/CartHeaderButton";
-import { SHOP } from "@/services/cartService";
-import type { CartItem, GroceryProduct, PickupSlot, SubstitutePreference } from "@/types/cart";
+import type { CartItem, GroceryProduct, GroceryShop, PickupSlot, SubstitutePreference } from "@/types/cart";
 import type { OrderStatus } from "@/types/order";
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -37,8 +36,9 @@ export function SectionTitle({ title, action, onAction }: { title: string; actio
 export function ActionButton({ label, onPress, disabled, loading, icon, light }: { label: string; onPress: () => void; disabled?: boolean; loading?: boolean; icon?: Icon; light?: boolean }) {
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!disabled || !!loading }} disabled={disabled || loading} onPress={onPress} style={({ pressed }) => [styles.action, light && styles.lightAction, (disabled || loading) && styles.disabled, pressed && styles.pressed]}>{loading ? <ActivityIndicator color={light ? colors.ink : colors.white} /> : <><Text style={[styles.actionText, light && styles.lightActionText]}>{label}</Text>{icon ? <FontAwesome name={icon} color={light ? colors.ink : colors.white} size={15} /> : null}</>}</Pressable>;
 }
-export function LinkButton({ label, onPress, icon }: { label: string; onPress: () => void; icon?: Icon }) {
-  return <Pressable accessibilityRole="button" onPress={onPress} style={styles.linkButton}>{icon ? <FontAwesome name={icon} color={colors.ink} size={15} /> : null}<Text style={styles.linkText}>{label}</Text></Pressable>;
+export function LinkButton({ label, onPress, icon, disabled, loading }: { label: string; onPress: () => void; icon?: Icon; disabled?: boolean; loading?: boolean }) {
+  const inactive = !!disabled || !!loading;
+  return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: inactive }} disabled={inactive} onPress={onPress} style={[styles.linkButton, inactive && styles.disabled]}>{loading ? <ActivityIndicator color={colors.ink} size="small" /> : icon ? <FontAwesome name={icon} color={colors.ink} size={15} /> : null}<Text style={styles.linkText}>{label}</Text></Pressable>;
 }
 export function IconCircle({ icon, tint = colors.mintSoft }: { icon: Icon; tint?: string }) {
   return <View style={[styles.iconCircle, { backgroundColor: tint }]}><FontAwesome name={icon} size={17} color={colors.ink} /></View>;
@@ -50,7 +50,7 @@ export function PriceSummary({ subtotal, savings, fee = 0, final = true }: { sub
   return <Card><Text style={styles.summaryHeading}>Price summary</Text><SummaryRow label="Subtotal" value={money(subtotal)} /><SummaryRow label="Pickup service" value={fee ? money(fee) : "Free"} /><SummaryRow label="You saved" value={`− ${money(savings)}`} green /><View style={styles.rule} />{final ? <SummaryRow label="Total" value={money(subtotal + fee)} strong /> : null}</Card>;
 }
 function SummaryRow({ label, value, green, strong }: { label: string; value: string; green?: boolean; strong?: boolean }) { return <View style={styles.summaryRow}><Text style={[styles.summaryLabel, strong && styles.strong]}>{label}</Text><Text style={[styles.summaryValue, green && styles.green, strong && styles.strong]}>{value}</Text></View>; }
-export function ShopCard() { return <Card dark><View style={styles.shopRow}><View style={styles.shopMark}><FontAwesome name="shopping-basket" size={19} color={colors.ink} /></View><View style={{ flex: 1 }}><Text style={styles.shopName}>{SHOP.name}</Text><Text style={styles.shopSub}>{SHOP.distance} · {SHOP.counter}</Text></View></View><View style={styles.shopDivider} /><View style={styles.shopRow}><FontAwesome name="clock-o" size={15} color={colors.mint} /><Text style={styles.shopPrep}>Ready in about {SHOP.prepMinutes} minutes</Text></View></Card>; }
+export function ShopCard({ shop }: { shop?: GroceryShop | null }) { return <Card dark><View style={styles.shopRow}><View style={styles.shopMark}><FontAwesome name="shopping-basket" size={19} color={colors.ink} /></View><View style={{ flex: 1 }}><Text style={styles.shopName}>{shop?.name ?? "Shop unavailable"}</Text><Text style={styles.shopSub}>{shop ? `${shop.address} · ${shop.counter}` : "Pickup details unavailable"}</Text></View></View><View style={styles.shopDivider} /><View style={styles.shopRow}><FontAwesome name="clock-o" size={15} color={colors.mint} /><Text style={styles.shopPrep}>{shop ? `Ready in about ${shop.prepMinutes} minutes` : "Pickup time unavailable"}</Text></View></Card>; }
 
 export const statusSteps: OrderStatus[] = ["placed", "accepted", "packing", "ready", "collected"];
 export const statusLabel: Record<OrderStatus, string> = { placed: "Placed", accepted: "Accepted", packing: "Packing", ready: "Ready for pickup", collected: "Collected", cancelled: "Cancelled" };

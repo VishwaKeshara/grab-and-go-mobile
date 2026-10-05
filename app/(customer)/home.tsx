@@ -1,6 +1,6 @@
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
-import { products as cartProducts, SHOP } from "@/services/cartService";
+import { homeFeaturedProducts, HOME_SHOP_NAME } from "@/services/cartService";
 import type { GroceryProduct } from "@/types/cart";
 import { getHomeContext } from "@/services/homeService";
 import { FontAwesome } from "@expo/vector-icons";
@@ -9,6 +9,7 @@ import { router } from "expo-router";
 import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
 import {
+    Alert,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -19,7 +20,8 @@ import {
 
 type IconName = ComponentProps<typeof FontAwesome>["name"];
 type Category = { icon: IconName; label: string; tint: string };
-type Product = GroceryProduct & {
+type Product = Pick<GroceryProduct, "name" | "unit" | "price" | "image"> & {
+  catalogProduct: GroceryProduct | null;
   shop: string;
   tag: string;
   tagColor: string;
@@ -34,18 +36,53 @@ const categories: Category[] = [
   { icon: "glass", label: "Beverages", tint: "#DFF7F1" },
 ];
 
-const products: Product[] = cartProducts.slice(0, 3).map((product, index) => ({
-  ...product,
-  shop: SHOP.name,
-  tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
-  tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
-}));
-
 export default function Home() {
-  const { addItem, loading: cartLoading } = useCart();
+  const { addItem, adding, loading: cartLoading, error: cartError, products: catalogProducts, shop } = useCart();
+  const [homeAddError, setHomeAddError] = useState("");
+  const preferred = homeFeaturedProducts
+    .map(display => catalogProducts.find(value => value.name === display.name && value.shopId === shop?.id))
+    .filter((value): value is GroceryProduct => Boolean(value));
+  const featured = [...preferred, ...catalogProducts.filter(value => !preferred.some(item => item.id === value.id))]
+    .slice(0, homeFeaturedProducts.length);
+  const products: Product[] = featured.length ? featured.map((catalogProduct, index) => ({
+    ...catalogProduct,
+    image: catalogProduct.image || homeFeaturedProducts.find(value => value.name === catalogProduct.name)?.image || "",
+    catalogProduct,
+    shop: shop?.name ?? HOME_SHOP_NAME,
+    tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
+    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
+  })) : homeFeaturedProducts.map((display, index) => ({
+    ...display,
+    catalogProduct: null,
+    shop: HOME_SHOP_NAME,
+    tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
+    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
+  }));
+  const addFeaturedProduct = async (product: Product) => {
+    if (__DEV__) console.log("[Home cart] add callback", { product: product.name, productId: product.catalogProduct?.id ?? null });
+    if (!product.catalogProduct) {
+      const message = shop
+        ? `${product.name} is not available for ordering right now.`
+        : cartError || "Ordering is unavailable right now. Please try again later.";
+      setHomeAddError(message);
+      Alert.alert("Product unavailable", message);
+      return;
+    }
+    setHomeAddError("");
+    if (!await addItem(product.catalogProduct)) {
+      setHomeAddError("Could not add this product. Check your cart and try again.");
+    }
+  };
   const [search, setSearch] = useState("");
   const [firstName, setFirstName] = useState("Dilshan");
   const [pickupHub, setPickupHub] = useState("Malabe Bazaar Hub");
+
+  useEffect(() => {
+    if (__DEV__) console.log("[Home cart] add button state", {
+      cartLoading, adding, catalogCount: catalogProducts.length,
+      shopId: shop?.id ?? null, error: cartError || null,
+    });
+  }, [cartLoading, adding, catalogProducts.length, shop?.id, cartError]);
 
   useEffect(() => {
     getHomeContext()
@@ -184,7 +221,7 @@ export default function Home() {
           </View>
           <View style={styles.shopCopy}>
             <View style={styles.shopTitleRow}>
-              <Text style={styles.shopName}>Pasar Groceries</Text>
+              <Text style={styles.shopName}>{HOME_SHOP_NAME}</Text>
               <Text style={styles.open}>Open now</Text>
             </View>
             <Text style={styles.shopMeta}>0.8 km · Fresh produce & pantry</Text>
@@ -204,9 +241,10 @@ export default function Home() {
           contentContainerStyle={styles.productRow}
         >
           {products.map((product) => (
-            <ProductCard key={product.id} product={product} onAdd={addItem} addingDisabled={cartLoading} />
+            <ProductCard key={product.name} product={product} onAdd={addFeaturedProduct} addingDisabled={cartLoading || adding} />
           ))}
         </ScrollView>
+        {(cartError || homeAddError) ? <Text style={styles.cartError}>{cartError || homeAddError}</Text> : null}
         <View style={styles.bottomSpace} />
       </ScrollView>
     </View>
@@ -254,7 +292,7 @@ function SectionHeader({
   );
 }
 
-function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onAdd: (product: GroceryProduct) => boolean; addingDisabled: boolean }) {
+function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onAdd: (product: Product) => void | Promise<void>; addingDisabled: boolean }) {
   return (
     <View style={styles.productCard}>
       <View style={styles.productImageWrap}>
@@ -266,7 +304,10 @@ function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onA
         >
           <Text style={styles.productTagText}>{product.tag}</Text>
         </View>
-        <Pressable accessibilityLabel={`Add ${product.name} to cart`} accessibilityRole="button" accessibilityState={{ disabled: addingDisabled }} disabled={addingDisabled} onPress={() => onAdd(product)} style={[styles.addButton, addingDisabled && styles.addButtonDisabled]}>
+        <Pressable accessibilityLabel={`Add ${product.name} to cart`} accessibilityRole="button" accessibilityState={{ disabled: addingDisabled }} disabled={addingDisabled} onPress={() => {
+          if (__DEV__) console.log("[Home ProductCard] + pressed", product.name);
+          onAdd(product);
+        }} style={[styles.addButton, addingDisabled && styles.addButtonDisabled]}>
           <FontAwesome color={colors.white} name="plus" size={12} />
         </Pressable>
       </View>
@@ -507,6 +548,7 @@ const styles = StyleSheet.create({
     width: 38,
   },
   addButtonDisabled: { opacity: 0.45 },
+  cartError: { color: "#A43A32", fontSize: 12, marginTop: 10 },
   productName: {
     color: colors.ink,
     fontSize: 11,

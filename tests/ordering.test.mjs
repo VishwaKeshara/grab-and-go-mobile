@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { addProductToCart, canTransition, cartTotals, isPickupSlotAvailable, isValidPhone } from "../utils/ordering.ts";
+import { openShopPhone, shopTelUrl } from "../utils/shopPhone.ts";
 
 test("cart totals use actual prices and quantities", () => {
   const items = [
@@ -24,6 +25,25 @@ test("phone validation checks digit count and allowed characters", () => {
   assert.equal(isValidPhone("+94 77 123 4567"), true);
   assert.equal(isValidPhone("----------"), false);
   assert.equal(isValidPhone("+94 abc 123456"), false);
+});
+
+test("shop phone builds a safe dial link without opening it", () => {
+  assert.equal(shopTelUrl("+94 (11) 234-5678"), "tel:+94112345678");
+  assert.equal(shopTelUrl("011 234 5678"), "tel:0112345678");
+  assert.equal(shopTelUrl("0094 11 234 5678"), "tel:+94112345678");
+  assert.equal(shopTelUrl(null), null);
+  assert.equal(shopTelUrl("+94 11 234 5678;123"), null);
+  assert.equal(shopTelUrl("not available"), null);
+});
+
+test("shop phone opens only the normalized link through a mocked dialer", async () => {
+  const opened = [];
+  const number = await openShopPhone("+94 (11) 234-5678", async url => { opened.push(url); });
+  assert.equal(number, "+94112345678");
+  assert.deepEqual(opened, ["tel:+94112345678"]);
+  await assert.rejects(openShopPhone(null, async url => { opened.push(url); }), /not provided/);
+  assert.equal(opened.length, 1);
+  await assert.rejects(openShopPhone("011 234 5678", async () => { throw new Error("unsupported"); }), /dialer could not be opened/);
 });
 
 test("pickup slots must allow preparation time and cannot be in the past", () => {
