@@ -1,7 +1,9 @@
 import { colors } from "@/constants/colors";
+import { CartHeaderButton } from "@/components/CartHeaderButton";
 import { FontAwesome } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const focusedPaths = [
   "/cart",
@@ -20,11 +22,12 @@ const focusedPaths = [
 
 export function Header() {
   const pathname = usePathname();
+  const insets = useSafeAreaInsets();
 
   if (focusedPaths.some((path) => pathname.endsWith(path))) return null;
 
   return (
-    <View style={styles.header}>
+    <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
       <View style={styles.brandMark}>
         <Text style={styles.brandMarkText}>▣</Text>
       </View>
@@ -32,10 +35,11 @@ export function Header() {
         <Text style={styles.eyebrow}>GRAB &amp; GO</Text>
         <View style={styles.locationRow}>
           <View style={styles.liveDot} />
-          <Text style={styles.location}>Malabe Bazaar Hub</Text>
+          <Text numberOfLines={1} style={styles.location}>Malabe Bazaar Hub</Text>
           <Text style={styles.chevron}>⌄</Text>
         </View>
       </View>
+      <CartHeaderButton />
       <Pressable
         accessibilityLabel="Notifications"
         onPress={() => router.push("/(customer)/notifications")}
@@ -75,7 +79,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   brandMarkText: { color: colors.mint, fontSize: 19 },
-  brandCopy: { flex: 1, marginLeft: 10 },
+  brandCopy: { flex: 1, marginLeft: 10, minWidth: 0 },
   eyebrow: {
     color: "#07856A",
     fontSize: 9,
@@ -90,7 +94,7 @@ const styles = StyleSheet.create({
     marginRight: 5,
     width: 8,
   },
-  location: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  location: { color: colors.ink, flexShrink: 1, fontSize: 11, fontWeight: "700" },
   chevron: { color: colors.muted, fontSize: 14, marginLeft: 4, marginTop: -3 },
   iconButton: {
     alignItems: "center",

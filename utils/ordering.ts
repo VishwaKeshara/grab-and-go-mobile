@@ -1,8 +1,17 @@
-import type { CartItem, PickupSlot } from "../types/cart";
+import type { CartItem, GroceryProduct, PickupSlot } from "../types/cart";
 import type { OrderStatus } from "../types/order";
 
 export function cartTotals(items: CartItem[]) {
   return items.reduce((sum, item) => ({ count: sum.count + 1, units: sum.units + item.quantity, subtotal: sum.subtotal + item.product.price * item.quantity, savings: sum.savings + Math.max(0, item.product.regularPrice - item.product.price) * item.quantity }), { count: 0, units: 0, subtotal: 0, savings: 0 });
+}
+
+export function addProductToCart(items: CartItem[], product: GroceryProduct): CartItem[] {
+  if (items.some(item => item.product.id === product.id)) {
+    return items.map(item => item.product.id === product.id
+      ? { ...item, quantity: item.quantity + 1 }
+      : item);
+  }
+  return [...items, { product, quantity: 1, substitution: { type: "call" } }];
 }
 
 export const isValidPhone = (phone: string) => /^\+?[\d\s()-]+$/.test(phone.trim()) && phone.replace(/\D/g, "").length >= 9;

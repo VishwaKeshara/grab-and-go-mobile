@@ -1,4 +1,7 @@
 import { colors } from "@/constants/colors";
+import { useCart } from "@/hooks/useCart";
+import { homeFeaturedProducts, HOME_SHOP_NAME } from "@/services/cartService";
+import type { GroceryProduct } from "@/types/cart";
 import { getHomeContext } from "@/services/homeService";
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
@@ -6,6 +9,7 @@ import { router } from "expo-router";
 import type { ComponentProps } from "react";
 import { useEffect, useState } from "react";
 import {
+    Alert,
     Pressable,
     ScrollView,
     StyleSheet,
@@ -16,13 +20,9 @@ import {
 
 type IconName = ComponentProps<typeof FontAwesome>["name"];
 type Category = { icon: IconName; label: string; tint: string };
-type Product = {
-  id: string;
-  name: string;
+type Product = Pick<GroceryProduct, "name" | "unit" | "price" | "image"> & {
+  catalogProduct: GroceryProduct | null;
   shop: string;
-  price: string;
-  unit: string;
-  image: string;
   tag: string;
   tagColor: string;
 };
@@ -36,46 +36,53 @@ const categories: Category[] = [
   { icon: "glass", label: "Beverages", tint: "#DFF7F1" },
 ];
 
-const products: Product[] = [
-  {
-    id: "bananas",
-    name: "Kolikuttu Bananas",
-    shop: "Kandy Fresh Market",
-    price: "LKR 280",
-    unit: "per 500g",
-    image:
-      "https://images.unsplash.com/photo-1571771894821-ce9b6c11b08e?w=400&q=80",
-    tag: "Fresh today",
-    tagColor: colors.mintSoft,
-  },
-  {
-    id: "coconut",
-    name: "King Coconut",
-    shop: "Highland Superstore",
-    price: "LKR 180",
-    unit: "each",
-    image:
-      "https://images.unsplash.com/photo-1581453883351-9a4e9a7b8f6b?w=400&q=80",
-    tag: "Best seller",
-    tagColor: "#FFF0D5",
-  },
-  {
-    id: "bread",
-    name: "Country Grain Loaf",
-    shop: "Pastry Lane",
-    price: "LKR 420",
-    unit: "400g",
-    image:
-      "https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&q=80",
-    tag: "Baked fresh",
-    tagColor: "#FFE6E0",
-  },
-];
-
 export default function Home() {
+  const { addItem, adding, loading: cartLoading, error: cartError, products: catalogProducts, shop } = useCart();
+  const [homeAddError, setHomeAddError] = useState("");
+  const preferred = homeFeaturedProducts
+    .map(display => catalogProducts.find(value => value.name === display.name && value.shopId === shop?.id))
+    .filter((value): value is GroceryProduct => Boolean(value));
+  const featured = [...preferred, ...catalogProducts.filter(value => !preferred.some(item => item.id === value.id))]
+    .slice(0, homeFeaturedProducts.length);
+  const products: Product[] = featured.length ? featured.map((catalogProduct, index) => ({
+    ...catalogProduct,
+    image: catalogProduct.image || homeFeaturedProducts.find(value => value.name === catalogProduct.name)?.image || "",
+    catalogProduct,
+    shop: shop?.name ?? HOME_SHOP_NAME,
+    tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
+    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
+  })) : homeFeaturedProducts.map((display, index) => ({
+    ...display,
+    catalogProduct: null,
+    shop: HOME_SHOP_NAME,
+    tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
+    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
+  }));
+  const addFeaturedProduct = async (product: Product) => {
+    if (__DEV__) console.log("[Home cart] add callback", { product: product.name, productId: product.catalogProduct?.id ?? null });
+    if (!product.catalogProduct) {
+      const message = shop
+        ? `${product.name} is not available for ordering right now.`
+        : cartError || "Ordering is unavailable right now. Please try again later.";
+      setHomeAddError(message);
+      Alert.alert("Product unavailable", message);
+      return;
+    }
+    setHomeAddError("");
+    if (!await addItem(product.catalogProduct)) {
+      setHomeAddError("Could not add this product. Check your cart and try again.");
+    }
+  };
   const [search, setSearch] = useState("");
   const [firstName, setFirstName] = useState("Dilshan");
   const [pickupHub, setPickupHub] = useState("Malabe Bazaar Hub");
+
+  useEffect(() => {
+    if (__DEV__) console.log("[Home cart] add button state", {
+      cartLoading, adding, catalogCount: catalogProducts.length,
+      shopId: shop?.id ?? null, error: cartError || null,
+    });
+  }, [cartLoading, adding, catalogProducts.length, shop?.id, cartError]);
 
   useEffect(() => {
     getHomeContext()
@@ -214,7 +221,7 @@ export default function Home() {
           </View>
           <View style={styles.shopCopy}>
             <View style={styles.shopTitleRow}>
-              <Text style={styles.shopName}>Pasar Groceries</Text>
+              <Text style={styles.shopName}>{HOME_SHOP_NAME}</Text>
               <Text style={styles.open}>Open now</Text>
             </View>
             <Text style={styles.shopMeta}>0.8 km · Fresh produce & pantry</Text>
@@ -234,9 +241,10 @@ export default function Home() {
           contentContainerStyle={styles.productRow}
         >
           {products.map((product) => (
-            <ProductCard key={product.id} product={product} />
+            <ProductCard key={product.name} product={product} onAdd={addFeaturedProduct} addingDisabled={cartLoading || adding} />
           ))}
         </ScrollView>
+        {(cartError || homeAddError) ? <Text style={styles.cartError}>{cartError || homeAddError}</Text> : null}
         <View style={styles.bottomSpace} />
       </ScrollView>
     </View>
@@ -284,39 +292,36 @@ function SectionHeader({
   );
 }
 
-function ProductCard({ product }: { product: Product }) {
+function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onAdd: (product: Product) => void | Promise<void>; addingDisabled: boolean }) {
   return (
-    <Pressable
-      onPress={() => router.push("/(customer)/product-details")}
-      style={styles.productCard}
-    >
+    <View style={styles.productCard}>
       <View style={styles.productImageWrap}>
-        <Image
-          contentFit="cover"
-          source={product.image}
-          style={styles.productImage}
-          transition={200}
-        />
+        <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")} style={styles.productImageTouch}>
+          <Image contentFit="cover" source={product.image} style={styles.productImage} transition={200} />
+        </Pressable>
         <View
           style={[styles.productTag, { backgroundColor: product.tagColor }]}
         >
           <Text style={styles.productTagText}>{product.tag}</Text>
         </View>
-        <View style={styles.addButton}>
+        <Pressable accessibilityLabel={`Add ${product.name} to cart`} accessibilityRole="button" accessibilityState={{ disabled: addingDisabled }} disabled={addingDisabled} onPress={() => {
+          if (__DEV__) console.log("[Home ProductCard] + pressed", product.name);
+          onAdd(product);
+        }} style={[styles.addButton, addingDisabled && styles.addButtonDisabled]}>
           <FontAwesome color={colors.white} name="plus" size={12} />
-        </View>
+        </Pressable>
       </View>
-      <Text numberOfLines={1} style={styles.productName}>
-        {product.name}
-      </Text>
+      <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")}>
+        <Text numberOfLines={1} style={styles.productName}>{product.name}</Text>
+      </Pressable>
       <Text numberOfLines={1} style={styles.productShop}>
         {product.shop}
       </Text>
       <View style={styles.priceRow}>
-        <Text style={styles.productPrice}>{product.price}</Text>
+        <Text style={styles.productPrice}>LKR {product.price.toLocaleString("en-LK")}</Text>
         <Text style={styles.productUnit}>{product.unit}</Text>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -518,6 +523,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
     position: "relative",
   },
+  productImageTouch: { height: "100%", width: "100%" },
   productImage: { height: "100%", width: "100%" },
   productTag: {
     borderRadius: 5,
@@ -532,15 +538,17 @@ const styles = StyleSheet.create({
     alignItems: "center",
     backgroundColor: colors.ink,
     borderColor: colors.white,
-    borderRadius: 14,
+    borderRadius: 19,
     borderWidth: 2,
-    bottom: 6,
-    height: 28,
+    bottom: 5,
+    height: 38,
     justifyContent: "center",
     position: "absolute",
-    right: 6,
-    width: 28,
+    right: 5,
+    width: 38,
   },
+  addButtonDisabled: { opacity: 0.45 },
+  cartError: { color: "#A43A32", fontSize: 12, marginTop: 10 },
   productName: {
     color: colors.ink,
     fontSize: 11,
