@@ -1,4 +1,5 @@
 import { CustomerNavbar } from "@/components/CustomerNavbar";
+import { CartSheet } from "@/components/CartSheet";
 import { Header } from "@/components/Header";
 import { OrderingProvider } from "@/hooks/useCart";
 import { Slot } from "expo-router";
@@ -11,6 +12,7 @@ export default function CustomerLayout() {
         <Header />
         <Slot />
         <CustomerNavbar />
+        <CartSheet />
       </View>
     </OrderingProvider>
   );

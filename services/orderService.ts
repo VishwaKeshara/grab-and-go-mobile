@@ -1,37 +1,112 @@
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { SHOP, cartTotals, isValidPhone, scopedKey } from "@/services/cartService";
-import { canTransition, isPickupSlotAvailable } from "@/utils/ordering";
-import type { CartItem, CheckoutDraft } from "@/types/cart";
+import { supabase } from "@/lib/supabase";
+import { mapShop } from "@/services/cartService";
+import type { CartItem, CheckoutDraft, GroceryShop, PickupSlot } from "@/types/cart";
+import type { CustomerOrderItemRow, CustomerOrderRow, CustomerShopRow } from "@/types/database";
 import type { Order, OrderStatus } from "@/types/order";
+import { cartTotals, isValidPhone } from "@/utils/ordering";
 
-const KEY = "grab-go-demo-orders-v1";
 export const SERVICE_FEE = 0;
 
-export async function loadOrders(): Promise<Order[]> {
-  const value = await AsyncStorage.getItem(await scopedKey(KEY));
-  return value ? JSON.parse(value) as Order[] : [];
+function localParts(value: string, timezone: string) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(new Date(value));
+  const get = (type: string) => parts.find(part => part.type === type)?.value ?? "";
+  return { date: `${get("year")}-${get("month")}-${get("day")}`,
+    time: `${get("hour")}:${get("minute")}` };
 }
 
-export async function createOrder(items: CartItem[], draft: CheckoutDraft): Promise<Order> {
+function mapOrder(row: CustomerOrderRow, items: CustomerOrderItemRow[], shop: GroceryShop): Order {
+  const start = localParts(row.pickup_start_at, shop.timezone);
+  const end = localParts(row.pickup_end_at, shop.timezone);
+  const pickupSlot: PickupSlot = {
+    id: row.pickup_slot_id ?? undefined, date: start.date,
+    start: start.time, end: end.time, mode: row.pickup_mode,
+  };
+  return {
+    id: row.id, reference: row.reference, pin: row.pickup_pin,
+    createdAt: row.created_at, status: row.status,
+    paymentStatus: row.payment_status, shop,
+    items: items.map(item => ({
+      product: {
+        id: item.product_id ?? item.id, shopId: row.shop_id,
+        name: item.product_name, unit: item.product_unit,
+        price: item.unit_price_lkr, regularPrice: item.regular_price_lkr,
+        image: item.image_url ?? "",
+      },
+      quantity: item.quantity, substitution: item.substitution,
+    })),
+    draft: {
+      checkoutId: row.checkout_id, customerName: row.customer_name,
+      phone: row.customer_phone, packingInstructions: row.packing_instructions,
+      travelMethod: row.travel_method, pickupSlot,
+      paymentMethod: row.payment_method,
+    },
+    subtotal: row.subtotal_lkr, savings: row.savings_lkr,
+    serviceFee: row.service_fee_lkr, total: row.total_lkr,
+  };
+}
+
+export async function loadOrders(): Promise<Order[]> {
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user) throw new Error("Sign in to load your orders.");
+  const { data, error } = await supabase.from("customer_orders")
+    .select("id,customer_id,shop_id,checkout_id,reference,pickup_pin,status,payment_method,payment_status,customer_name,customer_phone,packing_instructions,travel_method,pickup_start_at,pickup_end_at,pickup_mode,pickup_slot_id,subtotal_lkr,savings_lkr,service_fee_lkr,total_lkr,created_at")
+    .eq("customer_id", userData.user.id).order("created_at", { ascending: false });
+  if (error) throw error;
+  const rows = (data ?? []) as CustomerOrderRow[];
+  if (!rows.length) return [];
+  const [itemResult, shopResult] = await Promise.all([
+    supabase.from("customer_order_items")
+      .select("id,order_id,product_id,product_name,product_unit,image_url,quantity,unit_price_lkr,regular_price_lkr,substitution")
+      .in("order_id", rows.map(row => row.id)),
+    supabase.from("customer_shops")
+      .select("id,name,address,phone,pickup_counter,preparation_minutes,timezone,active")
+      .in("id", [...new Set(rows.map(row => row.shop_id))]),
+  ]);
+  if (itemResult.error) throw itemResult.error;
+  if (shopResult.error) throw shopResult.error;
+  const items = (itemResult.data ?? []) as CustomerOrderItemRow[];
+  const shops = new Map(((shopResult.data ?? []) as CustomerShopRow[])
+    .map(row => [row.id, mapShop(row)]));
+  return rows.map(row => {
+    const shop = shops.get(row.shop_id);
+    if (!shop) throw new Error("An order shop could not be loaded.");
+    return mapOrder(row, items.filter(item => item.order_id === row.id), shop);
+  });
+}
+
+export async function createOrder(
+  items: CartItem[], draft: CheckoutDraft, shop: GroceryShop,
+  expectedSubtotal = cartTotals(items).subtotal,
+): Promise<Order> {
+  if (!draft.pickupSlot?.id || !draft.customerName.trim() || !isValidPhone(draft.phone)) {
+    throw new Error("Complete your contact details and pickup time before paying.");
+  }
+  const { data, error } = await supabase.rpc("place_customer_order", {
+    p_checkout_id: draft.checkoutId,
+    p_shop_id: shop.id,
+    p_slot_id: draft.pickupSlot.id,
+    p_expected_subtotal: expectedSubtotal,
+    p_payment_method: draft.paymentMethod,
+    p_customer_name: draft.customerName,
+    p_customer_phone: draft.phone,
+    p_packing_instructions: draft.packingInstructions,
+    p_travel_method: draft.travelMethod,
+  });
+  if (error) throw error;
   const orders = await loadOrders();
-  const existing = orders.find(order => order.draft.checkoutId === draft.checkoutId);
-  if (existing) return existing;
-  if (!items.length || !draft.pickupSlot || !draft.customerName.trim() || !isValidPhone(draft.phone)) throw new Error("Complete your contact details and pickup time before paying.");
-  if (!isPickupSlotAvailable(draft.pickupSlot, SHOP.prepMinutes)) throw new Error("That pickup slot is too soon. Choose another time.");
-  const totals = cartTotals(items);
-  const now = new Date();
-  const id = `${now.getTime()}-${Math.random().toString(36).slice(2, 8)}`;
-  const order: Order = { id, reference: `GG-${now.getFullYear()}-${String(now.getTime()).slice(-6)}`, pin: String(Math.floor(1000 + Math.random() * 9000)), createdAt: now.toISOString(), status: "placed", paymentStatus: draft.paymentMethod === "pickup" ? "pay_at_pickup" : "paid_demo", items: JSON.parse(JSON.stringify(items)) as CartItem[], draft: JSON.parse(JSON.stringify(draft)) as CheckoutDraft, subtotal: totals.subtotal, savings: totals.savings, serviceFee: SERVICE_FEE, total: totals.subtotal + SERVICE_FEE };
-  await AsyncStorage.setItem(await scopedKey(KEY), JSON.stringify([order, ...orders]));
+  const order = orders.find(value => value.id === data);
+  if (!order) throw new Error(
+    "Order was placed, but its confirmation could not be loaded. Check My Orders or retry with the same checkout.",
+  );
   return order;
 }
 
-export async function setOrderStatus(id: string, status: OrderStatus): Promise<Order[]> {
-  const orders = await loadOrders();
-  const current = orders.find(order => order.id === id);
-  if (!current) throw new Error("This order could not be found.");
-  if (!canTransition(current.status, status)) throw new Error("This status change is not available.");
-  const updated = orders.map(order => order.id === id ? { ...order, status } : order);
-  await AsyncStorage.setItem(await scopedKey(KEY), JSON.stringify(updated));
-  return updated;
+export async function setOrderStatus(id: string, status: OrderStatus): Promise<void> {
+  if (status !== "cancelled") throw new Error("Only assigned shop staff can update order status.");
+  const { error } = await supabase.rpc("cancel_customer_order", { p_order_id: id });
+  if (error) throw error;
 }
