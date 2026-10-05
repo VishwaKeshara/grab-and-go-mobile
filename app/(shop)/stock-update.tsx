@@ -43,7 +43,7 @@ export default function StockUpdate() {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
-        router.replace("/(shop)/shop-login");
+        router.replace("/(auth)/login?accountType=shop&shopMode=owner");
         return;
       }
       setSessionChecked(true);

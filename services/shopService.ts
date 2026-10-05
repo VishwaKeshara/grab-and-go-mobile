@@ -712,86 +712,121 @@ function mapItemRow(row: Record<string, unknown>): ShopOrderItem {
   };
 }
 
-const SHOP_COLUMNS =
-  "id, owner_id, name, description, category, address, phone, image_url, is_active, created_at, updated_at";
-
-function toShop(row: Record<string, unknown>): Shop {
-  return row as unknown as Shop;
-}
 
 /** Shops owned by the signed-in user, for the shop management screen. */
 export async function listMyShops(): Promise<Shop[]> {
   const userId = await currentUserId();
   const { data, error } = await supabase
-    .from("shops")
-    .select(SHOP_COLUMNS)
-    .eq("owner_id", userId)
-    .order("created_at", { ascending: false });
+    .from("customer_shops")
+    .select("id, profile_id, name, address, phone, active")
+    .eq("profile_id", userId);
 
   if (error) throw error;
-  return (data ?? []).map(toShop);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    owner_id: row.profile_id,
+    name: row.name,
+    description: "",
+    category: "Grocery",
+    address: row.address,
+    phone: row.phone,
+    image_url: null,
+    is_active: row.active,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })) as Shop[];
 }
 
 /** All active shops, for browsing. */
 export async function listShops(): Promise<Shop[]> {
   const { data, error } = await supabase
-    .from("shops")
-    .select(SHOP_COLUMNS)
-    .eq("is_active", true)
+    .from("customer_shops")
+    .select("id, profile_id, name, address, phone, active")
+    .eq("active", true)
     .order("name", { ascending: true });
 
   if (error) throw error;
-  return (data ?? []).map(toShop);
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    owner_id: row.profile_id,
+    name: row.name,
+    description: "",
+    category: "Grocery",
+    address: row.address,
+    phone: row.phone,
+    image_url: null,
+    is_active: row.active,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })) as Shop[];
 }
 
 export async function getShop(id: string): Promise<Shop> {
   const { data, error } = await supabase
-    .from("shops")
-    .select(SHOP_COLUMNS)
+    .from("customer_shops")
+    .select("id, profile_id, name, address, phone, active")
     .eq("id", id)
     .single();
 
   if (error) throw error;
-  return toShop(data);
+  const row: any = data;
+  return {
+    id: row.id,
+    owner_id: row.profile_id,
+    name: row.name,
+    description: "",
+    category: "Grocery",
+    address: row.address,
+    phone: row.phone,
+    image_url: null,
+    is_active: row.active,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } as Shop;
 }
 
 export async function createShop(input: ShopInput): Promise<Shop> {
   const userId = await currentUserId();
   const { data, error } = await supabase
-    .from("shops")
+    .from("customer_shops")
     .insert({
-      owner_id: userId,
+      profile_id: userId,
       name: input.name.trim(),
-      description: input.description?.trim() ?? "",
-      category: input.category?.trim() || "Grocery",
       address: input.address?.trim() ?? "",
       phone: input.phone?.trim() || null,
-      image_url: input.image_url ?? null,
-      is_active: input.is_active ?? true,
+      pickup_counter: "Main",
+      preparation_minutes: 25,
+      active: input.is_active ?? true,
     })
-    .select(SHOP_COLUMNS)
+    .select()
     .single();
 
   if (error) throw error;
-  return toShop(data);
+  return { id: data.id, owner_id: data.profile_id, name: data.name, address: data.address, is_active: data.active } as Shop;
 }
 
 export async function updateShop(
   id: string,
   changes: ShopUpdate,
 ): Promise<Shop> {
+  const payload: any = {};
+  if (changes.name) payload.name = changes.name;
+  if (changes.address) payload.address = changes.address;
+  if (changes.phone) payload.phone = changes.phone;
+  if (changes.is_active !== undefined) payload.active = changes.is_active;
+
   const { data, error } = await supabase
-    .from("shops")
-    .update(changes)
+    .from("customer_shops")
+    .update(payload)
     .eq("id", id)
-    .select(SHOP_COLUMNS)
+    .select()
     .single();
 
   if (error) throw error;
-  return toShop(data);
+  return { id: data.id, owner_id: data.profile_id, name: data.name, address: data.address, is_active: data.active } as Shop;
 }
 
 export async function deleteShop(id: string) {
-  const { error } = await supabase.from("shops").delete().eq("id", id);
+  const { error } = await supabase.from("customer_shops").delete().eq("id", id);
   if (error) throw error;
 }

@@ -54,7 +54,39 @@ export function OrderingProvider({ children }: PropsWithChildren) {
 
   const setQuantity = (id: string, quantity: number) => setCart(previous => previous.map(item => item.product.id === id ? { ...item, quantity: Math.max(1, quantity) } : item));
   const removeItem = (id: string) => setCart(previous => previous.filter(item => item.product.id !== id));
-  const addItem = (product: GroceryProduct) => setCart(previous => previous.some(item => item.product.id === product.id) ? previous.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item) : [...previous, { product, quantity: 1, substitution: { type: "call" } }]);
+  const addItem = (product: GroceryProduct) => {
+    setCart(previous => {
+      if (previous.length > 0) {
+        // Handle different product structures between search (shop_id) and other sources (shopId)
+        const currentShopId = previous[0].product.shopId || previous[0].product.shop_id;
+        const newShopId = product.shopId || product.shop_id;
+        
+        if (currentShopId && newShopId && currentShopId !== newShopId) {
+          import("react-native").then(({ Alert }) => {
+            Alert.alert(
+              "Different Shop",
+              "You can only order from one shop at a time. Would you like to clear your cart and start a new order from this shop?",
+              [
+                { text: "Cancel", style: "cancel" },
+                { 
+                  text: "Clear Cart & Add", 
+                  style: "destructive",
+                  onPress: () => setCart([{ product, quantity: 1, substitution: { type: "call" } }])
+                }
+              ]
+            );
+          });
+          return previous;
+        }
+      }
+      
+      const exists = previous.find(item => item.product.id === product.id);
+      if (exists) {
+        return previous.map(item => item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item);
+      }
+      return [...previous, { product, quantity: 1, substitution: { type: "call" } }];
+    });
+  };
   const clearCart = () => setCart([]);
   const setSubstitution = (id: string, value: SubstitutePreference) => setCart(previous => previous.map(item => item.product.id === id ? { ...item, substitution: value } : item));
   const updateDraft = (value: Partial<CheckoutDraft>) => setDraft(previous => ({ ...previous, ...value }));

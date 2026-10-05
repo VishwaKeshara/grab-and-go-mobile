@@ -7,6 +7,8 @@ export type GroceryProduct = {
   price: number;
   regularPrice: number;
   image: string;
+  shop_id?: string;
+  shopId?: string;
 };
 
 export type CartItem = {

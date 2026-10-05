@@ -18,6 +18,12 @@ const items = [
     route: "/(shop)/shop-dashboard",
   },
   {
+    icon: "tags" as const,
+    label: "Products",
+    path: "/shop-management",
+    route: "/(shop)/shop-management",
+  },
+  {
     icon: "list-alt" as const,
     label: "Orders",
     path: "/new-orders",
@@ -38,7 +44,7 @@ const items = [
 ];
 
 /** Paths on which the navbar is hidden entirely. */
-const HIDDEN_PATHS = ["/shop-login"];
+const HIDDEN_PATHS = ["/login"];
 
 export function ShopNavbar() {
   const pathname = usePathname();
@@ -62,7 +68,7 @@ export function ShopNavbar() {
                 <FontAwesome
                   color={active ? colors.mint : "rgba(255,255,255,0.4)"}
                   name={item.icon}
-                  size={18}
+                  size={20}
                 />
               </View>
               <Text style={[styles.label, active && styles.activeLabel]}>
@@ -80,7 +86,7 @@ const styles = StyleSheet.create({
   shell: {
     bottom: 0,
     left: 0,
-    paddingBottom: 12,
+    paddingBottom: 8,
     paddingHorizontal: 16,
     position: "absolute",
     right: 0,
@@ -93,29 +99,29 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     elevation: 14,
     flexDirection: "row",
-    justifyContent: "space-around",
-    paddingHorizontal: 6,
-    paddingTop: 8,
+    justifyContent: "space-between",
+    paddingHorizontal: 4,
+    paddingTop: 6,
     shadowColor: colors.ink,
     shadowOffset: { height: 4, width: 0 },
     shadowOpacity: 0.35,
     shadowRadius: 16,
   },
-  item: { alignItems: "center", flex: 1, paddingBottom: 10, paddingTop: 2 },
+  item: { alignItems: "center", flex: 1, paddingBottom: 8, paddingTop: 2 },
   pressed: { opacity: 0.6 },
   iconWrap: {
     alignItems: "center",
     borderRadius: 12,
-    height: 28,
+    height: 30,
     justifyContent: "center",
     width: 44,
   },
   activeIconWrap: { backgroundColor: colors.nightSoft },
   label: {
     color: "rgba(255,255,255,0.4)",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: "700",
-    marginTop: 4,
+    marginTop: 2,
   },
   activeLabel: { color: colors.mint },
 });

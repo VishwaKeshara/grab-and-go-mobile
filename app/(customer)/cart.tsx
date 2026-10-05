@@ -1,13 +1,31 @@
 import { ActionButton, Card, ErrorText, OrderPage, PriceSummary, ProductLine, SectionTitle, ShopCard, money, preferenceText } from "@/components/OrderUI";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
-import { alternatives, products } from "@/services/cartService";
+import { alternatives } from "@/services/cartService";
+import { searchCanonicalProducts } from "@/services/productService";
+import type { GroceryProduct } from "@/types/cart";
 import { FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
+import { useEffect, useState } from "react";
 import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function Cart() {
   const { cart, totals, loading, error, setQuantity, removeItem, addItem, clearCart } = useCart();
+  const [products, setProducts] = useState<GroceryProduct[]>([]);
+  
+  useEffect(() => {
+    searchCanonicalProducts().then(items => {
+      setProducts(items.slice(0, 5).map(item => ({
+        id: item.id,
+        name: item.name,
+        unit: item.unit,
+        price: item.price,
+        regularPrice: item.price,
+        image: item.image_url || "",
+      })));
+    }).catch(console.error);
+  }, []);
+
   const confirmClear = () => Alert.alert("Clear your cart?", "All items will be removed from this cart.", [{ text: "Keep items", style: "cancel" }, { text: "Clear cart", style: "destructive", onPress: clearCart }]);
   return <OrderPage title="Your cart" eyebrow={`${totals.units} ITEMS READY TO GO`} back={() => router.back()} footer={<><View style={styles.totalRow}><Text style={styles.totalLabel}>Subtotal</Text><Text style={styles.total}>{money(totals.subtotal)}</Text></View><ActionButton label="Choose substitutions" icon="arrow-right" disabled={!cart.length || loading} onPress={() => router.push("/(customer)/substitute-selection")} /></>}>
     <ErrorText message={error} />

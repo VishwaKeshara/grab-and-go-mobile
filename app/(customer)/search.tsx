@@ -5,12 +5,7 @@ import {
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
 import {
-  clearSearchHistory,
-  deleteSearchHistory,
-  listCategories,
-  listSearchHistory,
-  recordSearch,
-  searchProducts,
+  searchCanonicalProducts as searchProducts,
 } from "@/services/productService";
 import type { ProductSort, ProductWithShop } from "@/types/product";
 import { router } from "expo-router";
@@ -36,58 +31,25 @@ const SORTS: { label: string; value: ProductSort }[] = [
 export default function Search() {
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
-  const [category, setCategory] = useState("");
   const [sort, setSort] = useState<ProductSort>("relevance");
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [categories, setCategories] = useState<string[]>([]);
   const [results, setResults] = useState<ProductWithShop[]>([]);
-  const [history, setHistory] = useState<
-    { id: string; query: string; result_count: number; created_at: string }[]
-  >([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<TextInput>(null);
 
-  const loadHistory = useCallback(() => {
-    // History is a convenience; a failure here must not break search.
-    listSearchHistory(8)
-      .then(setHistory)
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    listCategories()
-      .then((items) => {
-        if (active) setCategories(items);
-      })
-      .catch(() => undefined);
-    listSearchHistory(8)
-      .then((items) => {
-        if (active) setHistory(items);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
+  const loadHistory = useCallback(() => {}, []);
 
   const runSearch = useCallback(
     (term: string) => {
       searchProducts({
         query: term,
-        category: category || undefined,
         inStockOnly,
         sort,
       })
         .then((items) => {
           setResults(items);
-          if (term.trim()) {
-            recordSearch(term, items.length)
-              .then(loadHistory)
-              .catch(() => undefined);
-          }
         })
         .catch((searchError: unknown) => {
           setError(
@@ -101,12 +63,11 @@ export default function Search() {
           setSearching(false);
         });
     },
-    [category, inStockOnly, sort, loadHistory],
+    [inStockOnly, sort],
   );
 
   useEffect(() => {
     runSearch(submitted);
-    // Re-runs whenever a filter changes, keeping results in sync with the UI.
   }, [runSearch, submitted]);
 
   const submit = (term: string) => {
@@ -116,35 +77,11 @@ export default function Search() {
     inputRef.current?.blur();
   };
 
-  const removeHistory = async (id: string) => {
-    setHistory((items) => items.filter((item) => item.id !== id));
-    try {
-      await deleteSearchHistory(id);
-    } catch (deleteError) {
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "We could not remove that search.",
-      );
-      loadHistory();
-    }
-  };
+  const removeHistory = async (id: string) => {};
 
-  const clearAllHistory = async () => {
-    setHistory([]);
-    try {
-      await clearSearchHistory();
-    } catch (clearError) {
-      setError(
-        clearError instanceof Error
-          ? clearError.message
-          : "We could not clear your history.",
-      );
-      loadHistory();
-    }
-  };
+  const clearAllHistory = async () => {};
 
-  const showHistory = history.length > 0 && submitted.length === 0;
+  const showHistory = false;
 
   return (
     <AuthFrame>
@@ -197,39 +134,7 @@ export default function Search() {
           </Pressable>
         ))}
       </ScrollView>
-      {categories.length > 0 ? (
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.chipRow}
-          showsHorizontalScrollIndicator={false}
-        >
-          <Pressable
-            onPress={() => {
-            setLoading(true);
-            setCategory("");
-          }}
-            style={[styles.chip, category === "" && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, category === "" && styles.chipTextActive]}>
-              All
-            </Text>
-          </Pressable>
-          {categories.map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => {
-              setLoading(true);
-              setCategory(item);
-            }}
-              style={[styles.chip, category === item && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, category === item && styles.chipTextActive]}>
-                {item}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : null}
+
       <Pressable
         onPress={() => {
           setLoading(true);
@@ -243,37 +148,6 @@ export default function Search() {
         <Text style={styles.stockLabel}>In stock only</Text>
       </Pressable>
       {error ? <ErrorBanner message={error} /> : null}
-      {showHistory ? (
-        <View style={styles.historyBlock}>
-          <View style={styles.historyHeader}>
-            <Text style={styles.sectionTitle}>Recent searches</Text>
-            <Pressable onPress={clearAllHistory}>
-              <Text style={styles.clearAll}>Clear all</Text>
-            </Pressable>
-          </View>
-          {history.map((item) => (
-            <View key={item.id} style={styles.historyRow}>
-              <Pressable
-                onPress={() => submit(item.query)}
-                style={styles.historyMain}
-              >
-                <Text style={styles.historyQuery}>{item.query}</Text>
-                <Text style={styles.historyMeta}>
-                  {item.result_count} result{item.result_count === 1 ? "" : "s"} ·{" "}
-                  {formatRelativeTime(item.created_at)}
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel={`Delete ${item.query} from search history`}
-                onPress={() => removeHistory(item.id)}
-                style={styles.historyDelete}
-              >
-                <Text style={styles.historyDeleteText}>×</Text>
-              </Pressable>
-            </View>
-          ))}
-        </View>
-      ) : null}
       <View style={styles.resultHeader}>
         <Text style={styles.sectionTitle}>
           {submitted ? `Results for “${submitted}”` : "All products"}

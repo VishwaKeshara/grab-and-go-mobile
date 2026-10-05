@@ -165,14 +165,14 @@ export default function ShopDashboard() {
           </Pressable>
 
           <Pressable
-            onPress={() => router.push("/(shop)/stock-update")}
+            onPress={() => router.push("/(shop)/shop-management")}
             style={({ pressed }) => [styles.actionCard, pressed && styles.pressedAction]}
           >
             <View style={[styles.actionIconWrap, { backgroundColor: "rgba(85, 229, 186, 0.15)" }]}>
               <FontAwesome color={colors.mint} name="tags" size={18} />
             </View>
-            <Text style={styles.actionTitle}>Quick Price Edit</Text>
-            <Text style={styles.actionSub}>Instant Product Sync</Text>
+            <Text style={styles.actionTitle}>Products</Text>
+            <Text style={styles.actionSub}>Manage catalog and inventory</Text>
           </Pressable>
         </View>
 
