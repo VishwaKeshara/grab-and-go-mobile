@@ -356,15 +356,17 @@ export async function updatePackingItem(
   itemId: string,
   isPacked: boolean,
 ): Promise<void> {
-  const { error } = await supabase
-    .from("customer_order_items")
-    .update({
-      is_packed: isPacked,
-      packed_at: isPacked ? new Date().toISOString() : null,
-    })
-    .eq("id", itemId);
+  const { error } = await supabase.rpc(
+    "set_shop_order_item_packed",
+    {
+      p_order_item_id: itemId,
+      p_packed: isPacked,
+    }
+  );
 
-  if (error) throw error;
+  if (error) {
+    throw error;
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -828,5 +830,12 @@ export async function updateShop(
 
 export async function deleteShop(id: string) {
   const { error } = await supabase.from("customer_shops").delete().eq("id", id);
+  if (error) throw error;
+}
+
+export async function deleteShopProduct(productId: string): Promise<void> {
+  const { error } = await supabase.rpc("archive_shop_product", {
+    p_product_id: productId,
+  });
   if (error) throw error;
 }

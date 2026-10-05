@@ -97,11 +97,14 @@ export default function NewOrders() {
       if (diffMins > 20 || diffMins < -60) return false;
     }
 
+
+
     return true;
   });
 
   const getTabCount = (tab: FilterTab) => {
     return orders.filter((o) => {
+
       if (tab === "All Incoming") return o.status === "placed";
       if (tab === "Being Packed") return o.status === "packing" || o.status === "accepted";
       if (tab === "Ready") return o.status === "ready";
@@ -296,7 +299,7 @@ function OrderCard({ order, onAccept, onReject, onStage }: { order: ExtendedShop
         
         <Pressable 
           style={({ pressed }) => [styles.btnSecondary, pressed && styles.btnPressed, !isPlaced && { flexGrow: 1 }]}
-          onPress={() => router.push("/(shop)/shop-order-details")}
+          onPress={() => router.push({ pathname: "/(shop)/shop-order-details", params: { orderId: order.id } })}
         >
           <Text style={styles.btnSecondaryText}>
             Order Details

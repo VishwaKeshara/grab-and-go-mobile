@@ -1,229 +1,220 @@
-import React, { useState, useMemo } from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable } from "react-native";
-import { router } from "expo-router";
-import { ShopOrderItem } from "@/types/shopOrder";
-
-// --- Mock Data & Types ---
-interface ExtendedShopOrderItem extends ShopOrderItem {
-  location: string;
-  isFragile?: boolean;
-  fragileNote?: string;
-  isVerified?: boolean;
-}
-
-const INITIAL_MOCK_ITEMS: ExtendedShopOrderItem[] = [
-  {
-    id: "item-1",
-    orderId: "GNG-MLB-9042",
-    productId: "prod-1",
-    productName: "Araliya Keeri Samba 5kg",
-    quantity: 1,
-    unitPriceLkr: 1500,
-    productUnit: "5kg",
-    imageUrl: null,
-    substitution: { type: "none" },
-    isPacked: true,
-    packedAt: "2026-10-02T17:18:00+05:30",
-    location: "Aisle 2 • Grain Bay 03",
-    isVerified: true,
-  },
-  {
-    id: "item-2",
-    orderId: "GNG-MLB-9042",
-    productId: "prod-2",
-    productName: "Mysore Dhal Pouch 1kg",
-    quantity: 1,
-    unitPriceLkr: 420,
-    productUnit: "1kg",
-    imageUrl: null,
-    substitution: { type: "none" },
-    isPacked: true,
-    packedAt: "2026-10-02T17:19:00+05:30",
-    location: "Dry Goods Bin 08",
-    isVerified: true,
-  },
-  {
-    id: "item-3",
-    orderId: "GNG-MLB-9042",
-    productId: "prod-3",
-    productName: "Highland Fresh Milk 1L",
-    quantity: 2,
-    unitPriceLkr: 500,
-    productUnit: "1L",
-    imageUrl: null,
-    substitution: { type: "none" },
-    isPacked: false,
-    packedAt: null,
-    location: "Chiller Bay #01",
-  },
-  {
-    id: "item-4",
-    orderId: "GNG-MLB-9042",
-    productId: "prod-4",
-    productName: "Country Farm Eggs 10pk",
-    quantity: 1,
-    unitPriceLkr: 440,
-    productUnit: "10pk",
-    imageUrl: null,
-    substitution: { type: "none" },
-    isPacked: false,
-    packedAt: null,
-    location: "Counter Lake E-01",
-    isFragile: true,
-    fragileNote: "Place inside top commuter crate",
-  },
-];
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { Image } from "expo-image";
+import { ShopOrder } from "@/types/shopOrder";
+import { getShopOrderById, updateOrderStatus, updatePackingItem } from "@/services/shopService";
 
 export default function Packing() {
-  const [items, setItems] = useState<ExtendedShopOrderItem[]>(INITIAL_MOCK_ITEMS);
-  const [orderMoved, setOrderMoved] = useState(false);
+  const { orderId } = useLocalSearchParams<{ orderId?: string }>();
+  const [order, setOrder] = useState<ShopOrder | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
 
-  const totalItems = items.length;
-  const packedItems = items.filter((item) => item.isPacked).length;
-  const progressPercent = Math.round((packedItems / totalItems) * 100);
-  const isAllPacked = packedItems === totalItems;
+  useEffect(() => {
+    if (orderId) {
+      loadOrder(orderId);
+    } else {
+      setLoading(false);
+    }
+  }, [orderId]);
 
-  const handleTapPacked = (itemId: string) => {
-    setItems((prev) =>
-      prev.map((item) =>
-        item.id === itemId
-          ? { ...item, isPacked: true, isVerified: true }
-          : item
-      )
-    );
-  };
-
-  const handleMoveToBay = () => {
-    if (isAllPacked) {
-      setOrderMoved(true);
+  const loadOrder = async (id: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getShopOrderById(id);
+      if (!data) {
+        setError("Order not found");
+      } else {
+        setOrder(data);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to load order");
+    } finally {
+      setLoading(false);
     }
   };
 
+  const handleTogglePacked = async (itemId: string, currentPackedState: boolean) => {
+    try {
+      // Optimistic update
+      setOrder(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          items: prev.items?.map(item =>
+            item.id === itemId
+              ? { ...item, isPacked: !currentPackedState, packedAt: !currentPackedState ? new Date().toISOString() : null }
+              : item
+          )
+        };
+      });
+      await updatePackingItem(itemId, !currentPackedState);
+    } catch (err: any) {
+      console.error("Failed to pack item:", err);
+      // Revert if failed
+      if (orderId) loadOrder(orderId);
+      alert("Could not update this item. Please try again.");
+    }
+  };
+
+  const handleMarkReady = async () => {
+    if (!order) return;
+    setActionLoading(true);
+    try {
+      await updateOrderStatus(order.id, "ready");
+      router.push("/(shop)/new-orders");
+    } catch (err: any) {
+      alert(err.message || "Failed to mark order ready");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#00A859" />
+          <Text style={styles.loadingText}>Loading packing details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!orderId || error || !order) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Packing Order</Text>
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.emptyTitle}>{error || "Order not found"}</Text>
+          <Text style={styles.emptyText}>Open an order from the Orders screen.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const items = order.items || [];
+  const totalItems = items.length;
+  const packedItems = items.filter(i => i.isPacked).length;
+  const progressPercent = totalItems === 0 ? 0 : Math.round((packedItems / totalItems) * 100);
+  const isAllPacked = totalItems > 0 && packedItems === totalItems;
+
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>{"< Back"}</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Packing Screen</Text>
-        <View style={styles.profileBadge} />
+        <Text style={styles.headerTitle}>Packing Order</Text>
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Order Summary & Bagger Assignment */}
-        <View style={styles.assignmentSection}>
-          <View style={styles.orderSummaryCard}>
-            <View style={styles.rowBetween}>
-              <Text style={styles.orderRef}>#GNG-MLB-9042</Text>
-              <View style={styles.liveBadge}>
-                <Text style={styles.liveBadgeText}>LIVE PACKING</Text>
-              </View>
+        {/* Top Summary */}
+        <View style={styles.summarySection}>
+          <View style={styles.rowBetween}>
+            <Text style={styles.orderRef}>#{order.reference || order.id.substring(0,8)}</Text>
+            <View style={styles.liveBadge}>
+              <Text style={styles.liveBadgeText}>PACKING</Text>
             </View>
-            <Text style={styles.stagingText}>Staging Bay: Shelf #B-02</Text>
-            <Text style={styles.crateText}>Crate: 04</Text>
           </View>
+          <Text style={styles.customerName}>{order.customerName}</Text>
+          <Text style={styles.pickupInfo}>
+            Pickup {order.pickupStartAt ? new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "ASAP"}
+            {order.travelMethod ? ` • ${order.travelMethod.charAt(0).toUpperCase() + order.travelMethod.slice(1)}` : ""}
+          </Text>
 
-          <View style={styles.baggerCard}>
-            <Text style={styles.baggerLabel}>ASSIGNED BAGGER</Text>
-            <View style={styles.rowBetween}>
-              <Text style={styles.baggerName}>Nalin K. (Bagger #01)</Text>
-              <Text style={styles.targetTime}>target time 03:42</Text>
-            </View>
-            
-            {/* Progress */}
-            <View style={styles.progressHeader}>
-              <Text style={styles.progressText}>{packedItems} of {totalItems} Items Picked</Text>
-              <Text style={styles.progressPercent}>{progressPercent}%</Text>
-            </View>
-            <View style={styles.progressBarBg}>
-              <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
-            </View>
+          <View style={styles.progressHeader}>
+            <Text style={styles.progressText}>{packedItems} of {totalItems} items packed</Text>
+            <Text style={styles.progressPercent}>{progressPercent}%</Text>
+          </View>
+          <View style={styles.progressBarBg}>
+            <View style={[styles.progressBarFill, { width: `${progressPercent}%` }]} />
           </View>
         </View>
 
-        {/* Special Instructions Card */}
-        <View style={styles.instructionCard}>
-          <Text style={styles.instructionTitle}>MOTORCYCLE COMMUTER SPEC</Text>
-          <Text style={styles.instructionText}>• Double kraft bag base</Text>
-          <Text style={styles.instructionText}>• Egg protective sleeve</Text>
-          <Text style={styles.instructionNote}>Ensure transit stability for motorcycle commuter.</Text>
-        </View>
-
-        {/* Pick & Verify Items */}
-        <Text style={styles.sectionTitle}>Pick & Verify Items</Text>
-        {items.map((item) => (
-          <View key={item.id} style={styles.itemCard}>
-            <View style={styles.itemHeader}>
-              <Text style={styles.itemName}>{item.productName}</Text>
-              <Text style={styles.itemQty}>x{item.quantity}</Text>
-            </View>
-            <Text style={styles.itemLocation}>{item.location}</Text>
-
-            {item.isFragile && (
-              <View style={styles.fragileBox}>
-                <Text style={styles.fragileTag}>FRAGILE</Text>
-                <Text style={styles.fragileNote}>{item.fragileNote}</Text>
+        {/* Special Instructions */}
+        {order.packingInstructions ? (
+          <View style={styles.instructionCard}>
+            <Text style={styles.instructionTitle}>SPECIAL INSTRUCTIONS</Text>
+            <Text style={styles.instructionText}>{order.packingInstructions}</Text>
+            {order.travelMethod && (
+              <View style={styles.travelBadge}>
+                <Text style={styles.travelBadgeText}>For {order.travelMethod} transport</Text>
               </View>
             )}
+          </View>
+        ) : null}
 
-            {item.isPacked ? (
-              <View style={styles.packedStateBox}>
-                <Text style={styles.verifiedText}>✓ Barcode Verified</Text>
+        {/* Items to Pack */}
+        <Text style={styles.sectionTitle}>ITEMS TO PACK</Text>
+        {items.map((item) => (
+          <View key={item.id} style={styles.itemCard}>
+            <View style={styles.itemRow}>
+              {item.imageUrl ? (
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={styles.itemImage}
+                  contentFit="cover"
+                  transition={150}
+                />
+              ) : (
+                <View style={styles.itemImagePlaceholder}>
+                  <Text style={styles.itemImageFallbackText}>{item.productName.charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
+              <View style={styles.itemDetails}>
+                <View style={styles.itemHeader}>
+                  <Text style={styles.itemName}>{item.productName}</Text>
+                  <Text style={styles.itemQty}>x{item.quantity}</Text>
+                </View>
+                <Text style={styles.itemSubText}>{item.productUnit}</Text>
+                <Text style={styles.itemPrice}>LKR {item.unitPriceLkr.toLocaleString()}</Text>
               </View>
-            ) : (
-              <View style={styles.unpackedActionRow}>
-                <TouchableOpacity style={styles.btnScan}>
-                  <Text style={styles.btnScanText}>[|||] Scan</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={styles.btnTapPacked}
-                  onPress={() => handleTapPacked(item.id)}
-                >
-                  <Text style={styles.btnTapPackedText}>Tap Packed</Text>
-                </TouchableOpacity>
+            </View>
+
+            <View style={styles.actionRow}>
+              <View style={styles.scanBtnDisabled}>
+                <Text style={styles.scanBtnDisabledText}>Scan unavailable</Text>
               </View>
+              <Pressable
+                style={({ pressed }) => [
+                  item.isPacked ? styles.btnPacked : styles.btnMarkPacked,
+                  pressed && styles.btnPressed
+                ]}
+                onPress={() => handleTogglePacked(item.id, item.isPacked)}
+              >
+                <Text style={item.isPacked ? styles.btnPackedText : styles.btnMarkPackedText}>
+                  {item.isPacked ? "✓ Packed" : "Mark Packed"}
+                </Text>
+              </Pressable>
+            </View>
+            {item.isPacked && item.packedAt && (
+              <Text style={styles.packedTimeText}>
+                Packed at {new Date(item.packedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
             )}
           </View>
         ))}
 
-        {/* Handoff Bag Tagging */}
-        <View style={styles.handoffCard}>
-          <View style={styles.rowBetween}>
-            <Text style={styles.handoffTitle}>Commuter Tag #5182</Text>
-            <View style={styles.readyBadge}>
-              <Text style={styles.readyBadgeText}>Ready to Print</Text>
+        {/* Bottom Action Area */}
+        <View style={styles.bottomActionContainer}>
+          {isAllPacked ? (
+            <Pressable
+              style={({ pressed }) => [styles.btnPrimary, pressed && styles.btnPressed, actionLoading && { opacity: 0.5 }]}
+              onPress={handleMarkReady}
+              disabled={actionLoading}
+            >
+              <Text style={styles.btnPrimaryText}>{actionLoading ? "Updating..." : "Mark Order Ready"}</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.incompleteContainer}>
+              <Text style={styles.incompleteText}>{packedItems} of {totalItems} items packed</Text>
             </View>
-          </View>
-          <Text style={styles.handoffText}>• 2 Kraft Bags Prepared</Text>
-          <Text style={styles.handoffText}>• Thermal Pouch Attached</Text>
-          
-          <TouchableOpacity style={styles.btnPrint}>
-            <Text style={styles.btnPrintText}>Print Tag #5182</Text>
-          </TouchableOpacity>
+          )}
         </View>
 
-        {/* Bottom Action */}
-        <View style={styles.bottomActionContainer}>
-          <Pressable
-            style={({ pressed }: { pressed: boolean }) => [
-              styles.btnMoveBay,
-              !isAllPacked && styles.btnMoveBayDisabled,
-              pressed && isAllPacked && styles.btnPressed,
-              orderMoved && styles.btnMoveBaySuccess,
-            ]}
-            disabled={!isAllPacked || orderMoved}
-            onPress={handleMoveToBay}
-          >
-            <Text style={styles.btnMoveBayText}>
-              {orderMoved
-                ? "Order Staged Successfully"
-                : isAllPacked
-                ? "Move Order to Staging Bay"
-                : `Pick ${totalItems - packedItems} More to Move to Bay`}
-            </Text>
-          </Pressable>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -234,44 +225,61 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8F8FC",
   },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#8A8A9E",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0EB",
-  },
-  backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: "#00A859",
-    fontWeight: "600",
   },
   headerTitle: {
     fontSize: 18,
     fontWeight: "700",
     color: "#1E2030",
   },
-  profileBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: "#D0D0E0",
-  },
   scrollContent: {
     padding: 16,
     paddingBottom: 100,
   },
-  assignmentSection: {
-    backgroundColor: "#1E2030", // deep navy/purple
+  card: {
+    backgroundColor: "#FFFFFF",
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#F0F0F5",
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1E2030",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#8A8A9E",
+    textAlign: "center",
+  },
+  summarySection: {
+    backgroundColor: "#FFFFFF",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: "#E0E0EB",
   },
   rowBetween: {
     flexDirection: "row",
@@ -279,63 +287,42 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 8,
   },
-  orderSummaryCard: {
-    marginBottom: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: "#323546",
-    paddingBottom: 12,
-  },
   orderRef: {
     fontSize: 20,
     fontWeight: "800",
-    color: "#FFFFFF",
+    color: "#1E2030",
   },
   liveBadge: {
-    backgroundColor: "#F5A623",
+    backgroundColor: "#FFF5E6",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
   liveBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "800",
-    color: "#1E2030",
+    color: "#F5A623",
   },
-  stagingText: {
-    color: "#A0A0B8",
-    fontSize: 14,
+  customerName: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1E2030",
     marginBottom: 2,
   },
-  crateText: {
-    color: "#A0A0B8",
+  pickupInfo: {
     fontSize: 14,
-  },
-  baggerCard: {},
-  baggerLabel: {
-    color: "#8A8A9E",
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 4,
-  },
-  baggerName: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "600",
-  },
-  targetTime: {
-    color: "#D0021B", // amber/red warning for time
-    fontSize: 14,
-    fontWeight: "600",
+    color: "#4A4A68",
+    marginBottom: 12,
   },
   progressHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginTop: 12,
     marginBottom: 8,
   },
   progressText: {
-    color: "#A0A0B8",
+    color: "#4A4A68",
     fontSize: 13,
+    fontWeight: "600",
   },
   progressPercent: {
     color: "#00A859",
@@ -344,7 +331,7 @@ const styles = StyleSheet.create({
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: "#323546",
+    backgroundColor: "#F0F0F5",
     borderRadius: 4,
     overflow: "hidden",
   },
@@ -353,188 +340,185 @@ const styles = StyleSheet.create({
     backgroundColor: "#00A859",
   },
   instructionCard: {
-    backgroundColor: "#FFEBEB", // warning background
+    backgroundColor: "#FFF5E6",
     borderWidth: 1,
-    borderColor: "#FFD6D6",
+    borderColor: "#FFDDB3",
     borderRadius: 12,
     padding: 16,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   instructionTitle: {
-    color: "#D0021B",
-    fontSize: 13,
+    color: "#F5A623",
+    fontSize: 12,
     fontWeight: "800",
     marginBottom: 8,
   },
   instructionText: {
     color: "#1E2030",
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "500",
-    marginBottom: 4,
+    marginBottom: 12,
   },
-  instructionNote: {
+  travelBadge: {
+    alignSelf: "flex-start",
+    backgroundColor: "#FFFFFF",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  travelBadgeText: {
     color: "#4A4A68",
-    fontSize: 13,
-    fontStyle: "italic",
-    marginTop: 8,
+    fontSize: 12,
+    fontWeight: "600",
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: "800",
-    color: "#1E2030",
+    color: "#8A8A9E",
     marginBottom: 12,
+    letterSpacing: 0.5,
   },
   itemCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    borderWidth: 1,
+    borderColor: "#F0F0F5",
+  },
+  itemRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    marginBottom: 12,
+  },
+  itemImagePlaceholder: {
+    width: 48,
+    height: 48,
+    backgroundColor: "#F1F1F7",
+    borderRadius: 10,
+    marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  itemImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: "#F1F1F7",
+    marginRight: 12,
+  },
+  itemImageFallbackText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#A0A0B8",
+  },
+  itemDetails: {
+    flex: 1,
   },
   itemHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 4,
+    alignItems: "flex-start",
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
     color: "#1E2030",
     flex: 1,
     marginRight: 8,
   },
   itemQty: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
     color: "#1E2030",
   },
-  itemLocation: {
-    fontSize: 14,
+  itemSubText: {
+    fontSize: 13,
     color: "#8A8A9E",
-    marginBottom: 12,
-  },
-  fragileBox: {
-    backgroundColor: "#FFF5E6",
-    padding: 8,
-    borderRadius: 6,
-    marginBottom: 12,
-  },
-  fragileTag: {
-    color: "#F5A623",
-    fontSize: 12,
-    fontWeight: "800",
+    marginTop: 2,
     marginBottom: 4,
   },
-  fragileNote: {
+  itemPrice: {
+    fontSize: 14,
+    fontWeight: "600",
     color: "#1E2030",
-    fontSize: 13,
   },
-  packedStateBox: {
-    backgroundColor: "#E6F7ED",
-    padding: 10,
+  actionRow: {
+    flexDirection: "row",
+    gap: 8,
+  },
+  scanBtnDisabled: {
+    flex: 1,
+    backgroundColor: "#F8F8FC",
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#E0E0EB",
+  },
+  scanBtnDisabledText: {
+    color: "#A0A0B8",
+    fontWeight: "600",
+    fontSize: 14,
+  },
+  btnMarkPacked: {
+    flex: 2,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: "#00A859",
+    paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
   },
-  verifiedText: {
+  btnMarkPackedText: {
     color: "#00A859",
     fontWeight: "700",
     fontSize: 14,
   },
-  unpackedActionRow: {
-    flexDirection: "row",
-    gap: 8,
-  },
-  btnScan: {
-    flex: 1,
-    backgroundColor: "#F0F0F5",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  btnScanText: {
-    color: "#1E2030",
-    fontWeight: "600",
-    fontSize: 14,
-  },
-  btnTapPacked: {
+  btnPacked: {
     flex: 2,
-    backgroundColor: "#00A859",
+    backgroundColor: "#E6F7ED",
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
   },
-  btnTapPackedText: {
-    color: "#FFFFFF",
+  btnPackedText: {
+    color: "#00A859",
     fontWeight: "700",
     fontSize: 14,
   },
-  handoffCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 12,
-    marginBottom: 24,
-    borderWidth: 1,
-    borderColor: "#E0E0EB",
-  },
-  handoffTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1E2030",
-  },
-  readyBadge: {
-    backgroundColor: "#E0E0EB",
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 4,
-  },
-  readyBadgeText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: "#4A4A68",
-  },
-  handoffText: {
-    fontSize: 14,
-    color: "#4A4A68",
-    marginTop: 4,
-  },
-  btnPrint: {
-    marginTop: 16,
-    backgroundColor: "#1E2030",
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: "center",
-  },
-  btnPrintText: {
-    color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
-  },
-  bottomActionContainer: {
+  packedTimeText: {
+    fontSize: 11,
+    color: "#A0A0B8",
+    textAlign: "right",
     marginTop: 8,
   },
-  btnMoveBay: {
+  btnPressed: {
+    opacity: 0.8,
+  },
+  bottomActionContainer: {
+    marginTop: 16,
+  },
+  btnPrimary: {
     backgroundColor: "#00A859",
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
   },
-  btnMoveBayDisabled: {
-    backgroundColor: "#D0D0E0",
-  },
-  btnMoveBaySuccess: {
-    backgroundColor: "#1E2030",
-  },
-  btnPressed: {
-    opacity: 0.8,
-  },
-  btnMoveBayText: {
+  btnPrimaryText: {
     color: "#FFFFFF",
     fontSize: 16,
     fontWeight: "700",
   },
+  incompleteContainer: {
+    paddingVertical: 16,
+    alignItems: "center",
+    backgroundColor: "#F0F0F5",
+    borderRadius: 12,
+  },
+  incompleteText: {
+    color: "#8A8A9E",
+    fontSize: 15,
+    fontWeight: "600",
+  }
 });

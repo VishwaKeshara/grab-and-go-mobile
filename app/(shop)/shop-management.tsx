@@ -1,3 +1,4 @@
+import { Image } from "expo-image";
 import {
   AuthFrame,
   AuthHeader,
@@ -16,6 +17,7 @@ import {
 import {
   listMyShops,
   updateStock,
+  deleteShopProduct,
 } from "@/services/shopService";
 import type { Product } from "@/types/product";
 import type { Shop } from "@/types/shop";
@@ -126,6 +128,41 @@ export default function ShopManagement() {
     }
     return { all: products.length, outOfStock, paused };
   }, [products]);
+
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+
+  const handleDeleteProduct = async (productId: string) => {
+    if (deletingProductId) return;
+    setDeletingProductId(productId);
+
+    try {
+      await deleteShopProduct(productId);
+      if (selectedShop) loadProducts(selectedShop.id);
+      Alert.alert("Product deleted", "The product was removed successfully.");
+    } catch (error) {
+      console.error("[ShopManagement] delete product failed", error);
+      Alert.alert("Could not delete product", "Please try again.");
+    } finally {
+      setDeletingProductId(null);
+    }
+  };
+
+  const confirmDeleteProduct = (product: Product) => {
+    Alert.alert(
+      "Delete product?",
+      `${product.name} will be removed from your shop catalog.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void handleDeleteProduct(product.id);
+          },
+        },
+      ]
+    );
+  };
 
   const openCreateProduct = () => {
     setForm({
@@ -299,23 +336,41 @@ export default function ShopManagement() {
             />
           </View>
 
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.filterRow}
-          >
-            {(["All", "Out of Stock", "Paused"] as const).map((f) => (
-              <Pressable
-                key={f}
-                style={[styles.filterChip, filter === f && styles.filterChipActive]}
-                onPress={() => setFilter(f)}
-              >
-                <Text style={[styles.filterChipText, filter === f && styles.filterChipTextActive]}>
-                  {f} {f === "All" ? `(${counts.all})` : f === "Out of Stock" ? `(${counts.outOfStock})` : `(${counts.paused})`}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <View style={styles.filterRow}>
+            {[
+              { key: "All", label: `All (${counts.all})` },
+              {
+                key: "Out of Stock",
+                label: `Out of Stock (${counts.outOfStock})`,
+              },
+              {
+                key: "Paused",
+                label: `Paused (${counts.paused})`,
+              },
+            ].map((f) => {
+              const active = filter === f.key;
+
+              return (
+                <Pressable
+                  key={f.key}
+                  onPress={() => setFilter(f.key as any)}
+                  style={[
+                    styles.filterChip,
+                    active && styles.filterChipActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      active && styles.filterChipTextActive,
+                    ]}
+                  >
+                    {f.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
 
           {productsLoading ? (
             <View style={styles.loadingContainer}>
@@ -340,11 +395,7 @@ export default function ShopManagement() {
             filteredProducts.map((product) => (
               <View key={product.id} style={styles.productCard}>
                 <View style={styles.productTopRow}>
-                  <View style={styles.productThumb}>
-                    <Text style={styles.productThumbText}>
-                      {product.name.slice(0, 1).toUpperCase()}
-                    </Text>
-                  </View>
+                  <ProductCardImage product={product} />
                   <View style={styles.productDetails}>
                     <Text style={styles.productName}>{product.name}</Text>
                     <Text style={styles.productUnit}>{product.unit || "-"}</Text>
@@ -393,6 +444,15 @@ export default function ShopManagement() {
                       <Text style={product.active !== false ? styles.actionButtonPauseText : styles.actionButtonResumeText}>
                         {product.active !== false ? "Pause" : "Resume"}
                       </Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={() => confirmDeleteProduct(product)}
+                      style={({ pressed }) => [
+                        styles.deleteBtn,
+                        pressed && styles.actionBtnPressed,
+                      ]}
+                    >
+                      <Text style={styles.deleteBtnText}>Delete</Text>
                     </Pressable>
                   </View>
                 </View>
@@ -486,6 +546,30 @@ function ModalField({
   );
 }
 
+function ProductCardImage({ product }: { product: Product }) {
+  const [error, setError] = useState(false);
+
+  if (!product.image_url || error) {
+    return (
+      <View style={styles.productImageFallback}>
+        <Text style={styles.productImageFallbackText}>
+          {product.name.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri: product.image_url }}
+      style={styles.productImage}
+      contentFit="cover"
+      transition={150}
+      onError={() => setError(true)}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
   inlineErrorBanner: {
     backgroundColor: "#FFF0ED",
@@ -563,18 +647,36 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: colors.ink,
   },
-  filterRow: { gap: 8, paddingBottom: 16, paddingRight: 16 },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginBottom: 14,
+  },
   filterChip: {
-    backgroundColor: "#F0F1FC",
-    borderRadius: 16,
+    minHeight: 36,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0F1F8",
     borderWidth: 1,
     borderColor: "transparent",
   },
-  filterChipActive: { backgroundColor: colors.mintSoft, borderColor: colors.mint },
-  filterChipText: { color: colors.ink, fontSize: 11, fontWeight: "600" },
-  filterChipTextActive: { color: "#0E8067", fontWeight: "800" },
+  filterChipActive: {
+    backgroundColor: "#D8FAED",
+    borderColor: "#45D2A6",
+  },
+  filterChipText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  filterChipTextActive: {
+    color: "#087A60",
+    fontWeight: "800",
+  },
   
   productCard: {
     backgroundColor: colors.white,
@@ -588,15 +690,21 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     marginBottom: 12,
   },
-  productThumb: {
+  productImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: "#F1F1F7",
+  },
+  productImageFallback: {
     alignItems: "center",
     backgroundColor: "#F0F1FC",
-    borderRadius: 8,
+    borderRadius: 10,
     height: 48,
     justifyContent: "center",
     width: 48,
   },
-  productThumbText: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  productImageFallbackText: { color: colors.ink, fontSize: 18, fontWeight: "900" },
   productDetails: { flex: 1, marginLeft: 12 },
   productName: { color: colors.ink, fontSize: 14, fontWeight: "800" },
   productUnit: { color: colors.muted, fontSize: 11, marginTop: 2 },
@@ -653,6 +761,24 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   actionButtonResumeText: { color: "#0E8067", fontSize: 11, fontWeight: "700" },
+  deleteBtn: {
+    minHeight: 34,
+    paddingHorizontal: 11,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FFD2CC",
+    backgroundColor: "#FFF3F1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionBtnPressed: {
+    opacity: 0.7,
+  },
+  deleteBtnText: {
+    color: colors.coral,
+    fontSize: 11,
+    fontWeight: "800",
+  },
 
   empty: {
     alignItems: "center",
