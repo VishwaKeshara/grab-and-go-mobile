@@ -54,13 +54,18 @@ export default function Login() {
   const [appleLoading, setAppleLoading] = useState(false);
 
   useEffect(() => {
-    listShops().then(data => {
-      setShops(data);
-      if (data.length > 0 && !selectedShopId) {
-        setSelectedShopId(data[0].id);
-      }
-    }).catch(console.error);
-  }, []);
+    if (accountType === "shop" && shopRole === "staff") {
+      listShops().then(data => {
+        setShops(data);
+        if (data.length > 0) {
+          setSelectedShopId(prev => prev || data[0].id);
+        }
+      }).catch(err => {
+        console.error(err);
+        setError("Could not load shop list for staff login.");
+      });
+    }
+  }, [accountType, shopRole]);
 
   const isCustomerValid = email.trim().length > 0 && password.length > 0;
   const isOwnerValid = email.trim().length > 0 && password.length > 0;

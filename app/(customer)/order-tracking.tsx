@@ -130,16 +130,22 @@ export default function OrderTracking() {
         eyebrow="LIVE ORDER PASS"
         back={() => router.back()}
         footer={
-          <ActionButton
-            label="View order details"
-            icon="arrow-right"
-            onPress={() =>
-              router.push({
-                pathname: "/(customer)/order-details",
-                params: { id: order.id },
-              })
-            }
-          />
+          <View style={{ gap: 12 }}>
+            <LinkButton
+              label="Back to Home"
+              onPress={() => router.replace("/(customer)/home")}
+            />
+            <ActionButton
+              label="View order details"
+              icon="arrow-right"
+              onPress={() =>
+                router.push({
+                  pathname: "/(customer)/order-details",
+                  params: { id: order.id },
+                })
+              }
+            />
+          </View>
         }
       >
         <ErrorText message={error} />
