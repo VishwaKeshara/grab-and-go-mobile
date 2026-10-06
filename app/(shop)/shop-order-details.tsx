@@ -1,246 +1,267 @@
-import React from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Image, Pressable } from "react-native";
-import { router } from "expo-router";
+import React, { useState, useEffect } from "react";
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable, ActivityIndicator } from "react-native";
+import { router, useLocalSearchParams } from "expo-router";
+import { Image } from "expo-image";
 import { ShopOrder, ShopOrderItem } from "@/types/shopOrder";
-
-// --- Types & Mock Data ---
-interface ExtendedShopOrderItem extends ShopOrderItem {
-  substitutionNote?: string;
-  packingNote?: string;
-}
-
-interface ExtendedShopOrder extends ShopOrder {
-  items: ExtendedShopOrderItem[];
-  velocityLabel?: string;
-  velocityRank?: string;
-  merchantName?: string;
-  merchantLocation?: string;
-  merchantDistance?: string;
-  merchantBay?: string;
-  merchantManager?: string;
-  transportInfo?: string;
-  paymentState?: string;
-  specialPackingNotes?: string;
-}
-
-const MOCK_ORDER: ExtendedShopOrder = {
-  id: "MLB-8821",
-  shopId: "shop-1",
-  customerId: "cust-1",
-  reference: "GG-2026-882100",
-  pickupPin: "5182",
-  customerName: "Dinithi Perera",
-  customerPhone: "0771234567",
-  status: "collected",
-  packingStatus: "fully_packed",
-  totalLkr: 3450,
-  subtotalLkr: 3450,
-  savingsLkr: 0,
-  serviceFeeLkr: 0,
-  paymentMethod: "card",
-  paymentStatus: "paid",
-  packingInstructions: "Customer requested double bagging for heavy items.",
-  travelMethod: "motorcycle",
-  pickupStartAt: "2026-10-02T17:30:00+05:30",
-  pickupEndAt: "2026-10-02T18:00:00+05:30",
-  createdAt: "2026-10-02T17:12:00+05:30",
-  updatedAt: "2026-10-02T17:15:00+05:30",
-  acceptedAt: "2026-10-02T17:13:00+05:30",
-  packingStartedAt: "2026-10-02T17:14:00+05:30",
-  readyAt: "2026-10-02T17:20:00+05:30",
-  velocityLabel: "34 seconds",
-  velocityRank: "Top 5% Express",
-  merchantName: "Sumanadasa Stores",
-  merchantLocation: "Malabe Junction",
-  merchantDistance: "450m from SLIIT Campus",
-  merchantBay: "Bay B-04",
-  merchantManager: "Nimal S.",
-  transportInfo: "Motorcycle Commute",
-  paymentState: "LankaQR PAID",
-  specialPackingNotes: "Customer requested double bagging for heavy items.",
-  items: [
-    {
-      id: "item-1",
-      orderId: "MLB-8821",
-      productId: "prod-1",
-      productName: "Araliya Keeri Samba 5kg",
-      productUnit: "5kg",
-      imageUrl: null,
-      quantity: 1,
-      unitPriceLkr: 1490,
-      substitution: { type: "call" },
-      isPacked: true,
-      packedAt: "2026-10-02T17:18:00+05:30",
-      substitutionNote: "Substitution accepted by customer",
-    },
-    {
-      id: "item-2",
-      orderId: "MLB-8821",
-      productId: "prod-2",
-      productName: "Anchor Milk Powder",
-      productUnit: "400g",
-      imageUrl: null,
-      quantity: 2,
-      unitPriceLkr: 550,
-      substitution: { type: "none" },
-      isPacked: true,
-      packedAt: "2026-10-02T17:18:30+05:30",
-    },
-    {
-      id: "item-3",
-      orderId: "MLB-8821",
-      productId: "prod-3",
-      productName: "Farm Fresh Brown Eggs",
-      productUnit: "10 pack",
-      imageUrl: null,
-      quantity: 1,
-      unitPriceLkr: 440,
-      substitution: { type: "none" },
-      isPacked: true,
-      packedAt: "2026-10-02T17:19:00+05:30",
-      packingNote: "Packed in protective crate",
-    },
-    {
-      id: "item-4",
-      orderId: "MLB-8821",
-      productId: "prod-4",
-      productName: "Mysore Dhal Red Lentils",
-      productUnit: "1kg",
-      imageUrl: null,
-      quantity: 1,
-      unitPriceLkr: 420,
-      substitution: { type: "none" },
-      isPacked: true,
-      packedAt: "2026-10-02T17:19:30+05:30",
-    },
-  ],
-};
+import { getShopOrderById, updateOrderStatus } from "@/services/shopService";
 
 export default function ShopOrderDetails() {
-  const order = MOCK_ORDER;
+  const { orderId } = useLocalSearchParams<{ orderId?: string }>();
+  const [order, setOrder] = useState<ShopOrder | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [actionLoading, setActionLoading] = useState(false);
+
+  useEffect(() => {
+    if (orderId) {
+      loadOrder(orderId);
+    } else {
+      setLoading(false);
+    }
+  }, [orderId]);
+
+  const loadOrder = async (id: string) => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await getShopOrderById(id);
+      if (!data) {
+        setError("Order not found");
+      } else {
+        setOrder(data);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to load order");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleAccept = async () => {
+    if (!order) return;
+    setActionLoading(true);
+    try {
+      await updateOrderStatus(order.id, "accepted");
+      await loadOrder(order.id);
+    } catch (err: any) {
+      alert(err.message || "Failed to accept order");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleStartPacking = async () => {
+    if (!order) return;
+    setActionLoading(true);
+    try {
+      await updateOrderStatus(order.id, "packing");
+      router.push({ pathname: "/(shop)/packing", params: { orderId: order.id } });
+    } catch (err: any) {
+      alert(err.message || "Failed to start packing");
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleContinuePacking = () => {
+    if (!order) return;
+    router.push({ pathname: "/(shop)/packing", params: { orderId: order.id } });
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <ActivityIndicator size="large" color="#00A859" />
+          <Text style={styles.loadingText}>Loading order details...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!orderId || error || !order) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>Order Details</Text>
+        </View>
+        <View style={styles.card}>
+          <Text style={styles.emptyTitle}>{error || "Order not found"}</Text>
+          <Text style={styles.emptyText}>Open an order from the Orders screen.</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const getStatusBadge = () => {
+    switch (order.status) {
+      case "placed": return { text: "NEW", color: "#0052CC", bg: "#DEEBFF" };
+      case "accepted": return { text: "ACCEPTED", color: "#00A859", bg: "#E6F7ED" };
+      case "packing": return { text: "PACKING", color: "#F5A623", bg: "#FFF5E6" };
+      case "ready": return { text: "READY", color: "#00A859", bg: "#E6F7ED" };
+      case "collected": return { text: "COMPLETED", color: "#1E2030", bg: "#E0E0EB" };
+      case "cancelled": return { text: "CANCELLED", color: "#D0021B", bg: "#FFEBEB" };
+      default: return { text: String(order.status).toUpperCase(), color: "#4A4A68", bg: "#F0F0F5" };
+    }
+  };
+  const badge = getStatusBadge();
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Text style={styles.backButtonText}>{"< Back"}</Text>
-        </TouchableOpacity>
         <Text style={styles.headerTitle}>Order Details</Text>
-        <View style={{ width: 60 }} />
       </View>
 
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {/* Order Summary Card */}
         <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.cardLabel}>PICKUP ORDER</Text>
-            <View style={styles.statusBadge}>
-              <Text style={styles.statusBadgeText}>Collected</Text>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.orderRef}>#{order.reference || order.id.substring(0, 8)}</Text>
+            <View style={[styles.statusBadge, { backgroundColor: badge.bg }]}>
+              <Text style={[styles.statusBadgeText, { color: badge.color }]}>{badge.text}</Text>
             </View>
           </View>
-          <Text style={styles.orderRef}>{order.id}</Text>
-          <Text style={styles.subText}>
-            {new Date(order.createdAt).toLocaleDateString()} • {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-          </Text>
-          <View style={styles.divider} />
-          <Text style={styles.locationLabel}>Pickup Location:</Text>
-          <Text style={styles.locationText}>Malabe Junction • Counter #02</Text>
         </View>
 
-        {/* Performance / Handover Card */}
-        <View style={styles.performanceCard}>
-          <Text style={styles.performanceTitle}>Handover Velocity</Text>
-          <Text style={styles.velocityLabel}>{order.velocityLabel}</Text>
-          <Text style={styles.velocityRank}>{order.velocityRank}</Text>
-        </View>
-
-        {/* Partner Merchant Section */}
         <View style={styles.card}>
-          <View style={styles.merchantHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.sectionTitle}>{order.merchantName}</Text>
-              <Text style={styles.subText}>{order.merchantLocation}</Text>
-              <Text style={styles.subText}>{order.merchantDistance}</Text>
-            </View>
-            <TouchableOpacity style={styles.callButton}>
-              <Text style={styles.callButtonText}>📞</Text>
-            </TouchableOpacity>
+          <Text style={styles.sectionTitle}>Customer</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Name:</Text>
+            <Text style={styles.detailValue}>{order.customerName}</Text>
           </View>
-          <View style={styles.divider} />
-          <Text style={styles.subText}>Staging: {order.merchantBay}</Text>
-          <Text style={styles.subText}>Manager: {order.merchantManager}</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Phone:</Text>
+            <Text style={styles.detailValue}>{order.customerPhone || "N/A"}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Travel Method:</Text>
+            <Text style={styles.detailValue}>{order.travelMethod ? order.travelMethod.charAt(0).toUpperCase() + order.travelMethod.slice(1) : "N/A"}</Text>
+          </View>
+          <View style={styles.detailRowVertical}>
+            <Text style={styles.detailLabel}>Packing Instructions:</Text>
+            <Text style={styles.detailValueNote}>{order.packingInstructions || "No special packing instructions"}</Text>
+          </View>
         </View>
 
-        {/* Basket Items Section */}
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Pickup</Text>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Pickup Time:</Text>
+            <Text style={styles.detailValue}>
+              {order.pickupStartAt ? new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "ASAP"}
+            </Text>
+          </View>
+          {order.pickupStartAt && order.pickupEndAt && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>Pickup Window:</Text>
+              <Text style={styles.detailValue}>
+                {new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(order.pickupEndAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Text>
+            </View>
+          )}
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Pickup PIN:</Text>
+            <Text style={styles.detailValueStrong}>{order.pickupPin}</Text>
+          </View>
+        </View>
+
         <View style={styles.card}>
           <View style={styles.basketHeader}>
             <Text style={styles.sectionTitle}>Basket Items</Text>
             <View style={styles.itemCountBadge}>
-              <Text style={styles.itemCountText}>{order.items.length}</Text>
+              <Text style={styles.itemCountText}>{order.items?.length || 0}</Text>
             </View>
           </View>
 
-          {order.items.map((item) => (
+          {order.items?.map((item) => (
             <View key={item.id} style={styles.itemRow}>
-              <View style={styles.itemImagePlaceholder} />
+              {item.imageUrl ? (
+                <Image
+                  source={{ uri: item.imageUrl }}
+                  style={styles.itemImage}
+                  contentFit="cover"
+                  transition={150}
+                />
+              ) : (
+                <View style={styles.itemImagePlaceholder}>
+                  <Text style={styles.itemImageFallbackText}>{item.productName.charAt(0).toUpperCase()}</Text>
+                </View>
+              )}
               <View style={styles.itemDetails}>
                 <Text style={styles.itemName}>{item.productName}</Text>
-                <Text style={styles.itemSubText}>Qty: {item.quantity}</Text>
-                {item.quantity > 1 && (
-                  <Text style={styles.itemSubText}>LKR {item.unitPriceLkr.toLocaleString(undefined, { minimumFractionDigits: 2 })} each</Text>
-                )}
-                {item.substitutionNote && (
-                  <Text style={styles.noteText}>{item.substitutionNote}</Text>
-                )}
-                {item.packingNote && (
-                  <Text style={styles.noteText}>{item.packingNote}</Text>
+                <Text style={styles.itemSubText}>{item.productUnit}</Text>
+                <Text style={styles.itemSubText}>Qty: {item.quantity} × LKR {item.unitPriceLkr.toLocaleString()}</Text>
+                {item.substitution?.type !== "none" && (
+                  <Text style={styles.substitutionText}>Substitution: {item.substitution?.type}</Text>
                 )}
               </View>
               <Text style={styles.itemPrice}>
-                LKR {(item.unitPriceLkr * item.quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                LKR {(item.unitPriceLkr * item.quantity).toLocaleString()}
               </Text>
             </View>
           ))}
         </View>
 
-        {/* Additional Order Details */}
         <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Additional Details</Text>
+          <Text style={styles.sectionTitle}>Payment</Text>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Payment:</Text>
-            <Text style={styles.detailValue}>{order.paymentState}</Text>
+            <Text style={styles.detailLabel}>Subtotal:</Text>
+            <Text style={styles.detailValue}>LKR {order.subtotalLkr.toLocaleString()}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Pickup Time:</Text>
-            <Text style={styles.detailValue}>
-              {new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-            </Text>
+            <Text style={styles.detailLabel}>Savings:</Text>
+            <Text style={styles.detailValue}>LKR {order.savingsLkr.toLocaleString()}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Transport:</Text>
-            <Text style={styles.detailValue}>{order.transportInfo}</Text>
+            <Text style={styles.detailLabel}>Service Fee:</Text>
+            <Text style={styles.detailValue}>LKR {order.serviceFeeLkr.toLocaleString()}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Customer:</Text>
-            <Text style={styles.detailValue}>{order.customerName}</Text>
+            <Text style={styles.detailLabelStrong}>Total:</Text>
+            <Text style={styles.detailValueStrong}>LKR {order.totalLkr.toLocaleString()}</Text>
           </View>
-          {order.specialPackingNotes && (
-            <View style={styles.detailRowVertical}>
-              <Text style={styles.detailLabel}>Special Packing Notes:</Text>
-              <Text style={styles.detailValue}>{order.specialPackingNotes}</Text>
-            </View>
-          )}
+          <View style={styles.divider} />
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Payment Method:</Text>
+            <Text style={styles.detailValue}>{order.paymentMethod === 'card' ? 'Card' : order.paymentMethod === 'pickup' ? 'Pay at Pickup' : order.paymentMethod}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <Text style={styles.detailLabel}>Payment Status:</Text>
+            <Text style={styles.detailValue}>{order.paymentStatus === 'paid' ? 'Paid' : order.paymentStatus === 'pay_at_pickup' ? 'Pay at Pickup' : 'Failed'}</Text>
+          </View>
         </View>
 
-        {/* Actions */}
         <View style={styles.actionsContainer}>
-          <Pressable 
-            style={({ pressed }: { pressed: boolean }) => [styles.btnPrimary, pressed && styles.btnPressed]}
-            onPress={() => router.push("/(shop)/packing")}
-          >
-            <Text style={styles.btnPrimaryText}>Start / Continue Packing</Text>
-          </Pressable>
+          {order.status === "placed" && (
+            <Pressable
+              style={({ pressed }) => [styles.btnPrimary, pressed && styles.btnPressed, actionLoading && { opacity: 0.5 }]}
+              onPress={handleAccept}
+              disabled={actionLoading}
+            >
+              <Text style={styles.btnPrimaryText}>{actionLoading ? "Accepting..." : "Accept Order"}</Text>
+            </Pressable>
+          )}
+          {order.status === "accepted" && (
+            <Pressable
+              style={({ pressed }) => [styles.btnPrimary, pressed && styles.btnPressed, actionLoading && { opacity: 0.5 }]}
+              onPress={handleStartPacking}
+              disabled={actionLoading}
+            >
+              <Text style={styles.btnPrimaryText}>{actionLoading ? "Starting..." : "Start Packing"}</Text>
+            </Pressable>
+          )}
+          {order.status === "packing" && (
+            <Pressable
+              style={({ pressed }) => [styles.btnPrimary, pressed && styles.btnPressed]}
+              onPress={handleContinuePacking}
+            >
+              <Text style={styles.btnPrimaryText}>Continue Packing</Text>
+            </Pressable>
+          )}
+          {order.status === "ready" && (
+            <View style={styles.readyContainer}>
+              <Text style={styles.readyText}>Order ready for pickup</Text>
+            </View>
+          )}
         </View>
 
       </ScrollView>
@@ -253,23 +274,24 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#F8F8FC",
   },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  loadingText: {
+    marginTop: 12,
+    color: "#8A8A9E",
+  },
   header: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    justifyContent: "center",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 16,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
     borderBottomColor: "#E0E0EB",
-  },
-  backButton: {
-    padding: 8,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: "#00A859",
-    fontWeight: "600",
   },
   headerTitle: {
     fontSize: 18,
@@ -278,7 +300,7 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     padding: 16,
-    paddingBottom: 100, // padding for ShopNavbar
+    paddingBottom: 100,
   },
   card: {
     backgroundColor: "#FFFFFF",
@@ -290,101 +312,67 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.05,
     shadowRadius: 8,
     elevation: 2,
+    borderWidth: 1,
+    borderColor: "#F0F0F5",
   },
-  cardHeader: {
+  cardHeaderRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 8,
   },
-  cardLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#8A8A9E",
-    letterSpacing: 0.5,
+  orderRef: {
+    fontSize: 20,
+    fontWeight: "800",
+    color: "#1E2030",
   },
   statusBadge: {
-    backgroundColor: "#E6F7ED",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
   statusBadgeText: {
-    color: "#00A859",
     fontWeight: "700",
     fontSize: 12,
-  },
-  orderRef: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#1E2030",
-    marginBottom: 4,
-  },
-  subText: {
-    fontSize: 14,
-    color: "#8A8A9E",
-    marginBottom: 4,
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "#F0F0F5",
-    marginVertical: 12,
-  },
-  locationLabel: {
-    fontSize: 12,
-    color: "#8A8A9E",
-    marginBottom: 4,
-  },
-  locationText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#1E2030",
-  },
-  performanceCard: {
-    backgroundColor: "#1E2030",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 16,
-    alignItems: "center",
-  },
-  performanceTitle: {
-    fontSize: 14,
-    color: "#A0A0B8",
-    fontWeight: "600",
-    marginBottom: 8,
-  },
-  velocityLabel: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#00A859",
-    marginBottom: 4,
-  },
-  velocityRank: {
-    fontSize: 14,
-    color: "#FFFFFF",
-    fontWeight: "500",
-  },
-  merchantHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "700",
     color: "#1E2030",
+    marginBottom: 12,
+  },
+  detailRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
-  callButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: "#F0F0F5",
-    alignItems: "center",
-    justifyContent: "center",
+  detailRowVertical: {
+    marginTop: 8,
   },
-  callButtonText: {
-    fontSize: 20,
+  detailLabel: {
+    fontSize: 14,
+    color: "#8A8A9E",
+  },
+  detailLabelStrong: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E2030",
+  },
+  detailValue: {
+    fontSize: 14,
+    fontWeight: "500",
+    color: "#1E2030",
+    maxWidth: '65%',
+    textAlign: 'right',
+  },
+  detailValueStrong: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#1E2030",
+  },
+  detailValueNote: {
+    fontSize: 14,
+    color: "#1E2030",
+    marginTop: 4,
   },
   basketHeader: {
     flexDirection: "row",
@@ -409,11 +397,25 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   itemImagePlaceholder: {
-    width: 50,
-    height: 50,
-    backgroundColor: "#E0E0EB",
-    borderRadius: 8,
+    width: 48,
+    height: 48,
+    backgroundColor: "#F1F1F7",
+    borderRadius: 10,
     marginRight: 12,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  itemImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: "#F1F1F7",
+    marginRight: 12,
+  },
+  itemImageFallbackText: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "#A0A0B8",
   },
   itemDetails: {
     flex: 1,
@@ -430,7 +432,7 @@ const styles = StyleSheet.create({
     color: "#4A4A68",
     marginBottom: 2,
   },
-  noteText: {
+  substitutionText: {
     fontSize: 12,
     color: "#F5A623",
     marginTop: 4,
@@ -441,25 +443,10 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#1E2030",
   },
-  detailRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  detailRowVertical: {
-    marginTop: 8,
-    marginBottom: 8,
-  },
-  detailLabel: {
-    fontSize: 14,
-    color: "#8A8A9E",
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: "500",
-    color: "#1E2030",
-    maxWidth: '60%',
-    textAlign: 'right',
+  divider: {
+    height: 1,
+    backgroundColor: "#F0F0F5",
+    marginVertical: 12,
   },
   actionsContainer: {
     marginTop: 8,
@@ -478,4 +465,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "700",
   },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: "#1E2030",
+    marginBottom: 8,
+    textAlign: "center",
+  },
+  emptyText: {
+    fontSize: 14,
+    color: "#8A8A9E",
+    textAlign: "center",
+  },
+  readyContainer: {
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: "#E6F7ED",
+    borderRadius: 12,
+  },
+  readyText: {
+    color: "#00A859",
+    fontSize: 16,
+    fontWeight: "700",
+  }
 });

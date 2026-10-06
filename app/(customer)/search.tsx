@@ -1,30 +1,22 @@
-import {
-  AuthFrame,
-  AuthHeader,
-  ErrorBanner,
-} from "@/components/AuthUI";
+import { AuthFrame, AuthHeader, ErrorBanner } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
-import {
-  clearSearchHistory,
-  deleteSearchHistory,
-  listCategories,
-  listSearchHistory,
-  recordSearch,
-  searchProducts,
-} from "@/services/productService";
+import { searchCanonicalProducts as searchProducts } from "@/services/productService";
 import type { ProductSort, ProductWithShop } from "@/types/product";
 import { router } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
+  Image,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from "react-native";
-import { formatCurrencyShort, formatRelativeTime } from "@/utils/formatters";
+import { formatCurrencyShort } from "@/utils/formatters";
+import { useCart } from "@/hooks/useCart";
 
 const SORTS: { label: string; value: ProductSort }[] = [
   { label: "Newest", value: "relevance" },
@@ -36,58 +28,33 @@ const SORTS: { label: string; value: ProductSort }[] = [
 export default function Search() {
   const [query, setQuery] = useState("");
   const [submitted, setSubmitted] = useState("");
-  const [category, setCategory] = useState("");
   const [sort, setSort] = useState<ProductSort>("relevance");
   const [inStockOnly, setInStockOnly] = useState(false);
-  const [categories, setCategories] = useState<string[]>([]);
   const [results, setResults] = useState<ProductWithShop[]>([]);
-  const [history, setHistory] = useState<
-    { id: string; query: string; result_count: number; created_at: string }[]
-  >([]);
   const [loading, setLoading] = useState(true);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const inputRef = useRef<TextInput>(null);
+  const { width } = useWindowDimensions();
 
-  const loadHistory = useCallback(() => {
-    // History is a convenience; a failure here must not break search.
-    listSearchHistory(8)
-      .then(setHistory)
-      .catch(() => undefined);
-  }, []);
+  // Determine numColumns based on width for responsiveness
+  const numColumns = width >= 768 ? 4 : 2;
+  const gap = 12;
+  const horizontalPadding = 44; // AuthFrame has paddingHorizontal: 22
+  const itemWidth = (width - horizontalPadding - (gap * (numColumns - 1))) / numColumns;
 
-  useEffect(() => {
-    let active = true;
-    listCategories()
-      .then((items) => {
-        if (active) setCategories(items);
-      })
-      .catch(() => undefined);
-    listSearchHistory(8)
-      .then((items) => {
-        if (active) setHistory(items);
-      })
-      .catch(() => undefined);
-    return () => {
-      active = false;
-    };
-  }, []);
+  const { addItem, adding } = useCart();
+  const [addingId, setAddingId] = useState<string | null>(null);
 
   const runSearch = useCallback(
     (term: string) => {
       searchProducts({
         query: term,
-        category: category || undefined,
         inStockOnly,
         sort,
       })
         .then((items) => {
           setResults(items);
-          if (term.trim()) {
-            recordSearch(term, items.length)
-              .then(loadHistory)
-              .catch(() => undefined);
-          }
         })
         .catch((searchError: unknown) => {
           setError(
@@ -101,12 +68,11 @@ export default function Search() {
           setSearching(false);
         });
     },
-    [category, inStockOnly, sort, loadHistory],
+    [inStockOnly, sort],
   );
 
   useEffect(() => {
     runSearch(submitted);
-    // Re-runs whenever a filter changes, keeping results in sync with the UI.
   }, [runSearch, submitted]);
 
   const submit = (term: string) => {
@@ -116,39 +82,15 @@ export default function Search() {
     inputRef.current?.blur();
   };
 
-  const removeHistory = async (id: string) => {
-    setHistory((items) => items.filter((item) => item.id !== id));
-    try {
-      await deleteSearchHistory(id);
-    } catch (deleteError) {
-      setError(
-        deleteError instanceof Error
-          ? deleteError.message
-          : "We could not remove that search.",
-      );
-      loadHistory();
-    }
+  const handleAddToCart = async (product: ProductWithShop) => {
+    setAddingId(product.id);
+    // Cast to any to satisfy GroceryProduct since id is all that is used to match catalog
+    await addItem(product as any);
+    setAddingId(null);
   };
 
-  const clearAllHistory = async () => {
-    setHistory([]);
-    try {
-      await clearSearchHistory();
-    } catch (clearError) {
-      setError(
-        clearError instanceof Error
-          ? clearError.message
-          : "We could not clear your history.",
-      );
-      loadHistory();
-    }
-  };
-
-  const showHistory = history.length > 0 && submitted.length === 0;
-
-  return (
-    <AuthFrame>
-      <AuthHeader title="Search" />
+  const renderHeader = () => (
+    <View style={styles.headerContainer}>
       <View style={styles.searchWrap}>
         <Text style={styles.searchIcon}>⌕</Text>
         <TextInput
@@ -177,14 +119,15 @@ export default function Search() {
           </Pressable>
         ) : null}
       </View>
-      <ScrollView
+
+      <FlatList
         horizontal
-        contentContainerStyle={styles.chipRow}
+        data={SORTS}
         showsHorizontalScrollIndicator={false}
-      >
-        {SORTS.map((item) => (
+        contentContainerStyle={styles.chipRow}
+        keyExtractor={(item) => item.value}
+        renderItem={({ item }) => (
           <Pressable
-            key={item.value}
             onPress={() => {
               setLoading(true);
               setSort(item.value);
@@ -195,41 +138,9 @@ export default function Search() {
               {item.label}
             </Text>
           </Pressable>
-        ))}
-      </ScrollView>
-      {categories.length > 0 ? (
-        <ScrollView
-          horizontal
-          contentContainerStyle={styles.chipRow}
-          showsHorizontalScrollIndicator={false}
-        >
-          <Pressable
-            onPress={() => {
-            setLoading(true);
-            setCategory("");
-          }}
-            style={[styles.chip, category === "" && styles.chipActive]}
-          >
-            <Text style={[styles.chipText, category === "" && styles.chipTextActive]}>
-              All
-            </Text>
-          </Pressable>
-          {categories.map((item) => (
-            <Pressable
-              key={item}
-              onPress={() => {
-              setLoading(true);
-              setCategory(item);
-            }}
-              style={[styles.chip, category === item && styles.chipActive]}
-            >
-              <Text style={[styles.chipText, category === item && styles.chipTextActive]}>
-                {item}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
-      ) : null}
+        )}
+      />
+
       <Pressable
         onPress={() => {
           setLoading(true);
@@ -242,209 +153,267 @@ export default function Search() {
         </View>
         <Text style={styles.stockLabel}>In stock only</Text>
       </Pressable>
+
       {error ? <ErrorBanner message={error} /> : null}
-      {showHistory ? (
-        <View style={styles.historyBlock}>
-          <View style={styles.historyHeader}>
-            <Text style={styles.sectionTitle}>Recent searches</Text>
-            <Pressable onPress={clearAllHistory}>
-              <Text style={styles.clearAll}>Clear all</Text>
-            </Pressable>
-          </View>
-          {history.map((item) => (
-            <View key={item.id} style={styles.historyRow}>
-              <Pressable
-                onPress={() => submit(item.query)}
-                style={styles.historyMain}
-              >
-                <Text style={styles.historyQuery}>{item.query}</Text>
-                <Text style={styles.historyMeta}>
-                  {item.result_count} result{item.result_count === 1 ? "" : "s"} ·{" "}
-                  {formatRelativeTime(item.created_at)}
-                </Text>
-              </Pressable>
-              <Pressable
-                accessibilityLabel={`Delete ${item.query} from search history`}
-                onPress={() => removeHistory(item.id)}
-                style={styles.historyDelete}
-              >
-                <Text style={styles.historyDeleteText}>×</Text>
-              </Pressable>
-            </View>
-          ))}
-        </View>
-      ) : null}
+
       <View style={styles.resultHeader}>
         <Text style={styles.sectionTitle}>
           {submitted ? `Results for “${submitted}”` : "All products"}
         </Text>
-        {!loading ? (
+        {!loading && (
           <Text style={styles.resultCount}>
             {results.length} item{results.length === 1 ? "" : "s"}
           </Text>
-        ) : null}
+        )}
       </View>
-      {loading ? (
-        <Text style={styles.muted}>Loading products...</Text>
-      ) : results.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>⌕</Text>
-          <Text style={styles.emptyTitle}>No products found</Text>
-          <Text style={styles.emptyText}>
-            Try a different keyword or clear your filters.
-          </Text>
+    </View>
+  );
+
+  const renderEmpty = () => {
+    if (loading) {
+      return (
+        <View style={styles.emptyContainer}>
+          <ActivityIndicator size="large" color={colors.ink} />
+          <Text style={styles.loadingText}>Loading products...</Text>
         </View>
-      ) : (
-        results.map((product) => (
-          <Pressable
-            key={product.id}
-            onPress={() =>
-              router.push({
-                pathname: "/(customer)/product-details",
-                params: { id: product.id },
-              })
-            }
-            style={({ pressed }) => [styles.card, pressed && styles.pressed]}
-          >
+      );
+    }
+    return (
+      <View style={styles.empty}>
+        <Text style={styles.emptyIcon}>⌕</Text>
+        <Text style={styles.emptyTitle}>No products found</Text>
+        <Text style={styles.emptyText}>
+          Try a different keyword or clear your filters.
+        </Text>
+      </View>
+    );
+  };
+
+  const renderItem = ({ item }: { item: ProductWithShop }) => {
+    const outOfStock = item.stock_quantity === 0;
+    const isAddingThis = adding && addingId === item.id;
+
+    return (
+      <View style={[styles.cardWrapper, { width: itemWidth }]}>
+        <Pressable
+          onPress={() =>
+            router.push({
+              pathname: "/(customer)/product-details",
+              params: { id: item.id },
+            })
+          }
+          style={({ pressed }) => [styles.card, pressed && styles.pressed]}
+        >
+          {item.image_url ? (
+            <Image
+              source={{ uri: item.image_url }}
+              style={styles.productImage}
+              resizeMode="contain"
+            />
+          ) : (
             <View style={styles.thumb}>
-              <Text style={styles.thumbText}>{product.name.slice(0, 1)}</Text>
+              <Text style={styles.thumbText}>{item.name.slice(0, 1)}</Text>
             </View>
-            <View style={styles.cardCopy}>
-              <Text style={styles.cardName}>{product.name}</Text>
-              <Text style={styles.cardShop}>{product.shop_name}</Text>
-              <Text style={styles.cardMeta}>
-                {product.category} · {product.stock_quantity} {product.unit}
-                {product.stock_quantity === 0 ? " · Out of stock" : ""}
-              </Text>
-            </View>
-            <Text style={styles.price}>
-              {formatCurrencyShort(product.price)}
+          )}
+
+          <View style={styles.cardContent}>
+            <Text style={styles.cardName} numberOfLines={2}>{item.name}</Text>
+            <Text style={styles.cardShop} numberOfLines={1}>{item.shop_name}</Text>
+            <Text style={styles.cardMeta} numberOfLines={1}>
+              {item.category} · {item.unit}
             </Text>
-          </Pressable>
-        ))
-      )}
+            <View style={styles.priceRow}>
+              <Text style={styles.price}>{formatCurrencyShort(item.price)}</Text>
+              {outOfStock && <Text style={styles.outOfStockText}>Out of stock</Text>}
+            </View>
+
+            <Pressable
+              style={[
+                styles.addButton,
+                (outOfStock || isAddingThis) && styles.addButtonDisabled,
+              ]}
+              disabled={outOfStock || isAddingThis}
+              onPress={() => handleAddToCart(item)}
+            >
+              {isAddingThis ? (
+                <ActivityIndicator color={colors.white} size="small" />
+              ) : (
+                <Text style={styles.addButtonText}>Add</Text>
+              )}
+            </Pressable>
+          </View>
+        </Pressable>
+      </View>
+    );
+  };
+
+  return (
+    <AuthFrame>
+      <AuthHeader title="Search" />
+      <FlatList
+        key={numColumns}
+        data={results}
+        numColumns={numColumns}
+        renderItem={renderItem}
+        ListHeaderComponent={renderHeader}
+        ListEmptyComponent={renderEmpty}
+        contentContainerStyle={styles.listContent}
+        columnWrapperStyle={results.length > 0 ? styles.columnWrapper : undefined}
+      />
     </AuthFrame>
   );
 }
 
 const styles = StyleSheet.create({
+  headerContainer: {
+    paddingBottom: 10,
+  },
   searchWrap: {
     alignItems: "center",
     backgroundColor: "#F0F1FC",
-    borderRadius: 11,
+    borderRadius: 24, // highly rounded search bar
     flexDirection: "row",
     marginBottom: 14,
     minHeight: 46,
-    paddingHorizontal: 12,
+    paddingHorizontal: 16,
   },
-  searchIcon: { color: colors.muted, fontSize: 17, marginRight: 8 },
-  search: { color: colors.ink, flex: 1, fontSize: 13, paddingVertical: 12 },
-  clear: { alignItems: "center", height: 22, justifyContent: "center", width: 22 },
-  clearText: { color: colors.muted, fontSize: 18, lineHeight: 20 },
-  chipRow: { gap: 7, paddingBottom: 12, paddingRight: 22 },
+  searchIcon: { color: colors.muted, fontSize: 18, marginRight: 8 },
+  search: { color: colors.ink, flex: 1, fontSize: 14, paddingVertical: 12 },
+  clear: {
+    alignItems: "center",
+    height: 24,
+    justifyContent: "center",
+    width: 24,
+    backgroundColor: colors.line,
+    borderRadius: 12,
+    marginLeft: 8,
+  },
+  clearText: { color: colors.muted, fontSize: 14, fontWeight: "bold" },
+  chipRow: { gap: 8, paddingBottom: 16, paddingRight: 22 },
   chip: {
     backgroundColor: "#E9EAF9",
-    borderRadius: 15,
-    paddingHorizontal: 13,
-    paddingVertical: 7,
+    borderRadius: 16,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
   },
   chipActive: { backgroundColor: colors.ink },
-  chipText: { color: colors.ink, fontSize: 10, fontWeight: "700" },
+  chipText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
   chipTextActive: { color: colors.white },
   stockToggle: { alignItems: "center", flexDirection: "row", marginBottom: 16 },
   checkbox: {
     alignItems: "center",
     backgroundColor: colors.white,
     borderColor: colors.line,
-    borderRadius: 5,
+    borderRadius: 6,
     borderWidth: 1,
-    height: 18,
+    height: 20,
     justifyContent: "center",
-    marginRight: 8,
-    width: 18,
+    marginRight: 10,
+    width: 20,
   },
   checkboxOn: { backgroundColor: colors.ink, borderColor: colors.ink },
-  checkmark: { color: colors.white, fontSize: 11, fontWeight: "900" },
-  stockLabel: { color: colors.ink, fontSize: 11, fontWeight: "700" },
-  historyBlock: { marginBottom: 18 },
-  historyHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  clearAll: { color: colors.coral, fontSize: 10, fontWeight: "800" },
-  historyRow: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.line,
-    borderRadius: 11,
-    borderWidth: 1,
-    flexDirection: "row",
-    marginBottom: 8,
-    padding: 11,
-  },
-  historyMain: { flex: 1 },
-  historyQuery: { color: colors.ink, fontSize: 12, fontWeight: "700" },
-  historyMeta: { color: colors.muted, fontSize: 9, marginTop: 3 },
-  historyDelete: { alignItems: "center", paddingLeft: 10 },
-  historyDeleteText: { color: colors.muted, fontSize: 18, lineHeight: 20 },
+  checkmark: { color: colors.white, fontSize: 12, fontWeight: "900" },
+  stockLabel: { color: colors.ink, fontSize: 13, fontWeight: "700" },
   resultHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
+    marginBottom: 8,
   },
-  resultCount: { color: colors.muted, fontSize: 10 },
-  sectionTitle: {
+  sectionTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+  resultCount: { color: colors.muted, fontSize: 12 },
+  listContent: {
+    paddingBottom: 100, // proper bottom padding so nav doesn't cover
+  },
+  columnWrapper: {
+    gap: 12,
+    marginBottom: 16,
+  },
+  cardWrapper: {
+    // width applied via inline style
+    flexDirection: "column",
+  },
+  card: {
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    overflow: "hidden",
+    flexDirection: "column",
+    flex: 1,
+  },
+  productImage: {
+    width: "100%",
+    height: 120,
+    backgroundColor: "#F8F9FA",
+  },
+  thumb: {
+    width: "100%",
+    height: 120,
+    alignItems: "center",
+    backgroundColor: colors.mintSoft,
+    justifyContent: "center",
+  },
+  thumbText: { color: colors.ink, fontSize: 32, fontWeight: "900" },
+  cardContent: {
+    padding: 12,
+    flex: 1,
+    flexDirection: "column",
+  },
+  cardName: {
     color: colors.ink,
     fontSize: 13,
     fontWeight: "800",
-    marginBottom: 11,
+    marginBottom: 4,
+    minHeight: 36,
+    lineHeight: 18,
   },
-  card: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.line,
-    borderRadius: 13,
-    borderWidth: 1,
+  cardShop: { color: "#07856A", fontSize: 11, marginBottom: 2 },
+  cardMeta: { color: colors.muted, fontSize: 11, marginBottom: 8 },
+  priceRow: {
     flexDirection: "row",
-    marginBottom: 10,
-    padding: 11,
-  },
-  thumb: {
     alignItems: "center",
-    backgroundColor: colors.mintSoft,
-    borderRadius: 11,
-    height: 42,
-    justifyContent: "center",
-    width: 42,
+    justifyContent: "space-between",
+    marginBottom: 12,
   },
-  thumbText: { color: colors.ink, fontSize: 16, fontWeight: "900" },
-  cardCopy: { flex: 1, marginLeft: 10 },
-  cardName: { color: colors.ink, fontSize: 12, fontWeight: "800" },
-  cardShop: { color: "#07856A", fontSize: 9, marginTop: 3 },
-  cardMeta: { color: colors.muted, fontSize: 9, marginTop: 3 },
-  price: { color: colors.ink, fontSize: 12, fontWeight: "900" },
+  price: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+  outOfStockText: { color: colors.coral, fontSize: 10, fontWeight: "700" },
+  addButton: {
+    backgroundColor: colors.ink,
+    borderRadius: 8,
+    paddingVertical: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: "auto",
+  },
+  addButtonDisabled: {
+    backgroundColor: colors.muted,
+  },
+  addButtonText: {
+    color: colors.white,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+  emptyContainer: {
+    paddingTop: 40,
+    alignItems: "center",
+  },
+  loadingText: { color: colors.muted, fontSize: 14, marginTop: 12 },
   empty: {
     alignItems: "center",
     backgroundColor: "#F0F1FC",
     borderRadius: 16,
-    marginTop: 18,
-    padding: 28,
+    marginTop: 20,
+    padding: 32,
   },
-  emptyIcon: { color: colors.mint, fontSize: 30 },
-  emptyTitle: {
-    color: colors.ink,
-    fontSize: 15,
-    fontWeight: "800",
-    marginTop: 9,
-  },
+  emptyIcon: { color: colors.mint, fontSize: 36, marginBottom: 12 },
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
   emptyText: {
     color: colors.muted,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 6,
+    fontSize: 13,
+    lineHeight: 19,
+    marginTop: 8,
     textAlign: "center",
   },
-  muted: { color: colors.muted, fontSize: 12 },
-  pressed: { opacity: 0.75 },
+  pressed: { opacity: 0.8 },
 });

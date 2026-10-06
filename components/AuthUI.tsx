@@ -43,9 +43,11 @@ export function AuthFrame({
 export function AuthHeader({
   title,
   eyebrow = "GRAB & GO",
+  subtitle,
 }: {
   title: string;
   eyebrow?: string;
+  subtitle?: string;
 }) {
   return (
     <View style={styles.header}>
@@ -56,12 +58,10 @@ export function AuthHeader({
       >
         <Text style={styles.backIcon}>←</Text>
       </Pressable>
-      <View style={styles.headerMark}>
-        <Text style={styles.headerMarkText}>▣</Text>
-      </View>
       <View style={styles.headerCopy}>
         <Text style={styles.eyebrow}>{eyebrow}</Text>
         <Text style={styles.headerTitle}>{title}</Text>
+        {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
       </View>
       <View style={styles.headerAvatar}>
         <Text style={styles.avatarText}>◉</Text>
@@ -186,6 +186,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     marginTop: 1,
+  },
+  headerSubtitle: {
+    color: colors.muted,
+    fontSize: 11,
+    marginTop: 2,
   },
   headerAvatar: {
     alignItems: "center",

@@ -1,3 +1,6 @@
+import { Image } from "expo-image";
+import * as ImagePicker from "expo-image-picker";
+import { supabase } from "@/lib/supabase";
 import {
   AuthFrame,
   AuthHeader,
@@ -7,21 +10,22 @@ import {
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
 import {
-  createProduct,
-  deleteProduct,
-  listProductsByShop,
-  updateProduct,
+  createShopProduct,
+  deleteCanonicalProduct as deleteProduct,
+  listCanonicalProductsByShop as listProductsByShop,
+  updateShopProduct,
+  setProductActive,
 } from "@/services/productService";
 import {
-  createShop,
-  deleteShop,
   listMyShops,
-  updateShop,
+  updateStock,
+  deleteShopProduct,
 } from "@/services/shopService";
 import type { Product } from "@/types/product";
 import type { Shop } from "@/types/shop";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, useMemo } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Modal,
   Pressable,
@@ -30,10 +34,11 @@ import {
   Text,
   TextInput,
   View,
+  Platform,
 } from "react-native";
 import { formatCurrencyShort } from "@/utils/formatters";
 
-type Mode = "shop-create" | "shop-edit" | "product-create" | "product-edit";
+type Mode = "product-create" | "product-edit";
 
 export default function ShopManagement() {
   const [shops, setShops] = useState<Shop[]>([]);
@@ -45,16 +50,19 @@ export default function ShopManagement() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filter, setFilter] = useState<"All" | "Out of Stock" | "Paused">("All");
+
   const [mode, setMode] = useState<Mode | null>(null);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [pickedImage, setPickedImage] = useState<any>(null);
   const [form, setForm] = useState({
     name: "",
-    description: "",
-    category: "Grocery",
-    address: "",
-    phone: "",
     price: "",
+    regular_price: "",
     stock_quantity: "",
+    unit: "",
+    image_url: "",
   });
 
   const loadShops = useCallback(() => {
@@ -77,6 +85,7 @@ export default function ShopManagement() {
   }, []);
 
   const loadProducts = useCallback((shopId: string) => {
+    setProductsLoading(true);
     listProductsByShop(shopId)
       .then(setProducts)
       .catch((loadError: unknown) => {
@@ -97,117 +106,149 @@ export default function ShopManagement() {
     if (selectedShop) loadProducts(selectedShop.id);
   }, [selectedShop, loadProducts]);
 
-  const openCreateShop = () => {
-    setForm({
-      name: "",
-      description: "",
-      category: "Grocery",
-      address: "",
-      phone: "",
-      price: "",
-      stock_quantity: "",
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (p.active === false && p.is_available === false) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (
+          !p.name.toLowerCase().includes(q) &&
+          !(p.unit || "").toLowerCase().includes(q)
+        ) {
+          return false;
+        }
+      }
+      if (filter === "Out of Stock" && p.stock_quantity > 0) return false;
+      if (filter === "Paused" && p.active !== false) return false;
+      return true;
     });
-    setMode("shop-create");
+  }, [products, searchQuery, filter]);
+
+  const counts = useMemo(() => {
+    let outOfStock = 0;
+    let paused = 0;
+    let all = 0;
+    for (const p of products) {
+      if (p.active === false && p.is_available === false) continue;
+      all++;
+      if (p.stock_quantity === 0) outOfStock++;
+      if (p.active === false) paused++;
+    }
+    return { all, outOfStock, paused };
+  }, [products]);
+
+  const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
+
+  const handleDeleteProduct = async (productId: string) => {
+    if (deletingProductId) return;
+    setDeletingProductId(productId);
+
+    try {
+      await deleteShopProduct(productId);
+      if (selectedShop) loadProducts(selectedShop.id);
+      if (Platform.OS === "web") {
+        globalThis.alert?.("The product was removed successfully.");
+      } else {
+        Alert.alert("Product deleted", "The product was removed successfully.");
+      }
+    } catch (err) {
+      console.error("[ShopManagement] delete product failed", err);
+      const msg = err instanceof Error ? err.message : "Please try again.";
+      if (Platform.OS === "web") {
+        globalThis.alert?.("Could not delete product: " + msg);
+      } else {
+        Alert.alert("Could not delete product", msg);
+      }
+    } finally {
+      setDeletingProductId(null);
+    }
   };
 
-  const openEditShop = (shop: Shop) => {
-    setForm({
-      name: shop.name,
-      description: shop.description,
-      category: shop.category,
-      address: shop.address,
-      phone: shop.phone ?? "",
-      price: "",
-      stock_quantity: "",
-    });
-    setMode("shop-edit");
+  const confirmDeleteProduct = (product: Product) => {
+    if (Platform.OS === "web") {
+      const confirmed = globalThis.confirm?.(
+        `Delete ${product.name} from your shop catalog?`
+      );
+
+      if (confirmed) {
+        void handleDeleteProduct(product.id);
+      }
+      return;
+    }
+
+    Alert.alert(
+      "Delete product?",
+      `${product.name} will be removed from your shop catalog.`,
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: () => {
+            void handleDeleteProduct(product.id);
+          },
+        },
+      ]
+    );
   };
 
   const openCreateProduct = () => {
+    setEditingProduct(null);
+    setPickedImage(null);
     setForm({
       name: "",
-      description: "",
-      category: "General",
-      address: "",
-      phone: "",
       price: "",
+      regular_price: "",
       stock_quantity: "",
+      unit: "",
+      image_url: "",
     });
     setMode("product-create");
   };
 
   const openEditProduct = (product: Product) => {
+    setEditingProduct(product);
+    setPickedImage(null);
     setForm({
       name: product.name,
-      description: product.description,
-      category: product.category,
-      address: "",
-      phone: "",
       price: String(product.price),
+      regular_price: product.regular_price ? String(product.regular_price) : "",
       stock_quantity: String(product.stock_quantity),
+      unit: product.unit ?? "",
+      image_url: product.image_url ?? "",
     });
     setMode("product-edit");
   };
 
   const closeModal = () => {
     setMode(null);
+    setEditingProduct(null);
     setError("");
-  };
-
-  const saveShop = async () => {
-    if (!form.name.trim()) {
-      setError("Shop name is required.");
-      return;
-    }
-
-    setSaving(true);
-    setError("");
-    try {
-      if (mode === "shop-edit" && selectedShop) {
-        await updateShop(selectedShop.id, {
-          name: form.name,
-          description: form.description,
-          category: form.category,
-          address: form.address,
-          phone: form.phone || null,
-        });
-        setNotice("✓ Shop updated");
-      } else {
-        const created = await createShop({
-          name: form.name,
-          description: form.description,
-          category: form.category,
-          address: form.address,
-          phone: form.phone || null,
-        });
-        setSelectedShop(created);
-        setNotice("✓ Shop created");
-      }
-      closeModal();
-      loadShops();
-    } catch (saveError) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "We could not save your shop.",
-      );
-    } finally {
-      setSaving(false);
-    }
+    setPickedImage(null);
   };
 
   const saveProduct = async () => {
     if (!selectedShop) return;
 
     const price = Number(form.price);
+    const regularPrice = form.regular_price ? Number(form.regular_price) : price;
     const stock = Number(form.stock_quantity || 0);
+    const unit = form.unit.trim();
 
     if (!form.name.trim()) {
       setError("Product name is required.");
       return;
     }
+    if (!unit) {
+      setError("Unit is required.");
+      return;
+    }
     if (!Number.isFinite(price) || price < 0) {
-      setError("Enter a valid price.");
+      setError("Enter a valid selling price.");
+      return;
+    }
+    if (!Number.isFinite(regularPrice) || regularPrice < price) {
+      setError("Regular price must be greater than or equal to selling price.");
       return;
     }
     if (!Number.isFinite(stock) || stock < 0) {
@@ -217,28 +258,55 @@ export default function ShopManagement() {
 
     setSaving(true);
     setError("");
+
     try {
-      if (mode === "product-edit" && selectedShop) {
-        const existing = products.find((item) => item.id === editingId);
-        if (existing) {
-          await updateProduct(existing.id, {
-            name: form.name,
-            description: form.description,
-            category: form.category,
-            price,
-            stock_quantity: stock,
+      let finalImageUrl = form.image_url.trim();
+
+      if (pickedImage) {
+        const response = await fetch(pickedImage.uri);
+        const blob = await response.blob();
+        const ext = pickedImage.uri.split('.').pop() || 'jpg';
+        const filename = `${Date.now()}-${Math.random().toString(36).substring(2, 9)}.${ext}`;
+        const path = `${selectedShop.id}/${filename}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('product-images')
+          .upload(path, blob, {
+            contentType: pickedImage.mimeType || 'image/jpeg',
           });
-          setNotice("✓ Listing updated");
-        }
-      } else {
-        await createProduct({
-          shop_id: selectedShop.id,
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from('product-images')
+          .getPublicUrl(path);
+
+        finalImageUrl = publicUrlData.publicUrl;
+      }
+
+      if (mode === "product-edit" && selectedShop && editingProduct) {
+        await updateShopProduct(editingProduct.id, {
           name: form.name,
-          description: form.description,
-          category: form.category,
-          price,
-          stock_quantity: stock,
+          unit,
+          priceLkr: price,
+          regularPriceLkr: regularPrice,
+          imageUrl: finalImageUrl || null,
         });
+        await updateStock(selectedShop.id, editingProduct.id, stock, true);
+        setNotice("✓ Listing updated");
+      } else {
+        await createShopProduct(
+          selectedShop.id,
+          {
+            name: form.name,
+            unit,
+            priceLkr: price,
+            regularPriceLkr: regularPrice,
+            imageUrl: finalImageUrl || null,
+            active: true
+          },
+          stock
+        );
         setNotice("✓ Listing created");
       }
       closeModal();
@@ -254,222 +322,241 @@ export default function ShopManagement() {
     }
   };
 
-  const confirmDeleteShop = (shop: Shop) => {
-    Alert.alert(
-      "Delete shop?",
-      `This removes ${shop.name} and all of its listings. This cannot be undone.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            try {
-              await deleteShop(shop.id);
-              setNotice("✓ Shop deleted");
-              loadShops();
-            } catch (deleteError) {
-              setError(
-                deleteError instanceof Error
-                  ? deleteError.message
-                  : "We could not delete that shop.",
-              );
-            }
-          },
-        },
-      ],
-    );
-  };
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsEditing: true,
+      quality: 0.8,
+    });
 
-  const confirmDeleteProduct = (product: Product) => {
-    Alert.alert("Delete listing?", `Remove ${product.name}?`, [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          if (!selectedShop) return;
-          try {
-            await deleteProduct(product.id);
-            setNotice("✓ Listing deleted");
-            loadProducts(selectedShop.id);
-          } catch (deleteError) {
-            setError(
-              deleteError instanceof Error
-                ? deleteError.message
-                : "We could not delete that listing.",
-            );
-          }
-        },
-      },
-    ]);
+    if (!result.canceled) {
+      const asset = result.assets[0];
+      const mime = asset.mimeType || (asset.uri.endsWith('.png') ? 'image/png' : asset.uri.endsWith('.webp') ? 'image/webp' : 'image/jpeg');
+      if (!['image/jpeg', 'image/png', 'image/webp'].includes(mime)) {
+        Alert.alert("Unsupported format", "Please choose a JPEG, PNG, or WEBP image.");
+        return;
+      }
+      if (asset.fileSize && asset.fileSize > 5 * 1024 * 1024) {
+        Alert.alert("File too large", "Maximum image size is 5 MB.");
+        return;
+      }
+      setPickedImage(asset);
+      setForm(prev => ({ ...prev, image_url: "" })); // Priority 1: uploaded image clears URL
+    }
   };
-
-  const isProductMode = mode === "product-create" || mode === "product-edit";
 
   return (
-    <AuthFrame>
-      <AuthHeader eyebrow="SHOP" title="Shop Management" />
-      {error && !mode ? <ErrorBanner message={error} /> : null}
+    <AuthFrame scroll={false}>
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ paddingBottom: 130 }}
+        showsVerticalScrollIndicator={false}
+      >
+        <AuthHeader
+          eyebrow="PRODUCTS"
+          title="Products & Inventory"
+          subtitle="Manage catalog, pricing and stock"
+        />
+
+      {error && !mode ? (
+        <View style={styles.inlineErrorBanner}>
+          <Text style={styles.errorIcon}>!</Text>
+          <Text style={styles.inlineErrorText}>{error}</Text>
+          <Pressable onPress={() => { setError(""); loadShops(); }}>
+            <Text style={styles.retryText}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+
       {loading ? (
-        <Text style={styles.muted}>Loading your shops...</Text>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="small" color={colors.mint} />
+          <Text style={styles.muted}>Loading shops...</Text>
+        </View>
       ) : shops.length === 0 ? (
         <View style={styles.empty}>
           <Text style={styles.emptyIcon}>🏪</Text>
           <Text style={styles.emptyTitle}>No shops yet</Text>
           <Text style={styles.emptyText}>
-            Create your first shop to start adding product listings.
+            You need a shop to start adding product listings.
           </Text>
         </View>
       ) : (
         <>
-          <Text style={styles.sectionTitle}>Your shops</Text>
+          {selectedShop ? (
+            <View style={styles.shopSummaryCard}>
+              <View style={styles.shopSummaryInfo}>
+                <Text style={styles.shopSummaryName}>{selectedShop.name}</Text>
+                {selectedShop.address ? (
+                  <Text style={styles.shopSummaryAddress}>{selectedShop.address}</Text>
+                ) : null}
+                <Text style={styles.shopSummaryMeta}>
+                  Products: {products.length}
+                </Text>
+              </View>
+              <View style={styles.shopSummaryStatus}>
+                <Text style={styles.badgeActiveText}>
+                  {selectedShop.is_active ? "ACTIVE" : "PAUSED"}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
+          <View style={styles.listingHeader}>
+            <PrimaryButton onPress={openCreateProduct} loading={false}>
+              + Add Product
+            </PrimaryButton>
+          </View>
+
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products..."
+              placeholderTextColor="#9A98AA"
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+            />
+          </View>
+
           <ScrollView
-            contentContainerStyle={styles.shopRow}
             horizontal
             showsHorizontalScrollIndicator={false}
+            style={styles.filterScroll}
+            contentContainerStyle={styles.filterRow}
           >
-            {shops.map((shop) => {
-              const active = selectedShop?.id === shop.id;
+            {[
+              { key: "All", label: `All (${counts.all})` },
+              {
+                key: "Out of Stock",
+                label: `Out of Stock (${counts.outOfStock})`,
+              },
+              {
+                key: "Paused",
+                label: `Paused (${counts.paused})`,
+              },
+            ].map((f) => {
+              const active = filter === f.key;
+
               return (
                 <Pressable
-                  key={shop.id}
-                  onPress={() => {
-                    setProductsLoading(true);
-                    setSelectedShop(shop);
-                  }}
-                  style={[styles.shopChip, active && styles.shopChipActive]}
+                  key={f.key}
+                  onPress={() => setFilter(f.key as any)}
+                  style={[
+                    styles.filterChip,
+                    active && styles.filterChipActive,
+                  ]}
                 >
                   <Text
+                    numberOfLines={1}
                     style={[
-                      styles.shopChipText,
-                      active && styles.shopChipTextActive,
+                      styles.filterChipText,
+                      active && styles.filterChipTextActive,
                     ]}
                   >
-                    {shop.name}
+                    {f.label}
                   </Text>
                 </Pressable>
               );
             })}
           </ScrollView>
-          {selectedShop ? (
-            <View style={styles.shopCard}>
-              <View style={styles.shopCardHeader}>
-                <View style={styles.shopCardCopy}>
-                  <Text style={styles.shopName}>{selectedShop.name}</Text>
-                  <Text style={styles.shopMeta}>
-                    {selectedShop.category} •{" "}
-                    {selectedShop.is_active ? "Active" : "Paused"}
-                  </Text>
-                  {selectedShop.address ? (
-                    <Text style={styles.shopAddress}>{selectedShop.address}</Text>
-                  ) : null}
-                </View>
-              </View>
-              <View style={styles.shopActions}>
-                <Pressable onPress={() => openEditShop(selectedShop)} style={styles.smallButton}>
-                  <Text style={styles.smallButtonText}>Edit</Text>
-                </Pressable>
-                <Pressable
-                  onPress={() =>
-                    updateShop(selectedShop.id, {
-                      is_active: !selectedShop.is_active,
-                    })
-                      .then(() => {
-                        setNotice(
-                          selectedShop.is_active ? "✓ Shop paused" : "✓ Shop resumed",
-                        );
-                        loadShops();
-                        return undefined;
-                      })
-                      .catch((toggleError) =>
-                        setError(
-                          toggleError instanceof Error
-                            ? toggleError.message
-                            : "We could not update the shop.",
-                        ),
-                      )
-                  }
-                  style={styles.smallButton}
-                >
-                  <Text style={styles.smallButtonText}>
-                    {selectedShop.is_active ? "Pause" : "Resume"}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  onPress={() => confirmDeleteShop(selectedShop)}
-                  style={[styles.smallButton, styles.dangerButton]}
-                >
-                  <Text style={[styles.smallButtonText, styles.dangerText]}>
-                    Delete
-                  </Text>
-                </Pressable>
-              </View>
+
+          {productsLoading ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="small" color={colors.mint} />
+              <Text style={styles.muted}>Loading products...</Text>
             </View>
-          ) : null}
-          <View style={styles.listingHeader}>
-            <Text style={styles.sectionTitle}>
-              Product listings
-              {products.length > 0 ? ` (${products.length})` : ""}
-            </Text>
-            <Pressable onPress={openCreateProduct}>
-              <Text style={styles.addLink}>+ Add listing</Text>
-            </Pressable>
-          </View>
-          {productsLoading || !selectedShop ? (
-            <Text style={styles.muted}>Loading listings...</Text>
-          ) : products.length === 0 ? (
-            <View style={styles.emptySmall}>
+          ) : filteredProducts.length === 0 ? (
+            <View style={styles.empty}>
+              <Text style={styles.emptyTitle}>No products yet</Text>
               <Text style={styles.emptyText}>
-                No listings for this shop yet. Add your first product.
+                {searchQuery || filter !== "All"
+                  ? "No products match your search or filter."
+                  : "Add your first product to start selling."}
               </Text>
+              {!(searchQuery || filter !== "All") && (
+                <View style={{ marginTop: 16, width: "100%" }}>
+                  <PrimaryButton onPress={openCreateProduct}>+ Add Product</PrimaryButton>
+                </View>
+              )}
             </View>
           ) : (
-            products.map((product) => (
-              <View key={product.id} style={styles.listingCard}>
-                <View style={styles.listingThumb}>
-                  <Text style={styles.listingThumbText}>
-                    {product.name.slice(0, 1)}
-                  </Text>
+            filteredProducts.map((product) => (
+              <View key={product.id} style={styles.productCard}>
+                <View style={styles.productTopRow}>
+                  <ProductCardImage product={product} />
+                  <View style={styles.productDetails}>
+                    <Text style={styles.productName}>{product.name}</Text>
+                    <Text style={styles.productUnit}>{product.unit || "-"}</Text>
+                    <Text style={styles.productPrice}>{formatCurrencyShort(product.price)}</Text>
+                  </View>
+                  <View style={styles.productBadges}>
+                    <View style={product.active !== false ? styles.badgeActive : styles.badgePaused}>
+                      <Text style={product.active !== false ? styles.badgeActiveText : styles.badgePausedText}>
+                        {product.active !== false ? "ACTIVE" : "PAUSED"}
+                      </Text>
+                    </View>
+                  </View>
                 </View>
-                <View style={styles.listingCopy}>
-                  <Text style={styles.listingName}>{product.name}</Text>
-                  <Text style={styles.listingMeta}>
-                    {product.category} • {product.stock_quantity} in stock
-                    {product.stock_quantity === 0 ? " • Out of stock" : ""}
-                  </Text>
-                  <Text style={styles.listingPrice}>
-                    {formatCurrencyShort(product.price)}
-                  </Text>
-                </View>
-                <View style={styles.listingActions}>
-                  <Pressable
-                    accessibilityLabel={`Edit ${product.name}`}
-                    onPress={() => {
-                      setEditingId(product.id);
-                      openEditProduct(product);
-                    }}
-                    style={styles.iconButton}
-                  >
-                    <Text style={styles.iconButtonText}>✎</Text>
-                  </Pressable>
-                  <Pressable
-                    accessibilityLabel={`Delete ${product.name}`}
-                    onPress={() => confirmDeleteProduct(product)}
-                    style={styles.iconButton}
-                  >
-                    <Text style={[styles.iconButtonText, styles.dangerText]}>
-                      ×
-                    </Text>
-                  </Pressable>
+
+                <View style={styles.productBottomRow}>
+                  <View style={styles.stockRow}>
+                    <Text style={styles.stockLabel}>Stock: {product.stock_quantity}</Text>
+                    <View style={product.stock_quantity > 0 ? styles.badgeInStock : styles.badgeOutOfStock}>
+                      <Text style={product.stock_quantity > 0 ? styles.badgeInStockText : styles.badgeOutOfStockText}>
+                        {product.stock_quantity > 0 ? "IN STOCK" : "OUT OF STOCK"}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={styles.productActions}>
+                    <Pressable
+                      onPress={() => {
+                        openEditProduct(product);
+                      }}
+                      style={styles.actionButtonEdit}
+                    >
+                      <Text style={styles.actionButtonEditText}>Edit</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={async () => {
+                        if (!selectedShop) return;
+                        try {
+                          await setProductActive(product.id, !product.active);
+                          loadProducts(selectedShop.id);
+                        } catch (err) {
+                          setError(err instanceof Error ? err.message : "Failed to update product state.");
+                        }
+                      }}
+                      style={product.active !== false ? styles.actionButtonPause : styles.actionButtonResume}
+                    >
+                      <Text style={product.active !== false ? styles.actionButtonPauseText : styles.actionButtonResumeText}>
+                        {product.active !== false ? "Pause" : "Resume"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      disabled={deletingProductId === product.id}
+                      onPress={() => confirmDeleteProduct(product)}
+                      style={({ pressed }) => [
+                        styles.deleteButton,
+                        pressed && styles.actionBtnPressed,
+                        deletingProductId === product.id && styles.disabled,
+                      ]}
+                    >
+                      <Text style={styles.deleteButtonText}>
+                        {deletingProductId === product.id ? "Deleting..." : "Delete"}
+                      </Text>
+                    </Pressable>
+                  </View>
                 </View>
               </View>
             ))
           )}
-          <PrimaryButton onPress={openCreateShop}>+ Create a new shop</PrimaryButton>
         </>
       )}
+
+      </ScrollView>
+
       <Modal
         animationType="slide"
         onRequestClose={closeModal}
@@ -480,80 +567,80 @@ export default function ShopManagement() {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {mode === "shop-create"
-                  ? "New shop"
-                  : mode === "shop-edit"
-                    ? "Edit shop"
-                    : mode === "product-create"
-                      ? "New listing"
-                      : "Edit listing"}
+                {mode === "product-create" ? "Add Product" : "Edit Product"}
               </Text>
               <Pressable accessibilityLabel="Close" onPress={closeModal}>
                 <Text style={styles.modalClose}>×</Text>
               </Pressable>
             </View>
             <ScrollView keyboardShouldPersistTaps="handled">
-              {error ? <ErrorBanner message={error} /> : null}
               <ModalField
-                label="Name"
+                label="Product Name"
                 onChangeText={(value) => setForm({ ...form, name: value })}
                 value={form.name}
               />
               <ModalField
-                label="Description"
-                multiline
-                onChangeText={(value) => setForm({ ...form, description: value })}
-                value={form.description}
+                label="Unit (e.g. 400 g, 1 L)"
+                onChangeText={(value) => setForm({ ...form, unit: value })}
+                value={form.unit}
               />
-              {isProductMode ? (
-                <ModalField
-                  label="Category"
-                  onChangeText={(value) => setForm({ ...form, category: value })}
-                  value={form.category}
+              <ModalField
+                keyboardType="decimal-pad"
+                label="Selling Price (LKR)"
+                onChangeText={(value) => setForm({ ...form, price: value })}
+                value={form.price}
+              />
+              <ModalField
+                keyboardType="decimal-pad"
+                label="Regular Price (LKR) - Optional"
+                onChangeText={(value) => setForm({ ...form, regular_price: value })}
+                value={form.regular_price}
+              />
+              <ModalField
+                keyboardType="number-pad"
+                label={mode === "product-create" ? "Initial Stock" : "Stock quantity"}
+                onChangeText={(value) =>
+                  setForm({ ...form, stock_quantity: value })
+                }
+                value={form.stock_quantity}
+              />
+              <View style={styles.field}>
+                <Text style={styles.fieldLabel}>Image (Optional)</Text>
+
+                {pickedImage || form.image_url ? (
+                  <View style={{ marginBottom: 12, alignItems: 'center' }}>
+                    <Image
+                      source={{ uri: pickedImage ? pickedImage.uri : form.image_url }}
+                      style={{ width: 100, height: 100, borderRadius: 8, backgroundColor: '#f0f0f0' }}
+                      contentFit="cover"
+                    />
+                    <Pressable style={{ marginTop: 8 }} onPress={() => { setPickedImage(null); setForm(prev => ({...prev, image_url: ""})) }}>
+                      <Text style={{ color: colors.coral, fontSize: 12, fontWeight: 'bold' }}>Remove Image</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+
+                <View style={{ marginBottom: 12 }}><SecondaryButton onPress={pickImage}>[ Choose Image ]</SecondaryButton></View>
+
+                <Text style={[styles.fieldLabel, { textAlign: 'center', marginBottom: 12, color: colors.muted }]}>OR</Text>
+
+                <TextInput
+                  placeholder="Image URL https://..."
+                  placeholderTextColor="#9A98AA"
+                  style={styles.fieldInput}
+                  onChangeText={(value) => {
+                    setForm({ ...form, image_url: value });
+                    if (value) setPickedImage(null);
+                  }}
+                  value={form.image_url}
                 />
-              ) : (
-                <>
-                  <ModalField
-                    label="Category"
-                    onChangeText={(value) => setForm({ ...form, category: value })}
-                    value={form.category}
-                  />
-                  <ModalField
-                    label="Address"
-                    onChangeText={(value) => setForm({ ...form, address: value })}
-                    value={form.address}
-                  />
-                  <ModalField
-                    keyboardType="phone-pad"
-                    label="Phone"
-                    onChangeText={(value) => setForm({ ...form, phone: value })}
-                    value={form.phone}
-                  />
-                </>
-              )}
-              {isProductMode ? (
-                <>
-                  <ModalField
-                    keyboardType="decimal-pad"
-                    label="Price (LKR)"
-                    onChangeText={(value) => setForm({ ...form, price: value })}
-                    value={form.price}
-                  />
-                  <ModalField
-                    keyboardType="number-pad"
-                    label="Stock quantity"
-                    onChangeText={(value) =>
-                      setForm({ ...form, stock_quantity: value })
-                    }
-                    value={form.stock_quantity}
-                  />
-                </>
-              ) : null}
+              </View>
+
               <PrimaryButton
                 loading={saving}
-                onPress={isProductMode ? saveProduct : saveShop}
+                onPress={saveProduct}
               >
-                {mode?.endsWith("edit") ? "Save changes" : "Create"}
+                {mode === "product-edit" ? "Save Changes" : "Add Product"}
               </PrimaryButton>
               <SecondaryButton onPress={closeModal}>Cancel</SecondaryButton>
             </ScrollView>
@@ -580,123 +667,277 @@ function ModalField({
   );
 }
 
+function ProductCardImage({ product }: { product: Product }) {
+  const [error, setError] = useState(false);
+
+  if (!product.image_url || error) {
+    return (
+      <View style={styles.productImageFallback}>
+        <Text style={styles.productImageFallbackText}>
+          {product.name.charAt(0).toUpperCase()}
+        </Text>
+      </View>
+    );
+  }
+
+  return (
+    <Image
+      source={{ uri: product.image_url }}
+      style={styles.productImage}
+      contentFit="cover"
+      transition={150}
+      onError={() => setError(true)}
+    />
+  );
+}
+
 const styles = StyleSheet.create({
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: "800",
-    marginBottom: 11,
+  inlineErrorBanner: {
+    backgroundColor: "#FFF0ED",
+    borderRadius: 8,
+    padding: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 16,
+    gap: 8,
   },
-  muted: { color: colors.muted, fontSize: 12 },
+  errorIcon: {
+    backgroundColor: colors.coral,
+    color: colors.white,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    textAlign: "center",
+    lineHeight: 20,
+    fontSize: 12,
+    fontWeight: "bold",
+  },
+  inlineErrorText: {
+    color: "#A33D2F",
+    fontSize: 12,
+    flex: 1,
+  },
+  retryText: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "bold",
+  },
   notice: {
     color: "#07856A",
     fontSize: 11,
     fontWeight: "800",
     marginBottom: 12,
   },
-  shopRow: { gap: 8, paddingBottom: 14, paddingRight: 22 },
-  shopChip: {
-    backgroundColor: "#E9EAF9",
-    borderRadius: 15,
-    paddingHorizontal: 13,
-    paddingVertical: 8,
+  loadingContainer: {
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 24,
+    gap: 8,
+    flexDirection: "row",
   },
-  shopChipActive: { backgroundColor: colors.ink },
-  shopChipText: { color: colors.ink, fontSize: 10, fontWeight: "700" },
-  shopChipTextActive: { color: colors.white },
-  shopCard: {
+  muted: { color: colors.muted, fontSize: 12 },
+  shopSummaryCard: {
     backgroundColor: colors.white,
     borderColor: colors.line,
-    borderRadius: 13,
+    borderRadius: 14,
     borderWidth: 1,
-    marginBottom: 18,
-    padding: 13,
-  },
-  shopCardHeader: { flexDirection: "row" },
-  shopCardCopy: { flex: 1 },
-  shopName: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-  shopMeta: { color: "#07856A", fontSize: 9, marginTop: 4 },
-  shopAddress: { color: colors.muted, fontSize: 10, marginTop: 4 },
-  shopActions: { flexDirection: "row", gap: 8, marginTop: 12 },
-  smallButton: {
-    alignItems: "center",
-    backgroundColor: "#F0F1FC",
-    borderRadius: 9,
-    justifyContent: "center",
-    minHeight: 36,
-    paddingHorizontal: 14,
-  },
-  smallButtonText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
-  dangerButton: { backgroundColor: "#FFF0ED" },
-  dangerText: { color: colors.coral },
-  listingHeader: {
-    alignItems: "center",
+    marginBottom: 16,
+    padding: 16,
     flexDirection: "row",
     justifyContent: "space-between",
+    alignItems: "flex-start",
   },
-  addLink: { color: "#07856A", fontSize: 10, fontWeight: "800" },
-  listingCard: {
+  shopSummaryInfo: { flex: 1 },
+  shopSummaryName: { color: colors.ink, fontSize: 15, fontWeight: "800", marginBottom: 2 },
+  shopSummaryAddress: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+  shopSummaryMeta: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  shopSummaryStatus: {},
+  listingHeader: {
+    marginBottom: 16,
+  },
+  searchContainer: {
+    marginBottom: 12,
+  },
+  searchInput: {
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    fontSize: 13,
+    color: colors.ink,
+  },
+  filterScroll: {
+    flexGrow: 0,
+    marginBottom: 14,
+  },
+  filterRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 8,
+  },
+  filterChip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    minHeight: 36,
+    paddingHorizontal: 13,
+    paddingVertical: 8,
+    borderRadius: 10,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#F0F1F8",
+    borderWidth: 1,
+    borderColor: "transparent",
+  },
+  filterChipActive: {
+    backgroundColor: "#D8FAED",
+    borderColor: "#45D2A6",
+  },
+  filterChipText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  filterChipTextActive: {
+    color: "#087A60",
+    fontWeight: "800",
+  },
+
+  productCard: {
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 14,
+  },
+  productTopRow: {
+    flexDirection: "row",
+    marginBottom: 12,
+  },
+  productImage: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: "#F1F1F7",
+  },
+  productImageFallback: {
+    alignItems: "center",
+    backgroundColor: "#F0F1FC",
+    borderRadius: 10,
+    height: 48,
+    justifyContent: "center",
+    width: 48,
+  },
+  productImageFallbackText: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  productDetails: { flex: 1, marginLeft: 12 },
+  productName: { color: colors.ink, fontSize: 14, fontWeight: "800" },
+  productUnit: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  productPrice: { color: colors.ink, fontSize: 15, fontWeight: "900", marginTop: 4 },
+  productBadges: { alignItems: "flex-end", marginLeft: 8 },
+
+  badgeActive: { backgroundColor: colors.mintSoft, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgeActiveText: { color: "#0E8067", fontSize: 9, fontWeight: "800" },
+  badgePaused: { backgroundColor: "#F0F1FC", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgePausedText: { color: colors.muted, fontSize: 9, fontWeight: "800" },
+
+  productBottomRow: {
+    marginTop: 10,
+    gap: 10,
+  },
+  stockRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  stockLabel: { color: colors.ink, fontSize: 13, fontWeight: "700" },
+  badgeInStock: { backgroundColor: colors.mintSoft, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgeInStockText: { color: "#0E8067", fontSize: 9, fontWeight: "800" },
+  badgeOutOfStock: { backgroundColor: "#FFF0ED", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgeOutOfStockText: { color: colors.coral, fontSize: 9, fontWeight: "800" },
+
+  productActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  actionButtonEdit: {
     alignItems: "center",
     backgroundColor: colors.white,
     borderColor: colors.line,
-    borderRadius: 13,
     borderWidth: 1,
-    flexDirection: "row",
-    marginBottom: 10,
-    padding: 11,
+    borderRadius: 8,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  listingThumb: {
+  actionButtonEditText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  actionButtonPause: {
+    alignItems: "center",
+    backgroundColor: "#FFF0ED",
+    borderRadius: 8,
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+  },
+  actionButtonPauseText: { color: colors.coral, fontSize: 11, fontWeight: "700" },
+  actionButtonResume: {
     alignItems: "center",
     backgroundColor: colors.mintSoft,
-    borderRadius: 11,
-    height: 40,
-    justifyContent: "center",
-    width: 40,
-  },
-  listingThumbText: { color: colors.ink, fontSize: 15, fontWeight: "900" },
-  listingCopy: { flex: 1, marginLeft: 10 },
-  listingName: { color: colors.ink, fontSize: 12, fontWeight: "800" },
-  listingMeta: { color: colors.muted, fontSize: 9, marginTop: 3 },
-  listingPrice: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "900",
-    marginTop: 5,
-  },
-  listingActions: { gap: 6 },
-  iconButton: {
-    alignItems: "center",
-    backgroundColor: "#F0F1FC",
     borderRadius: 8,
-    height: 30,
     justifyContent: "center",
-    width: 30,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
-  iconButtonText: { color: colors.ink, fontSize: 14 },
+  actionButtonResumeText: { color: "#0E8067", fontSize: 11, fontWeight: "700" },
+  deleteButton: {
+    minHeight: 34,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: "#FFD2CC",
+    backgroundColor: "#FFF3F1",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  actionBtnPressed: {
+    opacity: 0.7,
+  },
+  disabled: {
+    opacity: 0.5,
+  },
+  deleteButtonText: {
+    color: colors.coral,
+    fontSize: 11,
+    fontWeight: "800",
+  },
+
   empty: {
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderWidth: 1,
     borderRadius: 16,
-    marginTop: 18,
-    padding: 28,
+    marginTop: 8,
+    padding: 32,
   },
-  emptySmall: {
-    backgroundColor: "#F0F1FC",
-    borderRadius: 12,
-    marginBottom: 14,
-    padding: 16,
-  },
-  emptyIcon: { fontSize: 30 },
+  emptyIcon: { fontSize: 32 },
   emptyTitle: {
     color: colors.ink,
     fontSize: 16,
     fontWeight: "800",
-    marginTop: 10,
+    marginTop: 12,
   },
   emptyText: {
     color: colors.muted,
-    fontSize: 11,
-    lineHeight: 17,
+    fontSize: 12,
+    lineHeight: 18,
     marginTop: 6,
     textAlign: "center",
   },
@@ -707,33 +948,35 @@ const styles = StyleSheet.create({
   },
   modalSheet: {
     backgroundColor: colors.paper,
-    borderTopLeftRadius: 22,
-    borderTopRightRadius: 22,
-    maxHeight: "88%",
-    padding: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    maxHeight: "90%",
+    padding: 24,
   },
   modalHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
-    marginBottom: 16,
+    marginBottom: 20,
   },
-  modalTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
-  modalClose: { color: colors.muted, fontSize: 26, lineHeight: 28 },
-  field: { marginBottom: 13 },
+  modalTitle: { color: colors.ink, fontSize: 18, fontWeight: "800" },
+  modalClose: { color: colors.muted, fontSize: 28, lineHeight: 28 },
+  field: { marginBottom: 16 },
   fieldLabel: {
     color: colors.ink,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
-    marginBottom: 6,
+    marginBottom: 8,
   },
   fieldInput: {
-    backgroundColor: "#F0F1FC",
-    borderRadius: 11,
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderWidth: 1,
+    borderRadius: 12,
     color: colors.ink,
-    fontSize: 13,
-    minHeight: 46,
-    paddingHorizontal: 13,
-    paddingVertical: 11,
+    fontSize: 14,
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
   },
 });
