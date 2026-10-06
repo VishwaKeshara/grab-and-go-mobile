@@ -130,7 +130,7 @@ export async function getProduct(id: string): Promise<ProductWithShop> {
 
   if (error) throw error;
   const row: any = data;
-  
+
   return {
     id: row.id,
     shop_id: row.shop_id,
@@ -381,9 +381,9 @@ export async function createShopProduct(shopId: string, input: Partial<Inventory
     p_image_url: input.imageUrl || null,
     p_initial_quantity: initialStock
   });
-  
+
   if (error) throw error;
-  
+
   // Return a partial object matching what the UI expects
   return { id: productId, shop_id: shopId, name: input.name };
 }
@@ -396,7 +396,7 @@ export async function updateShopProduct(productId: string, changes: Partial<Inve
   if (changes.regularPriceLkr !== undefined) payload.regular_price_lkr = changes.regularPriceLkr;
   if (changes.imageUrl !== undefined) payload.image_url = changes.imageUrl;
   if (changes.active !== undefined) payload.active = changes.active;
-  
+
   const { data, error } = await supabase
     .from("customer_products")
     .update(payload)
@@ -427,11 +427,11 @@ export async function searchCanonicalProducts(filters: ProductFilters = {}) {
     .eq("customer_shops.active", true)
     .eq("shop_inventory.is_available", true)
     .gt("shop_inventory.quantity", 0);
-  
+
   if (filters.query?.trim()) {
     q = q.ilike("name", `%${filters.query.trim()}%`);
   }
-  
+
   if (filters.shopId) {
     q = q.eq("shop_id", filters.shopId);
   }
@@ -450,7 +450,7 @@ export async function searchCanonicalProducts(filters: ProductFilters = {}) {
 
   const { data, error } = await q;
   if (error) throw error;
-  
+
   return data.map((row: any) => ({
     id: row.id,
     shop_id: row.shop_id,
@@ -466,7 +466,7 @@ export async function searchCanonicalProducts(filters: ProductFilters = {}) {
 }
 
 export async function deleteCanonicalProduct(id: string) {
-  const { error } = await supabase.from("customer_products").delete().eq("id", id);
+  const { error } = await supabase.rpc("archive_shop_product", { p_product_id: id });
   if (error) throw error;
 }
 
@@ -479,7 +479,7 @@ export async function listCanonicalProductsByShop(shopId: string) {
     `)
     .eq("shop_id", shopId)
     .order("name", { ascending: true });
-    
+
   if (error) throw error;
 
   return data.map((row: any) => ({
@@ -496,4 +496,4 @@ export async function listCanonicalProductsByShop(shopId: string) {
     category: "Grocery", // stub for UI compatibility
   })) as Product[];
 }
-
+

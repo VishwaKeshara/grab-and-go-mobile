@@ -163,7 +163,7 @@ export async function loadCatalog(): Promise<{
   const { data, error } = await supabase
     .from("customer_products")
     .select(
-      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for",
+      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,substitute_for,shop_inventory!inner(quantity,is_available)",
     )
     .eq("shop_id", shop.id)
     .eq("active", true)
@@ -173,7 +173,11 @@ export async function loadCatalog(): Promise<{
     throw error;
   }
 
-  const rows = ((data ?? []) as CustomerProductRow[]).filter(
+  const rows = (data ?? []).map((row: any) => ({
+    ...row,
+    available: row.shop_inventory?.[0]?.is_available ?? false,
+    stock_quantity: row.shop_inventory?.[0]?.quantity ?? 0,
+  })).filter(
     (row) => row.available && row.stock_quantity > 0,
   );
 
@@ -253,7 +257,7 @@ export async function loadCart(): Promise<CartItem[]> {
   } = await supabase
     .from("customer_products")
     .select(
-      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for",
+      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,substitute_for,shop_inventory(quantity,is_available)",
     )
     .in(
       "id",
@@ -265,8 +269,12 @@ export async function loadCart(): Promise<CartItem[]> {
   }
 
   const byId = new Map(
-    ((productData ?? []) as CustomerProductRow[]).map(
-      (row) => [row.id, mapProduct(row)],
+    (productData ?? []).map(
+      (row: any) => [row.id, mapProduct({
+        ...row,
+        available: row.shop_inventory?.[0]?.is_available ?? false,
+        stock_quantity: row.shop_inventory?.[0]?.quantity ?? 0,
+      } as CustomerProductRow)],
     ),
   );
 

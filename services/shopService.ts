@@ -465,6 +465,26 @@ export async function updateStock(
   if (error) throw error;
 }
 
+/**
+ * Updates the low stock threshold for a product in a shop.
+ */
+export async function updateLowStockThreshold(
+  shopId: string,
+  productId: string,
+  threshold: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("shop_inventory")
+    .update({
+      low_stock_threshold: threshold,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId)
+    .eq("product_id", productId);
+
+  if (error) throw error;
+}
+
 // ─────────────────────────────────────────────────────────────
 // QR / PIN Pickup Verification
 // ─────────────────────────────────────────────────────────────
