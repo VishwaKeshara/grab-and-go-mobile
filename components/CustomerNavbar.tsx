@@ -12,6 +12,7 @@ const items = [
 ] as const;
 
 const hiddenPaths = [
+  "/add-more-items",
   "/cart",
   "/checkout",
   "/order-confirmation",

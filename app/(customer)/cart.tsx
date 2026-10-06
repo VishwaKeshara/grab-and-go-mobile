@@ -10,13 +10,16 @@ import {
   money,
   preferenceText,
 } from "@/components/OrderUI";
+import { OrderActionDialog } from "@/components/OrderActionDialog";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
 import { FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { Alert, Pressable, StyleSheet, Text, View } from "react-native";
+import { useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 export default function Cart() {
+  const [clearConfirmationOpen, setClearConfirmationOpen] = useState(false);
   const {
     cart,
     totals,
@@ -30,16 +33,13 @@ export default function Cart() {
     addItem,
     clearCart,
   } = useCart();
-  const confirmClear = () =>
-    Alert.alert(
-      "Clear your cart?",
-      "All items will be removed from this cart.",
-      [
-        { text: "Keep items", style: "cancel" },
-        { text: "Clear cart", style: "destructive", onPress: clearCart },
-      ],
-    );
+  const confirmClear = () => setClearConfirmationOpen(true);
+  const clearConfirmed = () => {
+    setClearConfirmationOpen(false);
+    clearCart();
+  };
   return (
+    <>
     <OrderPage
       title="Your cart"
       eyebrow={`${totals.units} ITEMS READY TO GO`}
@@ -166,6 +166,15 @@ export default function Cart() {
         </>
       ) : null}
     </OrderPage>
+    <OrderActionDialog
+      dialog={clearConfirmationOpen ? { tone: "confirm", title: "Clear your cart?", message: "All items will be removed from this cart." } : null}
+      onClose={() => setClearConfirmationOpen(false)}
+      primaryLabel="Clear cart"
+      onPrimary={clearConfirmed}
+      secondaryLabel="Keep items"
+      destructive
+    />
+    </>
   );
 }
 

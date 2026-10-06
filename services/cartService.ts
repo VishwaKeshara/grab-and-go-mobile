@@ -13,6 +13,23 @@ export const homeFeaturedProducts: readonly Pick<GroceryProduct, "name" | "unit"
 ];
 
 const DRAFT_KEY = "grab-go-checkout-draft-v1";
+
+function throwOrderingRequestError(stage: string, cause: unknown): never {
+  if (__DEV__) {
+    const error = cause as {
+      code?: unknown; message?: unknown; details?: unknown; hint?: unknown;
+    } | null;
+    console.warn("[Ordering load] Supabase request failed", {
+      stage,
+      code: error?.code,
+      message: error?.message,
+      details: error?.details,
+      hint: error?.hint,
+    });
+  }
+  throw cause;
+}
+
 export async function scopedKey(key: string) {
   const { data } = await supabase.auth.getSession();
   return `${key}:${data.session?.user.id ?? "guest"}`;
@@ -37,24 +54,24 @@ export async function loadCatalog(): Promise<{
 }> {
   const { data: existingCart, error: existingCartError } = await supabase
     .from("customer_carts").select("shop_id").limit(1).maybeSingle();
-  if (existingCartError) throw existingCartError;
+  if (existingCartError) throwOrderingRequestError("catalog.cart", existingCartError);
   const shopQuery = () => supabase.from("customer_shops")
     .select("id,name,address,phone,pickup_counter,preparation_minutes,timezone,active")
     .eq("active", true);
   let { data: shopData, error: shopError } = existingCart?.shop_id
     ? await shopQuery().eq("id", existingCart.shop_id).maybeSingle()
     : await shopQuery().eq("name", HOME_SHOP_NAME).limit(1).maybeSingle();
-  if (shopError) throw shopError;
+  if (shopError) throwOrderingRequestError("catalog.shop", shopError);
   if (!shopData && !existingCart?.shop_id) {
     ({ data: shopData, error: shopError } = await shopQuery().order("name").limit(1).maybeSingle());
-    if (shopError) throw shopError;
+    if (shopError) throwOrderingRequestError("catalog.shop-fallback", shopError);
   }
   if (!shopData) throw new Error("No ordering shop is available.");
   const shop = mapShop(shopData as CustomerShopRow);
   const { data, error } = await supabase.from("customer_products")
     .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for")
     .eq("shop_id", shop.id).eq("active", true).order("name");
-  if (error) throw error;
+  if (error) throwOrderingRequestError("catalog.products", error);
   const rows = ((data ?? []) as CustomerProductRow[])
     .filter(row => row.available && row.stock_quantity > 0);
   const catalog = rows.filter(row => !row.substitute_for).map(mapProduct);
@@ -66,24 +83,24 @@ export async function loadCatalog(): Promise<{
 }
 export async function loadCart(): Promise<CartItem[]> {
   const { data: userData, error: userError } = await supabase.auth.getUser();
-  if (userError) throw userError;
+  if (userError) throwOrderingRequestError("cart.auth", userError);
   if (!userData.user) throw new Error("Sign in to load your cart.");
   const { data: cartData, error: cartError } = await supabase.from("customer_carts")
     .select("id,customer_id,shop_id").eq("customer_id", userData.user.id).maybeSingle();
-  if (cartError) throw cartError;
+  if (cartError) throwOrderingRequestError("cart.record", cartError);
   const cart = cartData as CustomerCartRow | null;
   if (!cart) return [];
   const { data, error } = await supabase.from("customer_cart_items")
     .select("product_id,quantity,substitution").eq("cart_id", cart.id)
     .order("updated_at");
-  if (error) throw error;
+  if (error) throwOrderingRequestError("cart.items", error);
   const rows = (data ?? []) as CustomerCartItemRow[];
   if (!rows.length) return [];
   const { data: productData, error: productError } = await supabase
     .from("customer_products")
     .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for")
     .in("id", rows.map(row => row.product_id));
-  if (productError) throw productError;
+  if (productError) throwOrderingRequestError("cart.products", productError);
   const byId = new Map(((productData ?? []) as CustomerProductRow[])
     .map(row => [row.id, mapProduct(row)]));
   return rows.map(row => {
@@ -126,4 +143,13 @@ export async function loadDraft(): Promise<CheckoutDraft> {
   const stored = value ? JSON.parse(value) as Partial<CheckoutDraft> : null;
   return stored ? { ...initialDraft, ...stored, checkoutId: stored.checkoutId || newCheckoutId() } : { ...initialDraft, checkoutId: newCheckoutId() };
 }
-export const saveDraft = async (draft: CheckoutDraft) => AsyncStorage.setItem(await scopedKey(DRAFT_KEY), JSON.stringify(draft));
+let draftWriteQueue: Promise<void> = Promise.resolve();
+export function saveDraft(draft: CheckoutDraft): Promise<void> {
+  const key = scopedKey(DRAFT_KEY);
+  const value = JSON.stringify(draft);
+  const write = draftWriteQueue.then(async () => {
+    await AsyncStorage.setItem(await key, value);
+  });
+  draftWriteQueue = write.catch(() => undefined);
+  return write;
+}
