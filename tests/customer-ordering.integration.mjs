@@ -22,6 +22,7 @@ const customerB = client(publicKey);
 const anonymous = client(publicKey);
 const admin = client(process.env.TEST_SUPABASE_SERVICE_ROLE_KEY);
 let orderId;
+let secondOrderId;
 let pastSlotId;
 let unavailableSlotId;
 
@@ -64,9 +65,13 @@ try {
   assert.ok(shops?.length, "Load the development catalog seed first");
   const shopId = shops[0].id;
   const { data: products, error: productError } = await customerA
-    .from("customer_products").select("id,price_lkr")
-    .eq("shop_id", shopId).eq("active", true).eq("available", true)
-    .is("substitute_for", null).gt("stock_quantity", 2).limit(1);
+    .from("customer_products")
+    .select("id,price_lkr,shop_inventory!inner(quantity,is_available)")
+    .eq("shop_id", shopId).eq("active", true)
+    .eq("shop_inventory.shop_id", shopId)
+    .eq("shop_inventory.is_available", true)
+    .is("substitute_for", null).gt("shop_inventory.quantity", 3)
+    .lt("shop_inventory.quantity", 101).limit(1);
   if (productError) throw productError;
   assert.ok(products?.length, "Load an in-stock development product");
   const product = products[0];
@@ -199,6 +204,95 @@ try {
   if (remainingError) throw remainingError;
   assert.equal(remaining.length, 0, "Purchased cart rows clear only after order creation");
 
+  const { data: stockBefore, error: stockBeforeError } = await admin
+    .from("shop_inventory").select("quantity")
+    .eq("shop_id", shopId).eq("product_id", product.id).single();
+  if (stockBeforeError) throw stockBeforeError;
+  const addRequestId = "addition-" + randomUUID();
+  const additionArgs = {
+    p_order_id: orderId, p_request_id: addRequestId,
+    p_items: [{ productId: product.id, quantity: 1 }],
+    p_expected_additional_subtotal: product.price_lkr,
+    p_expected_order_total: product.price_lkr * 2,
+  };
+  const unauthorizedAdd = await customerB.rpc("add_items_to_customer_order", additionArgs);
+  assert.ok(unauthorizedAdd.error, "Another customer must not add to this order");
+  assert.match(unauthorizedAdd.error.message, /order not found/i);
+  const tooMany = await customerA.rpc("add_items_to_customer_order", {
+    ...additionArgs, p_request_id: "stock-" + randomUUID(),
+    p_items: [{ productId: product.id, quantity: 99 }],
+    p_expected_additional_subtotal: product.price_lkr * 99,
+  });
+  assert.ok(tooMany.error, "Insufficient stock must reject the entire addition");
+  assert.match(tooMany.error.message, /selected product is unavailable/i);
+
+  const added = await customerA.rpc("add_items_to_customer_order", additionArgs);
+  if (added.error) throw added.error;
+  assert.equal(added.data.additionalSubtotal, product.price_lkr);
+  assert.equal(added.data.newTotal, product.price_lkr * 3);
+  const addRetry = await customerA.rpc("add_items_to_customer_order", additionArgs);
+  if (addRetry.error) throw addRetry.error;
+  assert.deepEqual(addRetry.data, added.data, "A retry must return the original addition");
+  const { data: ownReceipt, error: ownReceiptError } = await customerA
+    .from("customer_order_additions").select("request_id")
+    .eq("order_id", orderId).eq("request_id", addRequestId);
+  if (ownReceiptError) throw ownReceiptError;
+  assert.equal(ownReceipt.length, 1, "One idempotency receipt must be saved");
+  const { data: hiddenReceipt, error: hiddenReceiptError } = await customerB
+    .from("customer_order_additions").select("request_id").eq("order_id", orderId);
+  if (hiddenReceiptError) throw hiddenReceiptError;
+  assert.equal(hiddenReceipt.length, 0, "Another customer must not see the receipt");
+  const deniedReceiptWrite = await customerA.from("customer_order_additions").insert({
+    order_id: orderId, request_id: "forged-" + randomUUID(), items: [],
+    additional_subtotal_lkr: 1, additional_savings_lkr: 0, new_total_lkr: 1,
+  });
+  assert.ok(deniedReceiptWrite.error, "Customers must not write receipts directly");
+  const { data: itemsAfterAdd, error: itemsAfterAddError } = await customerA
+    .from("customer_order_items").select("id,quantity,unit_price_lkr,substitution")
+    .eq("order_id", orderId);
+  if (itemsAfterAddError) throw itemsAfterAddError;
+  assert.equal(itemsAfterAdd.length, 2, "A retry must not create another item row");
+  assert.ok(itemsAfterAdd.some(item => item.quantity === 2
+    && item.unit_price_lkr === product.price_lkr && item.substitution.type === "none"),
+  "The original item price and substitution must stay unchanged");
+  assert.ok(itemsAfterAdd.some(item => item.quantity === 1
+    && item.unit_price_lkr === product.price_lkr), "The addition needs its own price snapshot");
+  const { data: totalAfterAdd, error: totalAfterAddError } = await customerA
+    .from("customer_orders").select("subtotal_lkr,total_lkr")
+    .eq("id", orderId).single();
+  if (totalAfterAddError) throw totalAfterAddError;
+  assert.equal(totalAfterAdd.subtotal_lkr, product.price_lkr * 3);
+  assert.equal(totalAfterAdd.total_lkr, product.price_lkr * 3);
+  const staleTotal = await customerA.rpc("add_items_to_customer_order", {
+    ...additionArgs, p_request_id: "stale-total-" + randomUUID(),
+  });
+  assert.ok(staleTotal.error, "A changed order total must require a fresh review");
+  assert.match(staleTotal.error.message, /order total changed/i);
+  const { data: paymentAfterAdd, error: paymentAfterAddError } = await customerA
+    .from("customer_payments").select("amount_lkr").eq("order_id", orderId).single();
+  if (paymentAfterAddError) throw paymentAfterAddError;
+  assert.equal(paymentAfterAdd.amount_lkr, totalAfterAdd.total_lkr);
+  const { data: stockAfter, error: stockAfterError } = await admin
+    .from("shop_inventory").select("quantity")
+    .eq("shop_id", shopId).eq("product_id", product.id).single();
+  if (stockAfterError) throw stockAfterError;
+  assert.equal(stockAfter.quantity, stockBefore.quantity - 1,
+    "Only one additional unit may be reserved");
+
+  await changeCart(customerA, "add", product.id, 1);
+  const nextCheckoutId = "next-checkout-" + randomUUID();
+  const second = await customerA.rpc("place_customer_order", {
+    ...request, p_checkout_id: nextCheckoutId,
+    p_expected_subtotal: product.price_lkr,
+  });
+  if (second.error) throw second.error;
+  secondOrderId = second.data;
+  assert.notEqual(secondOrderId, orderId, "A fresh checkout ID must create a new order");
+  const { data: bothOrders, error: bothOrdersError } = await customerA
+    .from("customer_orders").select("id").in("id", [orderId, secondOrderId]);
+  if (bothOrdersError) throw bothOrdersError;
+  assert.equal(bothOrders.length, 2, "The previous order must remain in My Orders");
+
   for (const table of [
     "customer_orders", "customer_order_items",
     "customer_payments", "customer_order_status_history",
@@ -218,9 +312,23 @@ try {
     .update({ status: "ready" }).eq("id", orderId);
   assert.ok(deniedUpdate.error, "Direct order writes must be denied");
 
+  const newClient = client(publicKey);
+  await signIn(newClient, process.env.TEST_CUSTOMER_A_EMAIL, process.env.TEST_CUSTOMER_A_PASSWORD);
+  const { data: reloadedItems, error: reloadedItemsError } = await newClient
+    .from("customer_order_items").select("id").eq("order_id", orderId);
+  if (reloadedItemsError) throw reloadedItemsError;
+  assert.equal(reloadedItems.length, 2, "Additional items must persist in a fresh session");
+
   if (process.env.TEST_SHOP_EMAIL && process.env.TEST_SHOP_PASSWORD) {
     const staff = client(publicKey);
     await signIn(staff, process.env.TEST_SHOP_EMAIL, process.env.TEST_SHOP_PASSWORD);
+    const { data: shopView, error: shopViewError } = await staff
+      .from("customer_orders")
+      .select("id,customer_order_items(id,product_id,quantity)")
+      .eq("id", orderId).single();
+    if (shopViewError) throw shopViewError;
+    assert.equal(shopView.customer_order_items.length, 2,
+      "Assigned shop staff must see the added item row");
     const accepted = await staff.rpc("set_customer_order_status", {
       p_order_id: orderId, p_status: "accepted",
     });
@@ -233,12 +341,41 @@ try {
       .from("customer_order_status_history").select("status").eq("order_id", orderId);
     if (updatesError) throw updatesError;
     assert.ok(updates.some(value => value.status === "accepted"));
+  } else {
+    const changed = await admin.from("customer_orders").update({ status: "accepted" })
+      .eq("id", orderId);
+    if (changed.error) throw changed.error;
   }
+  const lateAddition = await customerA.rpc("add_items_to_customer_order", {
+    ...additionArgs, p_request_id: "late-" + randomUUID(),
+  });
+  assert.ok(lateAddition.error, "A status change during editing must reject new additions");
+  assert.match(lateAddition.error.message, /can no longer accept items/i);
+  const retryAfterStatus = await customerA.rpc("add_items_to_customer_order", additionArgs);
+  if (retryAfterStatus.error) throw retryAfterStatus.error;
+  assert.deepEqual(retryAfterStatus.data, added.data,
+    "A committed retry remains idempotent after a status change");
+  const cancelFirst = await customerA.rpc("cancel_customer_order", { p_order_id: orderId });
+  if (cancelFirst.error) throw cancelFirst.error;
+  const cancelSecond = await customerA.rpc("cancel_customer_order", { p_order_id: secondOrderId });
+  if (cancelSecond.error) throw cancelSecond.error;
+  orderId = undefined;
+  secondOrderId = undefined;
+  const { data: restoredStock, error: restoredStockError } = await admin
+    .from("shop_inventory").select("quantity")
+    .eq("shop_id", shopId).eq("product_id", product.id).single();
+  if (restoredStockError) throw restoredStockError;
+  assert.equal(restoredStock.quantity, stockBefore.quantity + 2,
+    "Cancellation must restore every original and added item unit");
   console.log("Customer ordering database integration checks passed.");
 } finally {
   if (orderId) {
     const cancelled = await customerA.rpc("cancel_customer_order", { p_order_id: orderId });
     if (cancelled.error) console.warn("Test order remains in the development project.");
+  }
+  if (secondOrderId) {
+    const cancelled = await customerA.rpc("cancel_customer_order", { p_order_id: secondOrderId });
+    if (cancelled.error) console.warn("Second test order remains in the development project.");
   }
   await Promise.allSettled([
     changeCart(customerA, "clear"), changeCart(customerB, "clear"),
