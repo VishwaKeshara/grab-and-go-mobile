@@ -3,10 +3,10 @@ import type { PropsWithChildren } from "react";
 import { Alert } from "react-native";
 import { getProfile } from "@/services/authService";
 import { cartTotals, changeCart, initialDraft, loadCart, loadCatalog, loadDraft, newCheckoutId, saveDraft } from "@/services/cartService";
-import { createOrder, loadOrders, setOrderStatus } from "@/services/orderService";
+import { addItemsToOrder, createOrder, loadOrders, setOrderStatus } from "@/services/orderService";
 import { processDemoPayment } from "@/services/paymentService";
 import type { CartItem, CheckoutDraft, GroceryProduct, GroceryShop, SubstitutePreference } from "@/types/cart";
-import type { Order, OrderStatus } from "@/types/order";
+import type { Order, OrderAdditionItem, OrderStatus } from "@/types/order";
 import { addProductToCart } from "@/utils/ordering";
 
 type Store = {
@@ -32,6 +32,7 @@ type Store = {
   updateDraft: (value: Partial<CheckoutDraft>) => void;
   submitOrder: () => Promise<Order>;
   changeStatus: (id: string, status: OrderStatus) => Promise<void>;
+  addMoreItems: (id: string, requestId: string, items: OrderAdditionItem[], subtotal: number, currentTotal: number) => Promise<void>;
   reorder: (order: Order) => void;
   reload: () => Promise<void>;
   reloadOrders: () => Promise<void>;
@@ -40,11 +41,44 @@ type Store = {
 const Context = createContext<Store | null>(null);
 
 function cartErrorMessage(cause: unknown, fallback: string) {
-  const code = (cause as { code?: string } | null)?.code;
+  const error = cause as { code?: string } | null;
+  const code = error?.code;
   if (code === "PGRST205" || code === "PGRST202" || code === "42P01" || code === "42883") {
     return "Ordering is unavailable right now. Please try again later.";
   }
   return cause instanceof Error ? cause.message : fallback;
+}
+
+class InitialOrderingLoadError extends Error {
+  constructor(
+    readonly stage: "cart" | "catalog",
+    readonly original: unknown,
+  ) {
+    super(stage === "cart" ? "Could not load your cart." : "Could not load ordering products.");
+  }
+}
+
+function logInitialLoadError(stage: "cart" | "catalog" | "unknown", cause: unknown): void {
+  if (!__DEV__) return;
+  const error = cause as {
+    code?: unknown; message?: unknown; details?: unknown; hint?: unknown;
+  } | null;
+  console.warn("[Ordering load] Initial request failed", {
+    stage,
+    code: error?.code,
+    message: error?.message,
+    details: error?.details,
+    hint: error?.hint,
+  });
+}
+
+async function loadInitialStage<T>(stage: "cart" | "catalog", request: () => Promise<T>): Promise<T> {
+  try {
+    return await request();
+  } catch (cause) {
+    logInitialLoadError(stage, cause);
+    throw new InitialOrderingLoadError(stage, cause);
+  }
 }
 
 async function loadWithTimeout<T>(request: Promise<T>): Promise<T> {
@@ -99,8 +133,11 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     try {
       const { savedCart, catalog } = await loadWithTimeout((async () => {
         await cartQueue.current;
-        const savedCart = await loadCart();
-        const catalog = await loadCatalog();
+        const savedCart = await loadInitialStage("cart", loadCart);
+        // Commit a successfully loaded cart before loading the catalog so a
+        // separate catalog failure cannot erase or misreport saved cart data.
+        setCart(savedCart);
+        const catalog = await loadInitialStage("catalog", loadCatalog);
         return { savedCart, catalog };
       })());
       setShop(catalog.shop);
@@ -121,8 +158,10 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       }).catch(() => setError("Could not load checkout details."));
       void reloadOrders();
     } catch (cause) {
-      if (__DEV__) console.warn("[Cart] initial load failed", cause);
-      setError(cartErrorMessage(cause, "Could not load your cart."));
+      const failure = cause instanceof InitialOrderingLoadError ? cause : null;
+      const original = failure?.original ?? cause;
+      if (!failure) logInitialLoadError("unknown", original);
+      setError(cartErrorMessage(original, failure?.message ?? "Could not load your cart."));
     } finally { setLoading(false); }
   };
   useEffect(() => { void reload(); }, []);
@@ -415,10 +454,18 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       setOrders(savedOrders);
       setCart(remainingCart);
       setCartSheetOpen(false);
-      setDraft(previous => ({
+      // Keep the checkout ID through uncertain failures; rotate it only after
+      // the saved order and remaining cart have both been confirmed.
+      const nextDraft: CheckoutDraft = {
         ...initialDraft, checkoutId: newCheckoutId(),
-        customerName: previous.customerName, phone: previous.phone,
-      }));
+        customerName: draft.customerName, phone: draft.phone,
+      };
+      setDraft(nextDraft);
+      try {
+        await saveDraft(nextDraft);
+      } catch {
+        setError("Your order was placed, but the next checkout details could not be saved on this device.");
+      }
       return order;
     } catch (cause) {
       try { setCart(await loadCart()); } catch { /* Keep the displayed cart if offline. */ }
@@ -432,11 +479,23 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       order.id === id ? { ...order, status: "cancelled" } : order));
     void reloadOrders();
   };
+  const addMoreItems = async (id: string, requestId: string, items: OrderAdditionItem[], subtotal: number, currentTotal: number) => {
+    await addItemsToOrder(id, requestId, items, subtotal, currentTotal);
+    const version = ++orderLoadVersion.current;
+    try {
+      const latest = await loadOrders();
+      if (!latest.some(order => order.id === id)) throw new Error("Order missing after update");
+      if (version === orderLoadVersion.current) setOrders(latest);
+    } catch {
+      throw new Error("Your request may have saved, but the order could not be refreshed. Retry the same selection to check safely.");
+    }
+  };
   const reorder = (order: Order) => {
     if (!ready.current || lock.current) return;
     const version = ++cartVersion.current;
     void enqueue(async () => {
       for (const item of order.items) {
+        if (!item.product.id) continue;
         await changeCart("add", item.product.id, item.quantity);
       }
     }).then(() => { void syncCart(version).catch(() => undefined); })
@@ -449,7 +508,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     cartSheetOpen, openCartSheet: () => setCartSheetOpen(true),
     closeCartSheet: () => setCartSheetOpen(false),
     setQuantity, removeItem, addItem, clearCart, setSubstitution, updateDraft,
-    submitOrder, changeStatus, reorder, reload, reloadOrders,
+    submitOrder, changeStatus, addMoreItems, reorder, reload, reloadOrders,
   } }, children);
 }
 

@@ -53,6 +53,22 @@ export const homeFeaturedProducts: readonly Pick<
 
 const DRAFT_KEY = "grab-go-checkout-draft-v1";
 
+function throwOrderingRequestError(stage: string, cause: unknown): never {
+  if (__DEV__) {
+    const error = cause as {
+      code?: unknown; message?: unknown; details?: unknown; hint?: unknown;
+    } | null;
+    console.warn("[Ordering load] Supabase request failed", {
+      stage,
+      code: error?.code,
+      message: error?.message,
+      details: error?.details,
+      hint: error?.hint,
+    });
+  }
+  throw cause;
+}
+
 export async function scopedKey(key: string) {
   const { data } = await supabase.auth.getSession();
 
@@ -103,55 +119,19 @@ export async function loadCatalog(): Promise<{
   products: GroceryProduct[];
   alternatives: Record<string, GroceryProduct[]>;
 }> {
-  const {
-    data: existingCart,
-    error: existingCartError,
-  } = await supabase
-    .from("customer_carts")
-    .select("shop_id")
-    .limit(1)
-    .maybeSingle();
-
-  if (existingCartError) {
-    throw existingCartError;
-  }
-
-  const shopQuery = () =>
-    supabase
-      .from("customer_shops")
-      .select(
-        "id,name,address,phone,pickup_counter,preparation_minutes,timezone,active",
-      )
-      .eq("active", true);
-
-  let {
-    data: shopData,
-    error: shopError,
-  } = existingCart?.shop_id
-    ? await shopQuery()
-        .eq("id", existingCart.shop_id)
-        .maybeSingle()
-    : await shopQuery()
-        .eq("name", HOME_SHOP_NAME)
-        .limit(1)
-        .maybeSingle();
-
-  if (shopError) {
-    throw shopError;
-  }
-
+  const { data: existingCart, error: existingCartError } = await supabase
+    .from("customer_carts").select("shop_id").limit(1).maybeSingle();
+  if (existingCartError) throwOrderingRequestError("catalog.cart", existingCartError);
+  const shopQuery = () => supabase.from("customer_shops")
+    .select("id,name,address,phone,pickup_counter,preparation_minutes,timezone,active")
+    .eq("active", true);
+  let { data: shopData, error: shopError } = existingCart?.shop_id
+    ? await shopQuery().eq("id", existingCart.shop_id).maybeSingle()
+    : await shopQuery().eq("name", HOME_SHOP_NAME).limit(1).maybeSingle();
+  if (shopError) throwOrderingRequestError("catalog.shop", shopError);
   if (!shopData && !existingCart?.shop_id) {
-    ({
-      data: shopData,
-      error: shopError,
-    } = await shopQuery()
-      .order("name")
-      .limit(1)
-      .maybeSingle());
-
-    if (shopError) {
-      throw shopError;
-    }
+    ({ data: shopData, error: shopError } = await shopQuery().order("name").limit(1).maybeSingle());
+    if (shopError) throwOrderingRequestError("catalog.shop-fallback", shopError);
   }
 
   if (!shopData) {
@@ -159,32 +139,13 @@ export async function loadCatalog(): Promise<{
   }
 
   const shop = mapShop(shopData as CustomerShopRow);
-
-  const { data, error } = await supabase
-    .from("customer_products")
-    .select(
-      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,substitute_for,shop_inventory!inner(quantity,is_available)",
-    )
-    .eq("shop_id", shop.id)
-    .eq("active", true)
-    .order("name");
-
-  if (error) {
-    throw error;
-  }
-
-  const rows = (data ?? []).map((row: any) => ({
-    ...row,
-    available: row.shop_inventory?.[0]?.is_available ?? false,
-    stock_quantity: row.shop_inventory?.[0]?.quantity ?? 0,
-  })).filter(
-    (row) => row.available && row.stock_quantity > 0,
-  );
-
-  const catalog = rows
-    .filter((row) => !row.substitute_for)
-    .map(mapProduct);
-
+  const { data, error } = await supabase.from("customer_products")
+    .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for")
+    .eq("shop_id", shop.id).eq("active", true).order("name");
+  if (error) throwOrderingRequestError("catalog.products", error);
+  const rows = ((data ?? []) as CustomerProductRow[])
+    .filter(row => row.available && row.stock_quantity > 0);
+  const catalog = rows.filter(row => !row.substitute_for).map(mapProduct);
   const choices: Record<string, GroceryProduct[]> = {};
 
   for (const row of rows) {
@@ -203,32 +164,12 @@ export async function loadCatalog(): Promise<{
 }
 
 export async function loadCart(): Promise<CartItem[]> {
-  const {
-    data: userData,
-    error: userError,
-  } = await supabase.auth.getUser();
-
-  if (userError) {
-    throw userError;
-  }
-
-  if (!userData.user) {
-    throw new Error("Sign in to load your cart.");
-  }
-
-  const {
-    data: cartData,
-    error: cartError,
-  } = await supabase
-    .from("customer_carts")
-    .select("id,customer_id,shop_id")
-    .eq("customer_id", userData.user.id)
-    .maybeSingle();
-
-  if (cartError) {
-    throw cartError;
-  }
-
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throwOrderingRequestError("cart.auth", userError);
+  if (!userData.user) throw new Error("Sign in to load your cart.");
+  const { data: cartData, error: cartError } = await supabase.from("customer_carts")
+    .select("id,customer_id,shop_id").eq("customer_id", userData.user.id).maybeSingle();
+  if (cartError) throwOrderingRequestError("cart.record", cartError);
   const cart = cartData as CustomerCartRow | null;
 
   if (!cart) {
@@ -240,11 +181,7 @@ export async function loadCart(): Promise<CartItem[]> {
     .select("product_id,quantity,substitution")
     .eq("cart_id", cart.id)
     .order("updated_at");
-
-  if (error) {
-    throw error;
-  }
-
+  if (error) throwOrderingRequestError("cart.items", error);
   const rows = (data ?? []) as CustomerCartItemRow[];
 
   if (!rows.length) {
@@ -256,29 +193,12 @@ export async function loadCart(): Promise<CartItem[]> {
     error: productError,
   } = await supabase
     .from("customer_products")
-    .select(
-      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,substitute_for,shop_inventory(quantity,is_available)",
-    )
-    .in(
-      "id",
-      rows.map((row) => row.product_id),
-    );
-
-  if (productError) {
-    throw productError;
-  }
-
-  const byId = new Map(
-    (productData ?? []).map(
-      (row: any) => [row.id, mapProduct({
-        ...row,
-        available: row.shop_inventory?.[0]?.is_available ?? false,
-        stock_quantity: row.shop_inventory?.[0]?.quantity ?? 0,
-      } as CustomerProductRow)],
-    ),
-  );
-
-  return rows.map((row) => {
+    .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for")
+    .in("id", rows.map(row => row.product_id));
+  if (productError) throwOrderingRequestError("cart.products", productError);
+  const byId = new Map(((productData ?? []) as CustomerProductRow[])
+    .map(row => [row.id, mapProduct(row)]));
+  return rows.map(row => {
     const product = byId.get(row.product_id);
 
     if (!product) {
@@ -375,11 +295,13 @@ export async function loadDraft(): Promise<CheckoutDraft> {
         checkoutId: newCheckoutId(),
       };
 }
-
-export const saveDraft = async (
-  draft: CheckoutDraft,
-) =>
-  AsyncStorage.setItem(
-    await scopedKey(DRAFT_KEY),
-    JSON.stringify(draft),
-  );
+let draftWriteQueue: Promise<void> = Promise.resolve();
+export function saveDraft(draft: CheckoutDraft): Promise<void> {
+  const key = scopedKey(DRAFT_KEY);
+  const value = JSON.stringify(draft);
+  const write = draftWriteQueue.then(async () => {
+    await AsyncStorage.setItem(await key, value);
+  });
+  draftWriteQueue = write.catch(() => undefined);
+  return write;
+}

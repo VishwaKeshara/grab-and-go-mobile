@@ -6,6 +6,7 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const focusedPaths = [
+  "/add-more-items",
   "/cart",
   "/checkout",
   "/notifications",

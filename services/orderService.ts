@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { mapShop } from "@/services/cartService";
+import { mapProduct, mapShop } from "@/services/cartService";
 
 import type {
   CartItem,
@@ -11,18 +11,18 @@ import type {
 import type {
   CustomerOrderItemRow,
   CustomerOrderRow,
+  CustomerProductRow,
   CustomerShopRow,
 } from "@/types/database";
 
 import type {
+  AddableOrderProduct,
   Order,
+  OrderAdditionItem,
   OrderStatus,
 } from "@/types/order";
 
-import {
-  cartTotals,
-  isValidPhone,
-} from "@/utils/ordering";
+import { cartTotals, isValidPhone } from "@/utils/ordering";
 
 export const SERVICE_FEE = 0;
 
@@ -51,15 +51,8 @@ function mapOrder(
   items: CustomerOrderItemRow[],
   shop: GroceryShop,
 ): Order {
-  const start = localParts(
-    row.pickup_start_at,
-    shop.timezone,
-  );
-
-  const end = localParts(
-    row.pickup_end_at,
-    shop.timezone,
-  );
+  const start = localParts(row.pickup_start_at, shop.timezone);
+  const end = localParts(row.pickup_end_at, shop.timezone);
 
   const pickupSlot: PickupSlot = {
     id: row.pickup_slot_id ?? undefined,
@@ -79,6 +72,7 @@ function mapOrder(
     shop,
 
     items: items.map((item) => ({
+      id: item.id,
       product: {
         id: item.product_id ?? item.id,
         shopId: row.shop_id,
@@ -110,14 +104,9 @@ function mapOrder(
 }
 
 export async function loadOrders(): Promise<Order[]> {
-  const {
-    data: userData,
-    error: userError,
-  } = await supabase.auth.getUser();
+  const { data: userData, error: userError } = await supabase.auth.getUser();
 
-  if (userError) {
-    throw userError;
-  }
+  if (userError) throw userError;
 
   if (!userData.user) {
     throw new Error("Sign in to load your orders.");
@@ -131,73 +120,52 @@ export async function loadOrders(): Promise<Order[]> {
     .eq("customer_id", userData.user.id)
     .order("created_at", { ascending: false });
 
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   const rows = (data ?? []) as CustomerOrderRow[];
 
-  if (!rows.length) {
-    return [];
-  }
+  if (!rows.length) return [];
 
-  const [itemResult, shopResult] =
-    await Promise.all([
-      supabase
-        .from("customer_order_items")
-        .select(
-          "id,order_id,product_id,product_name,product_unit,image_url,quantity,unit_price_lkr,regular_price_lkr,substitution",
-        )
-        .in(
-          "order_id",
-          rows.map((row) => row.id),
-        ),
+  const [itemResult, shopResult] = await Promise.all([
+    supabase
+      .from("customer_order_items")
+      .select(
+        "id,order_id,product_id,product_name,product_unit,image_url,quantity,unit_price_lkr,regular_price_lkr,substitution",
+      )
+      .in(
+        "order_id",
+        rows.map((row) => row.id),
+      ),
 
-      supabase
-        .from("customer_shops")
-        .select(
-          "id,name,address,phone,pickup_counter,preparation_minutes,timezone,active",
-        )
-        .in(
-          "id",
-          [...new Set(rows.map((row) => row.shop_id))],
-        ),
-    ]);
+    supabase
+      .from("customer_shops")
+      .select(
+        "id,name,address,phone,pickup_counter,preparation_minutes,timezone,active",
+      )
+      .in("id", [...new Set(rows.map((row) => row.shop_id))]),
+  ]);
 
-  if (itemResult.error) {
-    throw itemResult.error;
-  }
+  if (itemResult.error) throw itemResult.error;
+  if (shopResult.error) throw shopResult.error;
 
-  if (shopResult.error) {
-    throw shopResult.error;
-  }
-
-  const items =
-    (itemResult.data ?? []) as CustomerOrderItemRow[];
+  const items = (itemResult.data ?? []) as CustomerOrderItemRow[];
 
   const shops = new Map(
-    (
-      (shopResult.data ?? []) as CustomerShopRow[]
-    ).map((row) => [
-      row.id,
-      mapShop(row),
-    ]),
+    ((shopResult.data ?? []) as CustomerShopRow[]).map(
+      (row) => [row.id, mapShop(row)] as const,
+    ),
   );
 
   return rows.map((row) => {
     const shop = shops.get(row.shop_id);
 
     if (!shop) {
-      throw new Error(
-        "An order shop could not be loaded.",
-      );
+      throw new Error("An order shop could not be loaded.");
     }
 
     return mapOrder(
       row,
-      items.filter(
-        (item) => item.order_id === row.id,
-      ),
+      items.filter((item) => item.order_id === row.id),
       shop,
     );
   });
@@ -219,39 +187,22 @@ export async function createOrder(
     );
   }
 
-  /*
-   * IMPORTANT:
-   * Do not rebuild order items client-side here.
-   *
-   * The authoritative server RPC should read the
-   * authenticated customer's DB-backed cart.
-   */
+  const { data, error } = await supabase.rpc("place_customer_order", {
+    p_checkout_id: draft.checkoutId,
+    p_shop_id: shop.id,
+    p_slot_id: draft.pickupSlot.id,
+    p_expected_subtotal: expectedSubtotal,
+    p_payment_method: draft.paymentMethod,
+    p_customer_name: draft.customerName,
+    p_customer_phone: draft.phone,
+    p_packing_instructions: draft.packingInstructions,
+    p_travel_method: draft.travelMethod,
+  });
 
-  const { data, error } = await supabase.rpc(
-    "place_customer_order",
-    {
-      p_checkout_id: draft.checkoutId,
-      p_shop_id: shop.id,
-      p_slot_id: draft.pickupSlot.id,
-      p_expected_subtotal: expectedSubtotal,
-      p_payment_method: draft.paymentMethod,
-      p_customer_name: draft.customerName,
-      p_customer_phone: draft.phone,
-      p_packing_instructions:
-        draft.packingInstructions,
-      p_travel_method: draft.travelMethod,
-    },
-  );
-
-  if (error) {
-    throw error;
-  }
+  if (error) throw error;
 
   const orders = await loadOrders();
-
-  const order = orders.find(
-    (value) => value.id === data,
-  );
+  const order = orders.find((value) => value.id === data);
 
   if (!order) {
     throw new Error(
@@ -265,22 +216,106 @@ export async function createOrder(
 export async function setOrderStatus(
   id: string,
   status: OrderStatus,
-): Promise<void> {
+): Promise<Order[]> {
   if (status !== "cancelled") {
+    throw new Error("Only assigned shop staff can update order status.");
+  }
+
+  const { error } = await supabase.rpc("cancel_customer_order", {
+    p_order_id: id,
+  });
+
+  if (error) throw error;
+
+  return loadOrders();
+}
+
+export async function loadAddableOrderProducts(
+  orderId: string,
+): Promise<AddableOrderProduct[]> {
+  // loadOrders returns orders owned by the signed-in customer.
+  const orders = await loadOrders();
+  const order = orders.find((value) => value.id === orderId);
+
+  if (!order) {
+    throw new Error("Order not found for your account.");
+  }
+
+  if (
+    order.status !== "placed" ||
+    order.draft.paymentMethod !== "pickup" ||
+    order.paymentStatus !== "pay_at_pickup"
+  ) {
+    throw new Error("Order can no longer accept items.");
+  }
+
+  const { data, error } = await supabase
+    .from("customer_products")
+    .select(
+      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for",
+    )
+    .eq("shop_id", order.shop.id)
+    .eq("active", true)
+    .eq("available", true)
+    .gt("stock_quantity", 0)
+    .is("substitute_for", null)
+    .order("name");
+
+  if (error) throw error;
+
+  const rows = (data ?? []) as CustomerProductRow[];
+
+  return rows.map((row) => ({
+    product: mapProduct(row),
+    stock: row.stock_quantity,
+  }));
+}
+
+export async function addItemsToOrder(
+  orderId: string,
+  requestId: string,
+  items: OrderAdditionItem[],
+  expectedAdditionalSubtotal: number,
+  expectedOrderTotal: number,
+): Promise<Order> {
+  if (!orderId || !requestId || items.length === 0) {
+    throw new Error("Choose products to add to your order.");
+  }
+
+  // The RPC rechecks ownership, eligibility, prices, stock,
+  // pickup availability, and duplicate requests atomically.
+  const { error } = await supabase.rpc("add_items_to_customer_order", {
+    p_order_id: orderId,
+    p_request_id: requestId,
+    p_items: items.map((item) => ({
+      productId: item.productId,
+      quantity: item.quantity,
+    })),
+    p_expected_additional_subtotal: expectedAdditionalSubtotal,
+    p_expected_order_total: expectedOrderTotal,
+  });
+
+  // Keep the original error code for the screen's error handling.
+  if (error) throw error;
+
+  let orders: Order[];
+
+  try {
+    orders = await loadOrders();
+  } catch {
     throw new Error(
-      "Only assigned shop staff can update order status.",
+      "The additional items may have saved, but the order could not be refreshed. Retry with the same request.",
     );
   }
 
-  const { error } = await supabase.rpc(
-    "cancel_customer_order",
-    {
-      p_order_id: id,
-    },
-  );
+  const updatedOrder = orders.find((order) => order.id === orderId);
 
-  if (error) {
-    throw error;
+  if (!updatedOrder) {
+    throw new Error(
+      "The additional items may have saved, but the order could not be refreshed. Check My Orders.",
+    );
   }
+
+  return updatedOrder;
 }
 
