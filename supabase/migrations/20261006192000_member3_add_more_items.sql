@@ -1,6 +1,4 @@
--- Member 3: add products to an existing unpaid pickup order.
--- Requires 005_customer_ordering.sql and 006_member3_order_payment.sql.
--- This migration intentionally creates only the addition receipt table and RPC.
+
 begin;
 
 do $$
@@ -138,20 +136,13 @@ begin
 
   select * into v_slot from public.customer_pickup_slots
     where id = v_order.pickup_slot_id and shop_id = v_order.shop_id for update;
-  if not found then
-    raise exception 'Pickup time is too close or unavailable';
-  end if;
-  if v_slot.starts_at <= now() then
-    raise exception 'Pickup time has passed';
-  end if;
-  if not v_slot.is_available
+  if not found or not v_slot.is_available
     or v_slot.starts_at <> v_order.pickup_start_at
     or v_slot.ends_at <> v_order.pickup_end_at
     or v_slot.slot_date <> (v_slot.starts_at at time zone v_shop.timezone)::date
     or v_slot.slot_date < (now() at time zone v_shop.timezone)::date
-    or v_slot.starts_at <= now() + pg_catalog.make_interval(
-      mins => v_shop.preparation_minutes
-    )
+    or v_slot.starts_at <= now()
+      + pg_catalog.make_interval(mins => v_shop.preparation_minutes)
     or (select count(*) from public.customer_orders o
       where o.shop_id = v_order.shop_id and o.status <> 'cancelled'
         and o.pickup_start_at < v_slot.ends_at
