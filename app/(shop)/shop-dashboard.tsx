@@ -6,7 +6,8 @@ import { router } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
-import AsyncStorage from "@react-native-async-storage/async-storage";
+
+import { getLocalStaffSession, getStaffProfile } from "@/services/shopService";
 import {
   getShopByProfileId,
   getShopDashboardSummary,
@@ -60,23 +61,18 @@ export default function ShopDashboard() {
       setError(false);
 
       let profile = null;
-      const staffJson = await AsyncStorage.getItem("staff_session");
-      if (staffJson) {
-        const staff = JSON.parse(staffJson);
-        setStaffSession(staff);
-        profile = {
-          id: staff.shop_id,
-          name: "Shop",
-          active: true,
-          isOpen: true,
-        };
-      } else {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession();
-        if (!session?.user?.id) return;
-        profile = await getShopByProfileId(session.user.id);
+      const token = await getLocalStaffSession();
+      if (token) {
+        const staffProfile = await getStaffProfile(token);
+        if (staffProfile) {
+          router.replace('/(shop)/new-orders');
+          return;
+        }
       }
+      // Owner flow – get Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      profile = await getShopByProfileId(session.user.id);
 
       setShop(profile as any);
 

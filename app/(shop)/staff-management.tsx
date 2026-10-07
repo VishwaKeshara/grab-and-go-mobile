@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { router } from "expo-router";
-import { getLocalStaffSession } from "@/services/shopService";
+import { getLocalStaffSession, getStaffProfile } from "@/services/shopService";
 import { ShopStaff } from "@/types/shop";
 
 export default function StaffManagementScreen() {
@@ -21,10 +21,13 @@ export default function StaffManagementScreen() {
 
   useEffect(() => {
     async function checkAuth() {
-      const staffToken = await getLocalStaffSession();
-      if (staffToken) {
-        router.replace("/(shop)/shop-dashboard");
-        return;
+      const token = await getLocalStaffSession();
+      if (token) {
+        const staffProfile = await getStaffProfile(token);
+        if (staffProfile) {
+          router.replace("/(shop)/new-orders");
+          return;
+        }
       }
       const { data: user } = await supabase.auth.getUser();
       if (!user.user) return;

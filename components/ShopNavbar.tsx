@@ -10,7 +10,11 @@ import { FontAwesome } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
-const items = [
+// NEW: Staff detection imports
+import { useEffect, useState } from "react";
+import { getLocalStaffSession, getStaffProfile } from "@/services/shopService";
+
+const ownerItems = [
   {
     icon: "home" as const,
     label: "Dashboard",
@@ -43,18 +47,56 @@ const items = [
   },
 ];
 
+const staffItems = [
+  {
+    icon: "list-alt" as const,
+    label: "Orders",
+    path: "/new-orders",
+    route: "/(shop)/new-orders",
+  },
+  {
+    icon: "qrcode" as const,
+    label: "Scan",
+    path: "/qr-verification",
+    route: "/(shop)/qr-verification",
+  },
+  {
+    icon: "user" as const,
+    label: "Profile",
+    path: "/shop-profile",
+    route: "/(shop)/shop-profile",
+  },
+];
+
 /** Paths on which the navbar is hidden entirely. */
 const HIDDEN_PATHS = ["/login"];
 
 export function ShopNavbar() {
   const pathname = usePathname();
 
+  const [isStaff, setIsStaff] = useState(false);
+
+  // Detect staff mode on mount and on navigation changes
+  useEffect(() => {
+    (async () => {
+      const token = await getLocalStaffSession();
+      if (!token) {
+        setIsStaff(false);
+        return;
+      }
+      const profile = await getStaffProfile(token);
+      setIsStaff(Boolean(profile));
+    })();
+  }, [pathname]);
+
   if (HIDDEN_PATHS.some((p) => pathname.endsWith(p))) return null;
+
+  const renderedItems = isStaff ? staffItems : ownerItems;
 
   return (
     <View style={styles.shell}>
       <View style={styles.navbar}>
-        {items.map((item) => {
+        {renderedItems.map((item) => {
           const active = pathname.endsWith(item.path);
           return (
             <Pressable
@@ -65,15 +107,9 @@ export function ShopNavbar() {
               style={({ pressed }) => [styles.item, pressed && styles.pressed]}
             >
               <View style={[styles.iconWrap, active && styles.activeIconWrap]}>
-                <FontAwesome
-                  color={active ? colors.mint : "rgba(255,255,255,0.4)"}
-                  name={item.icon}
-                  size={20}
-                />
+                <FontAwesome color={active ? colors.mint : "rgba(255,255,255,0.4)"} name={item.icon} size={20} />
               </View>
-              <Text style={[styles.label, active && styles.activeLabel]}>
-                {item.label}
-              </Text>
+              <Text style={[styles.label, active && styles.activeLabel]}>{item.label}</Text>
             </Pressable>
           );
         })}
@@ -109,19 +145,8 @@ const styles = StyleSheet.create({
   },
   item: { alignItems: "center", flex: 1, paddingBottom: 8, paddingTop: 2 },
   pressed: { opacity: 0.6 },
-  iconWrap: {
-    alignItems: "center",
-    borderRadius: 12,
-    height: 30,
-    justifyContent: "center",
-    width: 44,
-  },
+  iconWrap: { alignItems: "center", borderRadius: 12, height: 30, justifyContent: "center", width: 44 },
   activeIconWrap: { backgroundColor: colors.nightSoft },
-  label: {
-    color: "rgba(255,255,255,0.4)",
-    fontSize: 8,
-    fontWeight: "700",
-    marginTop: 2,
-  },
+  label: { color: "rgba(255,255,255,0.4)", fontSize: 8, fontWeight: "700", marginTop: 2 },
   activeLabel: { color: colors.mint },
 });
