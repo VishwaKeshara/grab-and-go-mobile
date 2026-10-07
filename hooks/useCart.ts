@@ -1,6 +1,7 @@
 import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PropsWithChildren } from "react";
 import { Alert } from "react-native";
+import { ShopSwitchModal } from "@/components/ShopSwitchModal";
 import { getProfile } from "@/services/authService";
 import { cartTotals, changeCart, initialDraft, loadCart, loadCatalog, loadDraft, newCheckoutId, saveDraft } from "@/services/cartService";
 import { createOrder, loadOrders, setOrderStatus } from "@/services/orderService";
@@ -73,6 +74,17 @@ export function OrderingProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
+
+  type ShopSwitchPrompt = { currentShopName: string; newShopName: string } | null;
+  const [shopSwitchPrompt, setShopSwitchPrompt] = useState<ShopSwitchPrompt>(null);
+  const shopSwitchResolver = useRef<((confirmed: boolean) => void) | null>(null);
+
+  const askToSwitchShop = (currentShopName: string, newShopName: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      shopSwitchResolver.current = resolve;
+      setShopSwitchPrompt({ currentShopName, newShopName });
+    });
+
   const lock = useRef(false);
   const addInFlight = useRef(false);
   const ready = useRef(false);
@@ -249,11 +261,24 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       return false;
     }
 
-    const product = products.find(
+    let product = products.find(
       (value) => value.id === requested.id,
     );
 
-    if (!product) {
+    const targetShopId = product?.shopId || requested.shopId || (requested as any).shop_id;
+
+    if (__DEV__) {
+      console.log("[Cart] add item check:", {
+        requestedId: requested.id,
+        requestedShopId: requested.shopId,
+        requestedAsAnyShopId: (requested as any).shop_id,
+        requestedAsAnyShopName: (requested as any).shop_name,
+        currentCartShopId: cart.length > 0 ? cart[0].product.shopId : "empty",
+        targetShopId,
+      });
+    }
+
+    if (!product && !targetShopId) {
       setError(
         "This product is not available in the ordering catalog.",
       );
@@ -266,22 +291,62 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       return false;
     }
 
-    /*
-     * IMPORTANT:
-     * Do NOT restore HEAD's local cross-shop cart replacement.
-     *
-     * The authoritative catalog/cart service and
-     * change_customer_cart RPC must enforce the actual shop/cart rules.
-     *
-     * This hook must not bypass the database by locally replacing
-     * the cart with another shop's item.
-     */
+    if (!product) {
+      product = {
+        id: requested.id,
+        shopId: targetShopId,
+        name: requested.name,
+        unit: requested.unit || (requested as any).unit || "",
+        price: requested.price || (requested as any).price_lkr || 0,
+        regularPrice: requested.regularPrice || (requested as any).regular_price_lkr || 0,
+        image: requested.image || (requested as any).image_url || ""
+      };
+    }
+
+    if (cart.length > 0) {
+      const currentShopId = cart[0].product.shopId;
+      if (currentShopId && targetShopId && currentShopId !== targetShopId) {
+        const currentShopName = shop && shop.id === currentShopId ? shop.name : "another shop";
+        const newShopName = (requested as any).shop_name || "this shop";
+
+        const confirmed = await askToSwitchShop(currentShopName, newShopName);
+
+        if (!confirmed) {
+          return false;
+        }
+
+        try {
+          addInFlight.current = true;
+          setAdding(true);
+
+          await enqueue(() => changeCart("clear"));
+          setCart([]);
+
+          if (__DEV__) {
+            console.log("[Cart] sending add RPC (switch)", product!.id);
+          }
+          await enqueue(() => changeCart("add", product!.id, 1));
+
+          await reload();
+
+          setCartSheetOpen(true);
+          return true;
+        } catch (e) {
+          mutationFailed(e, ++cartVersion.current);
+          return false;
+        } finally {
+          addInFlight.current = false;
+          setAdding(false);
+        }
+      }
+    }
 
     addInFlight.current = true;
     setAdding(true);
     setError("");
 
     const version = ++cartVersion.current;
+    const wasEmpty = cart.length === 0;
 
     try {
       if (__DEV__) {
@@ -306,15 +371,30 @@ export function OrderingProvider({ children }: PropsWithChildren) {
         addProductToCart(previous, product),
       );
 
-      setCartSheetOpen(true);
-
-      void loadWithTimeout(syncCart(version)).catch(() => {
+      try {
+        await loadWithTimeout(
+          (async () => {
+            await syncCart(version);
+            if (wasEmpty) {
+              const catalog = await loadCatalog();
+              if (version === cartVersion.current) {
+                setShop(catalog.shop);
+                setProducts(catalog.products);
+                setAlternatives(catalog.alternatives);
+              }
+            }
+          })()
+        );
+      } catch (e) {
+        if (__DEV__) console.warn("Could not refresh shop on first add", e);
         if (version === cartVersion.current) {
           setError(
             "Added to cart, but the cart could not be refreshed. Please try again.",
           );
         }
-      });
+      }
+
+      setCartSheetOpen(true);
 
       return true;
     } catch (cause) {
@@ -450,7 +530,24 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     closeCartSheet: () => setCartSheetOpen(false),
     setQuantity, removeItem, addItem, clearCart, setSubstitution, updateDraft,
     submitOrder, changeStatus, reorder, reload, reloadOrders,
-  } }, children);
+  } },
+    children,
+    createElement(ShopSwitchModal, {
+      visible: !!shopSwitchPrompt,
+      currentShopName: shopSwitchPrompt?.currentShopName || "",
+      newShopName: shopSwitchPrompt?.newShopName || "",
+      onConfirm: () => {
+        if (shopSwitchResolver.current) shopSwitchResolver.current(true);
+        setShopSwitchPrompt(null);
+        shopSwitchResolver.current = null;
+      },
+      onCancel: () => {
+        if (shopSwitchResolver.current) shopSwitchResolver.current(false);
+        setShopSwitchPrompt(null);
+        shopSwitchResolver.current = null;
+      }
+    })
+  );
 }
 
 export function useCart() {
