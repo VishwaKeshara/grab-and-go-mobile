@@ -1,11 +1,41 @@
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import type { PropsWithChildren } from "react";
+import {
+  createContext,
+  createElement,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { Alert } from "react-native";
+
 import { getProfile } from "@/services/authService";
-import { cartTotals, changeCart, initialDraft, loadCart, loadCatalog, loadDraft, newCheckoutId, saveDraft } from "@/services/cartService";
-import { addItemsToOrder, createOrder, loadOrders, setOrderStatus } from "@/services/orderService";
+import {
+  cartTotals,
+  changeCart,
+  initialDraft,
+  loadCart,
+  loadCatalog,
+  loadDraft,
+  newCheckoutId,
+  saveDraft,
+} from "@/services/cartService";
+import {
+  addItemsToOrder,
+  createOrder,
+  loadOrders,
+  setOrderStatus,
+} from "@/services/orderService";
 import { processDemoPayment } from "@/services/paymentService";
-import type { CartItem, CheckoutDraft, GroceryProduct, GroceryShop, SubstitutePreference } from "@/types/cart";
+import type {
+  CartItem,
+  CheckoutDraft,
+  GroceryProduct,
+  GroceryShop,
+  SubstitutePreference,
+} from "@/types/cart";
 import type { Order, OrderAdditionItem, OrderStatus } from "@/types/order";
 import { addProductToCart } from "@/utils/ordering";
 
@@ -32,7 +62,13 @@ type Store = {
   updateDraft: (value: Partial<CheckoutDraft>) => void;
   submitOrder: () => Promise<Order>;
   changeStatus: (id: string, status: OrderStatus) => Promise<void>;
-  addMoreItems: (id: string, requestId: string, items: OrderAdditionItem[], subtotal: number, currentTotal: number) => Promise<void>;
+  addMoreItems: (
+    id: string,
+    requestId: string,
+    items: OrderAdditionItem[],
+    subtotal: number,
+    currentTotal: number,
+  ) => Promise<void>;
   reorder: (order: Order) => void;
   reload: () => Promise<void>;
   reloadOrders: () => Promise<void>;
@@ -40,12 +76,18 @@ type Store = {
 
 const Context = createContext<Store | null>(null);
 
-function cartErrorMessage(cause: unknown, fallback: string) {
-  const error = cause as { code?: string } | null;
-  const code = error?.code;
-  if (code === "PGRST205" || code === "PGRST202" || code === "42P01" || code === "42883") {
+function cartErrorMessage(cause: unknown, fallback: string): string {
+  const code = (cause as { code?: string } | null)?.code;
+
+  if (
+    code === "PGRST205" ||
+    code === "PGRST202" ||
+    code === "42P01" ||
+    code === "42883"
+  ) {
     return "Ordering is unavailable right now. Please try again later.";
   }
+
   return cause instanceof Error ? cause.message : fallback;
 }
 
@@ -54,15 +96,27 @@ class InitialOrderingLoadError extends Error {
     readonly stage: "cart" | "catalog",
     readonly original: unknown,
   ) {
-    super(stage === "cart" ? "Could not load your cart." : "Could not load ordering products.");
+    super(
+      stage === "cart"
+        ? "Could not load your cart."
+        : "Could not load ordering products.",
+    );
   }
 }
 
-function logInitialLoadError(stage: "cart" | "catalog" | "unknown", cause: unknown): void {
+function logInitialLoadError(
+  stage: "cart" | "catalog" | "unknown",
+  cause: unknown,
+): void {
   if (!__DEV__) return;
+
   const error = cause as {
-    code?: unknown; message?: unknown; details?: unknown; hint?: unknown;
+    code?: unknown;
+    message?: unknown;
+    details?: unknown;
+    hint?: unknown;
   } | null;
+
   console.warn("[Ordering load] Initial request failed", {
     stage,
     code: error?.code,
@@ -72,7 +126,10 @@ function logInitialLoadError(stage: "cart" | "catalog" | "unknown", cause: unkno
   });
 }
 
-async function loadInitialStage<T>(stage: "cart" | "catalog", request: () => Promise<T>): Promise<T> {
+async function loadInitialStage<T>(
+  stage: "cart" | "catalog",
+  request: () => Promise<T>,
+): Promise<T> {
   try {
     return await request();
   } catch (cause) {
@@ -83,11 +140,18 @@ async function loadInitialStage<T>(stage: "cart" | "catalog", request: () => Pro
 
 async function loadWithTimeout<T>(request: Promise<T>): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
+
   try {
     return await Promise.race([
       request,
-      new Promise<T>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("Cart loading timed out. Check your connection and try again.")), 15000);
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => {
+          reject(
+            new Error(
+              "Cart loading timed out. Check your connection and try again.",
+            ),
+          );
+        }, 15000);
       }),
     ]);
   } finally {
@@ -101,12 +165,15 @@ export function OrderingProvider({ children }: PropsWithChildren) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [shop, setShop] = useState<GroceryShop | null>(null);
   const [products, setProducts] = useState<GroceryProduct[]>([]);
-  const [alternatives, setAlternatives] = useState<Record<string, GroceryProduct[]>>({});
+  const [alternatives, setAlternatives] = useState<
+    Record<string, GroceryProduct[]>
+  >({});
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
+
   const lock = useRef(false);
   const addInFlight = useRef(false);
   const ready = useRef(false);
@@ -116,12 +183,20 @@ export function OrderingProvider({ children }: PropsWithChildren) {
 
   const reloadOrders = useCallback(async () => {
     const version = ++orderLoadVersion.current;
+
     try {
       const latest = await loadOrders();
-      if (version === orderLoadVersion.current) setOrders(latest);
+
+      if (version === orderLoadVersion.current) {
+        setOrders(latest);
+      }
     } catch (cause) {
       if (version === orderLoadVersion.current) {
-        setError(cause instanceof Error ? cause.message : "Could not load your orders.");
+        setError(
+          cause instanceof Error
+            ? cause.message
+            : "Could not load your orders.",
+        );
       }
     }
   }, []);
@@ -130,43 +205,88 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     setLoading(true);
     setError("");
     ready.current = false;
+
     try {
-      const { savedCart, catalog } = await loadWithTimeout((async () => {
-        await cartQueue.current;
-        const savedCart = await loadInitialStage("cart", loadCart);
-        // Commit a successfully loaded cart before loading the catalog so a
-        // separate catalog failure cannot erase or misreport saved cart data.
-        setCart(savedCart);
-        const catalog = await loadInitialStage("catalog", loadCatalog);
-        return { savedCart, catalog };
-      })());
+      const { savedCart, catalog } = await loadWithTimeout(
+        (async () => {
+          await cartQueue.current;
+
+          const savedCart = await loadInitialStage("cart", loadCart);
+
+          // Preserve the loaded cart if catalog loading fails.
+          setCart(savedCart);
+
+          const catalog = await loadInitialStage("catalog", loadCatalog);
+
+          return { savedCart, catalog };
+        })(),
+      );
+
       setShop(catalog.shop);
       setProducts(catalog.products);
       setAlternatives(catalog.alternatives);
       setCart(savedCart);
       ready.current = true;
-      void loadDraft().then(savedDraft => {
-        setDraft(savedDraft);
-        void getProfile().then(profile => {
-          if (!profile) return;
-          setDraft(previous => ({
-            ...previous,
-            customerName: previous.customerName || profile.full_name || "",
-            phone: previous.phone || profile.phone || "",
-          }));
-        }).catch(() => undefined);
-      }).catch(() => setError("Could not load checkout details."));
+
+      if (__DEV__) {
+        console.log("[Cart] initial load succeeded", {
+          shopId: catalog.shop.id,
+          catalogCount: catalog.products.length,
+          cartCount: savedCart.length,
+        });
+      }
+
+      void loadDraft()
+        .then((savedDraft) => {
+          setDraft(savedDraft);
+
+          void getProfile()
+            .then((profile) => {
+              if (!profile) return;
+
+              setDraft((previous) => ({
+                ...previous,
+                customerName: previous.customerName || profile.full_name || "",
+                phone: previous.phone || profile.phone || "",
+              }));
+            })
+            .catch(() => undefined);
+        })
+        .catch(() => {
+          setError("Could not load checkout details.");
+        });
+
       void reloadOrders();
     } catch (cause) {
       const failure = cause instanceof InitialOrderingLoadError ? cause : null;
+
       const original = failure?.original ?? cause;
-      if (!failure) logInitialLoadError("unknown", original);
-      setError(cartErrorMessage(original, failure?.message ?? "Could not load your cart."));
-    } finally { setLoading(false); }
+
+      if (!failure) {
+        logInitialLoadError("unknown", original);
+      }
+
+      setError(
+        cartErrorMessage(
+          original,
+          failure?.message ?? "Could not load your cart.",
+        ),
+      );
+    } finally {
+      setLoading(false);
+    }
   };
-  useEffect(() => { void reload(); }, []);
+
   useEffect(() => {
-    if (ready.current) saveDraft(draft).catch(() => setError("Could not save checkout details."));
+    void reload();
+  }, []);
+
+  useEffect(() => {
+    if (ready.current) {
+      void saveDraft(draft).catch(() => {
+        setError("Could not save checkout details.");
+      });
+    }
   }, [draft]);
 
   const enqueue = (operation: () => Promise<void>) => {
@@ -190,10 +310,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     version: number,
     snapshot?: CartItem[],
   ) => {
-    const message = cartErrorMessage(
-      cause,
-      "Could not update your cart.",
-    );
+    const message = cartErrorMessage(cause, "Could not update your cart.");
 
     setError(message);
 
@@ -215,9 +332,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
 
     setCart((previous) =>
       previous.map((item) =>
-        item.product.id === id
-          ? { ...item, quantity: value }
-          : item,
+        item.product.id === id ? { ...item, quantity: value } : item,
       ),
     );
 
@@ -225,9 +340,9 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       .then(() => {
         void syncCart(version).catch(() => undefined);
       })
-      .catch((cause) =>
-        mutationFailed(cause, version, snapshot),
-      );
+      .catch((cause) => {
+        mutationFailed(cause, version, snapshot);
+      });
   };
 
   const removeItem = (id: string) => {
@@ -236,86 +351,93 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     const snapshot = cart;
     const version = ++cartVersion.current;
 
-    setCart((previous) =>
-      previous.filter((item) => item.product.id !== id),
-    );
+    setCart((previous) => previous.filter((item) => item.product.id !== id));
 
     void enqueue(() => changeCart("remove", id))
       .then(() => {
         void syncCart(version).catch(() => undefined);
       })
-      .catch((cause) =>
-        mutationFailed(cause, version, snapshot),
-      );
+      .catch((cause) => {
+        mutationFailed(cause, version, snapshot);
+      });
   };
 
-  const addItem = async (
-    requested: GroceryProduct,
-  ): Promise<boolean> => {
+  const addItem = async (requested: GroceryProduct): Promise<boolean> => {
+    const product = products.find((value) => value.id === requested.id);
+
     if (__DEV__) {
       console.log("[Cart] addItem entered", {
         productId: requested.id,
         loading,
         adding: addInFlight.current,
+        locked: lock.current,
+        ready: ready.current,
+        catalogCount: products.length,
+        productInCatalog: !!product,
+        requestedShopId: requested.shopId,
+        catalogShopId: shop?.id,
+        error,
       });
     }
 
+    const blocked = (reason: string, title: string, message: string): false => {
+      if (__DEV__) {
+        console.warn("[Cart] add blocked", {
+          reason,
+          productId: requested.id,
+        });
+      }
+
+      setError(message);
+      Alert.alert(title, message);
+      return false;
+    };
+
     if (loading) {
-      Alert.alert(
+      return blocked(
+        "loading",
         "Cart loading",
         "Please wait for your cart to load and try again.",
       );
-      return false;
     }
 
     if (addInFlight.current) {
+      if (__DEV__) {
+        console.log("[Cart] add blocked", {
+          reason: "add-in-flight",
+          productId: requested.id,
+        });
+      }
+
       return false;
     }
 
     if (lock.current) {
-      Alert.alert(
+      return blocked(
+        "checkout-locked",
         "Cart unavailable",
         "Please wait until your order has finished processing.",
       );
-      return false;
     }
 
     if (!ready.current) {
-      Alert.alert(
+      return blocked(
+        "catalog-not-ready",
         "Cart unavailable",
         error || "Could not load the ordering catalog.",
       );
-      return false;
     }
 
-    const product = products.find(
-      (value) => value.id === requested.id,
-    );
-
     if (!product) {
-      setError(
-        "This product is not available in the ordering catalog.",
-      );
-
-      Alert.alert(
+      return blocked(
+        "product-not-in-catalog",
         "Product unavailable",
         "This product is not available in the ordering catalog.",
       );
-
-      return false;
     }
 
-    /*
-     * IMPORTANT:
-     * Do NOT restore HEAD's local cross-shop cart replacement.
-     *
-     * The authoritative catalog/cart service and
-     * change_customer_cart RPC must enforce the actual shop/cart rules.
-     *
-     * This hook must not bypass the database by locally replacing
-     * the cart with another shop's item.
-     */
-
+    // Keep shop/cart rules enforced by the server RPC.
+    // Do not replace another shop's cart locally.
     addInFlight.current = true;
     setAdding(true);
     setError("");
@@ -324,26 +446,16 @@ export function OrderingProvider({ children }: PropsWithChildren) {
 
     try {
       if (__DEV__) {
-        console.log(
-          "[Cart] sending add RPC",
-          product.id,
-        );
+        console.log("[Cart] sending add RPC", product.id);
       }
 
-      await enqueue(() =>
-        changeCart("add", product.id, 1),
-      );
+      await enqueue(() => changeCart("add", product.id, 1));
 
       if (__DEV__) {
-        console.log(
-          "[Cart] add RPC succeeded",
-          product.id,
-        );
+        console.log("[Cart] add RPC succeeded", product.id);
       }
 
-      setCart((previous) =>
-        addProductToCart(previous, product),
-      );
+      setCart((previous) => addProductToCart(previous, product));
 
       setCartSheetOpen(true);
 
@@ -362,7 +474,6 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       }
 
       mutationFailed(cause, version);
-
       return false;
     } finally {
       addInFlight.current = false;
@@ -382,15 +493,12 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       .then(() => {
         void syncCart(version).catch(() => undefined);
       })
-      .catch((cause) =>
-        mutationFailed(cause, version, snapshot),
-      );
+      .catch((cause) => {
+        mutationFailed(cause, version, snapshot);
+      });
   };
 
-  const setSubstitution = (
-    id: string,
-    value: SubstitutePreference,
-  ) => {
+  const setSubstitution = (id: string, value: SubstitutePreference) => {
     if (!ready.current || lock.current) return;
 
     const snapshot = cart;
@@ -398,122 +506,230 @@ export function OrderingProvider({ children }: PropsWithChildren) {
 
     setCart((previous) =>
       previous.map((item) =>
-        item.product.id === id
-          ? { ...item, substitution: value }
-          : item,
+        item.product.id === id ? { ...item, substitution: value } : item,
       ),
     );
 
-    void enqueue(() =>
-      changeCart(
-        "substitute",
-        id,
-        undefined,
-        value,
-      ),
-    )
+    void enqueue(() => changeCart("substitute", id, undefined, value))
       .then(() => {
         void syncCart(version).catch(() => undefined);
       })
-      .catch((cause) =>
-        mutationFailed(cause, version, snapshot),
-      );
+      .catch((cause) => {
+        mutationFailed(cause, version, snapshot);
+      });
   };
 
-  const updateDraft = (
-    value: Partial<CheckoutDraft>,
-  ) =>
+  const updateDraft = (value: Partial<CheckoutDraft>) => {
     setDraft((previous) => ({
       ...previous,
       ...value,
     }));
-  const submitOrder = async () => {
-    if (lock.current) throw new Error("Your order is already being placed.");
-    if (!shop) throw new Error("Ordering shop is unavailable.");
+  };
+
+  const submitOrder = async (): Promise<Order> => {
+    if (lock.current) {
+      throw new Error("Your order is already being placed.");
+    }
+
+    if (!shop) {
+      throw new Error("Ordering shop is unavailable.");
+    }
+
     lock.current = true;
     ++cartVersion.current;
     setSubmitting(true);
+
     try {
       await cartQueue.current;
+
       const remoteCart = await loadCart();
-      const displayed = new Map(cart.map(item => [item.product.id, item]));
-      if (remoteCart.length && (
-        remoteCart.length !== cart.length || remoteCart.some(item => {
-          const current = displayed.get(item.product.id);
-          return !current || current.quantity !== item.quantity
-            || current.product.price !== item.product.price
-            || JSON.stringify(current.substitution) !== JSON.stringify(item.substitution);
-        })
-      )) {
+      const displayed = new Map(
+        cart.map((item) => [item.product.id, item] as const),
+      );
+
+      if (
+        remoteCart.length &&
+        (remoteCart.length !== cart.length ||
+          remoteCart.some((item) => {
+            const current = displayed.get(item.product.id);
+
+            return (
+              !current ||
+              current.quantity !== item.quantity ||
+              current.product.price !== item.product.price ||
+              JSON.stringify(current.substitution) !==
+                JSON.stringify(item.substitution)
+            );
+          }))
+      ) {
         setCart(remoteCart);
-        throw new Error("Your cart changed. Review it before placing your order.");
+        throw new Error(
+          "Your cart changed. Review it before placing your order.",
+        );
       }
+
       await processDemoPayment(draft.paymentMethod);
-      const order = await createOrder(remoteCart, draft, shop, cartTotals(cart).subtotal);
-      const [remainingCart, savedOrders] = await Promise.all([loadCart(), loadOrders()]);
+
+      const order = await createOrder(
+        remoteCart,
+        draft,
+        shop,
+        cartTotals(cart).subtotal,
+      );
+
+      const [remainingCart, savedOrders] = await Promise.all([
+        loadCart(),
+        loadOrders(),
+      ]);
+
       setOrders(savedOrders);
       setCart(remainingCart);
       setCartSheetOpen(false);
-      // Keep the checkout ID through uncertain failures; rotate it only after
-      // the saved order and remaining cart have both been confirmed.
+
+      // Rotate the checkout ID only after confirming the saved
+      // order and remaining cart. Preserve it on uncertain failures.
       const nextDraft: CheckoutDraft = {
-        ...initialDraft, checkoutId: newCheckoutId(),
-        customerName: draft.customerName, phone: draft.phone,
+        ...initialDraft,
+        checkoutId: newCheckoutId(),
+        customerName: draft.customerName,
+        phone: draft.phone,
       };
+
       setDraft(nextDraft);
+
       try {
         await saveDraft(nextDraft);
       } catch {
-        setError("Your order was placed, but the next checkout details could not be saved on this device.");
+        setError(
+          "Your order was placed, but the next checkout details could not be saved on this device.",
+        );
       }
+
       return order;
     } catch (cause) {
-      try { setCart(await loadCart()); } catch { /* Keep the displayed cart if offline. */ }
+      try {
+        setCart(await loadCart());
+      } catch {
+        // Keep the displayed cart if the refresh fails.
+      }
+
       throw cause;
-    } finally { lock.current = false; setSubmitting(false); }
-  };
-  const changeStatus = async (id: string, status: OrderStatus) => {
-    await setOrderStatus(id, status);
-    ++orderLoadVersion.current;
-    setOrders(previous => previous.map(order =>
-      order.id === id ? { ...order, status: "cancelled" } : order));
-    void reloadOrders();
-  };
-  const addMoreItems = async (id: string, requestId: string, items: OrderAdditionItem[], subtotal: number, currentTotal: number) => {
-    await addItemsToOrder(id, requestId, items, subtotal, currentTotal);
-    const version = ++orderLoadVersion.current;
-    try {
-      const latest = await loadOrders();
-      if (!latest.some(order => order.id === id)) throw new Error("Order missing after update");
-      if (version === orderLoadVersion.current) setOrders(latest);
-    } catch {
-      throw new Error("Your request may have saved, but the order could not be refreshed. Retry the same selection to check safely.");
+    } finally {
+      lock.current = false;
+      setSubmitting(false);
     }
   };
+
+  const changeStatus = async (
+    id: string,
+    status: OrderStatus,
+  ): Promise<void> => {
+    await setOrderStatus(id, status);
+
+    ++orderLoadVersion.current;
+
+    setOrders((previous) =>
+      previous.map((order) =>
+        order.id === id ? { ...order, status: "cancelled" } : order,
+      ),
+    );
+
+    void reloadOrders();
+  };
+
+  const addMoreItems = async (
+    id: string,
+    requestId: string,
+    items: OrderAdditionItem[],
+    subtotal: number,
+    currentTotal: number,
+  ): Promise<void> => {
+    await addItemsToOrder(id, requestId, items, subtotal, currentTotal);
+
+    const version = ++orderLoadVersion.current;
+
+    try {
+      const latest = await loadOrders();
+
+      if (!latest.some((order) => order.id === id)) {
+        throw new Error("Order missing after update");
+      }
+
+      if (version === orderLoadVersion.current) {
+        setOrders(latest);
+      }
+    } catch {
+      throw new Error(
+        "Your request may have saved, but the order could not be refreshed. Retry the same selection to check safely.",
+      );
+    }
+  };
+
   const reorder = (order: Order) => {
     if (!ready.current || lock.current) return;
+
     const version = ++cartVersion.current;
+
     void enqueue(async () => {
       for (const item of order.items) {
         if (!item.product.id) continue;
+
         await changeCart("add", item.product.id, item.quantity);
       }
-    }).then(() => { void syncCart(version).catch(() => undefined); })
-      .catch(cause => mutationFailed(cause, version));
-    setDraft(previous => ({ ...previous, pickupSlot: null }));
+    })
+      .then(() => {
+        void syncCart(version).catch(() => undefined);
+      })
+      .catch((cause) => {
+        mutationFailed(cause, version);
+      });
+
+    setDraft((previous) => ({
+      ...previous,
+      pickupSlot: null,
+    }));
   };
+
   const totals = useMemo(() => cartTotals(cart), [cart]);
-  return createElement(Context.Provider, { value: {
-    cart, draft, orders, shop, products, alternatives, loading, adding, error, submitting, totals,
-    cartSheetOpen, openCartSheet: () => setCartSheetOpen(true),
+
+  const value: Store = {
+    cart,
+    draft,
+    orders,
+    shop,
+    products,
+    alternatives,
+    loading,
+    adding,
+    error,
+    submitting,
+    totals,
+    cartSheetOpen,
+    openCartSheet: () => setCartSheetOpen(true),
     closeCartSheet: () => setCartSheetOpen(false),
-    setQuantity, removeItem, addItem, clearCart, setSubstitution, updateDraft,
-    submitOrder, changeStatus, addMoreItems, reorder, reload, reloadOrders,
-  } }, children);
+    setQuantity,
+    removeItem,
+    addItem,
+    clearCart,
+    setSubstitution,
+    updateDraft,
+    submitOrder,
+    changeStatus,
+    addMoreItems,
+    reorder,
+    reload,
+    reloadOrders,
+  };
+
+  return createElement(Context.Provider, { value }, children);
 }
 
-export function useCart() {
+export function useCart(): Store {
   const store = useContext(Context);
-  if (!store) throw new Error("useCart must be used inside OrderingProvider");
+
+  if (!store) {
+    throw new Error("useCart must be used inside OrderingProvider");
+  }
+
   return store;
 }

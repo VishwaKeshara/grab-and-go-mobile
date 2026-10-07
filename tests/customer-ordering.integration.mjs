@@ -65,10 +65,13 @@ try {
   assert.ok(shops?.length, "Load the development catalog seed first");
   const shopId = shops[0].id;
   const { data: products, error: productError } = await customerA
-    .from("customer_products").select("id,price_lkr")
-    .eq("shop_id", shopId).eq("active", true).eq("available", true)
-    .is("substitute_for", null).gt("stock_quantity", 3)
-    .lt("stock_quantity", 101).limit(1);
+    .from("customer_products")
+    .select("id,price_lkr,shop_inventory!inner(quantity,is_available)")
+    .eq("shop_id", shopId).eq("active", true)
+    .eq("shop_inventory.shop_id", shopId)
+    .eq("shop_inventory.is_available", true)
+    .is("substitute_for", null).gt("shop_inventory.quantity", 3)
+    .lt("shop_inventory.quantity", 101).limit(1);
   if (productError) throw productError;
   assert.ok(products?.length, "Load an in-stock development product");
   const product = products[0];
@@ -202,7 +205,8 @@ try {
   assert.equal(remaining.length, 0, "Purchased cart rows clear only after order creation");
 
   const { data: stockBefore, error: stockBeforeError } = await admin
-    .from("customer_products").select("stock_quantity").eq("id", product.id).single();
+    .from("shop_inventory").select("quantity")
+    .eq("shop_id", shopId).eq("product_id", product.id).single();
   if (stockBeforeError) throw stockBeforeError;
   const addRequestId = "addition-" + randomUUID();
   const additionArgs = {
@@ -269,9 +273,10 @@ try {
   if (paymentAfterAddError) throw paymentAfterAddError;
   assert.equal(paymentAfterAdd.amount_lkr, totalAfterAdd.total_lkr);
   const { data: stockAfter, error: stockAfterError } = await admin
-    .from("customer_products").select("stock_quantity").eq("id", product.id).single();
+    .from("shop_inventory").select("quantity")
+    .eq("shop_id", shopId).eq("product_id", product.id).single();
   if (stockAfterError) throw stockAfterError;
-  assert.equal(stockAfter.stock_quantity, stockBefore.stock_quantity - 1,
+  assert.equal(stockAfter.quantity, stockBefore.quantity - 1,
     "Only one additional unit may be reserved");
 
   await changeCart(customerA, "add", product.id, 1);
@@ -357,9 +362,10 @@ try {
   orderId = undefined;
   secondOrderId = undefined;
   const { data: restoredStock, error: restoredStockError } = await admin
-    .from("customer_products").select("stock_quantity").eq("id", product.id).single();
+    .from("shop_inventory").select("quantity")
+    .eq("shop_id", shopId).eq("product_id", product.id).single();
   if (restoredStockError) throw restoredStockError;
-  assert.equal(restoredStock.stock_quantity, stockBefore.stock_quantity + 2,
+  assert.equal(restoredStock.quantity, stockBefore.quantity + 2,
     "Cancellation must restore every original and added item unit");
   console.log("Customer ordering database integration checks passed.");
 } finally {

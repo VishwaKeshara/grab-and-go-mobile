@@ -11,7 +11,7 @@ import type {
 import type {
   CustomerOrderItemRow,
   CustomerOrderRow,
-  CustomerProductRow,
+  CustomerInventoryProductRow,
   CustomerShopRow,
 } from "@/types/database";
 
@@ -252,23 +252,26 @@ export async function loadAddableOrderProducts(
   const { data, error } = await supabase
     .from("customer_products")
     .select(
-      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for",
+      "id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,substitute_for,shop_inventory!inner(quantity,is_available)",
     )
     .eq("shop_id", order.shop.id)
     .eq("active", true)
-    .eq("available", true)
-    .gt("stock_quantity", 0)
+    .eq("shop_inventory.shop_id", order.shop.id)
+    .eq("shop_inventory.is_available", true)
+    .gt("shop_inventory.quantity", 0)
     .is("substitute_for", null)
     .order("name");
 
   if (error) throw error;
 
-  const rows = (data ?? []) as CustomerProductRow[];
+  const rows = (data ?? []) as CustomerInventoryProductRow[];
 
-  return rows.map((row) => ({
-    product: mapProduct(row),
-    stock: row.stock_quantity,
-  }));
+  return rows.flatMap((row) => {
+    const inventory = row.shop_inventory[0];
+    return inventory
+      ? [{ product: mapProduct(row), stock: inventory.quantity }]
+      : [];
+  });
 }
 
 export async function addItemsToOrder(
@@ -295,8 +298,19 @@ export async function addItemsToOrder(
     p_expected_order_total: expectedOrderTotal,
   });
 
-  // Keep the original error code for the screen's error handling.
-  if (error) throw error;
+  // Keep the original Supabase error for the screen's friendly error mapping.
+  // Development diagnostics intentionally omit request data and credentials.
+  if (error) {
+    if (__DEV__) {
+      console.warn("[Add More Items] Supabase RPC failed", {
+        code: error.code,
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+      });
+    }
+    throw error;
+  }
 
   let orders: Order[];
 
