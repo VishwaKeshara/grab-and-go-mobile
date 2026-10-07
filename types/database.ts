@@ -6,11 +6,16 @@ export type CustomerShopRow = {
   pickup_counter: string; preparation_minutes: number;
   timezone: string; active: boolean;
 };
-export type CustomerProductRow = {
+export type CustomerProductDetailsRow = {
   id: string; shop_id: string; name: string; unit: string;
   price_lkr: number; regular_price_lkr: number; image_url: string | null;
-  active: boolean; available: boolean; stock_quantity: number;
-  substitute_for: string | null;
+};
+export type CustomerProductRow = CustomerProductDetailsRow & {
+  active: boolean; available: boolean; stock_quantity: number; substitute_for: string | null;
+};
+export type CustomerInventoryProductRow = CustomerProductDetailsRow & {
+  active: boolean; substitute_for: string | null;
+  shop_inventory: { quantity: number; is_available: boolean }[];
 };
 export type CustomerCartRow = {
   id: string; customer_id: string; shop_id: string | null;

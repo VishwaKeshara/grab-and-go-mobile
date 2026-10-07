@@ -10,7 +10,8 @@ import type {
 import type {
   CustomerCartItemRow,
   CustomerCartRow,
-  CustomerProductRow,
+  CustomerInventoryProductRow,
+  CustomerProductDetailsRow,
   CustomerShopRow,
 } from "@/types/database";
 
@@ -101,7 +102,7 @@ export function mapShop(row: CustomerShopRow): GroceryShop {
 }
 
 export function mapProduct(
-  row: CustomerProductRow,
+  row: CustomerProductDetailsRow,
 ): GroceryProduct {
   return {
     id: row.id,
@@ -140,11 +141,15 @@ export async function loadCatalog(): Promise<{
 
   const shop = mapShop(shopData as CustomerShopRow);
   const { data, error } = await supabase.from("customer_products")
-    .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for")
-    .eq("shop_id", shop.id).eq("active", true).order("name");
+    .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,substitute_for,shop_inventory!inner(quantity,is_available)")
+    .eq("shop_id", shop.id)
+    .eq("active", true)
+    .eq("shop_inventory.shop_id", shop.id)
+    .eq("shop_inventory.is_available", true)
+    .gt("shop_inventory.quantity", 0)
+    .order("name");
   if (error) throwOrderingRequestError("catalog.products", error);
-  const rows = ((data ?? []) as CustomerProductRow[])
-    .filter(row => row.available && row.stock_quantity > 0);
+  const rows = (data ?? []) as CustomerInventoryProductRow[];
   const catalog = rows.filter(row => !row.substitute_for).map(mapProduct);
   const choices: Record<string, GroceryProduct[]> = {};
 
@@ -193,10 +198,10 @@ export async function loadCart(): Promise<CartItem[]> {
     error: productError,
   } = await supabase
     .from("customer_products")
-    .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url,active,available,stock_quantity,substitute_for")
+    .select("id,shop_id,name,unit,price_lkr,regular_price_lkr,image_url")
     .in("id", rows.map(row => row.product_id));
   if (productError) throwOrderingRequestError("cart.products", productError);
-  const byId = new Map(((productData ?? []) as CustomerProductRow[])
+  const byId = new Map(((productData ?? []) as CustomerProductDetailsRow[])
     .map(row => [row.id, mapProduct(row)]));
   return rows.map(row => {
     const product = byId.get(row.product_id);
