@@ -101,6 +101,8 @@ export type Product = {
   stock_quantity: number;
   image_url: string | null;
   is_available: boolean;
+  active?: boolean;
+  regular_price?: number;
   created_at: string;
   updated_at: string;
 };

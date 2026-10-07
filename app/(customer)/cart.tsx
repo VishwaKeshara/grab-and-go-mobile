@@ -50,22 +50,28 @@ export default function Cart() {
             <Text style={styles.totalLabel}>Subtotal</Text>
             <Text style={styles.total}>{money(totals.subtotal)}</Text>
           </View>
+
           <ActionButton
             label="Choose substitutions"
             icon="arrow-right"
             disabled={!cart.length || loading}
-            onPress={() => router.push("/(customer)/substitute-selection")}
+            onPress={() =>
+              router.push("/(customer)/substitute-selection")
+            }
           />
         </>
       }
     >
       <ErrorText message={error} />
+
       <ShopCard shop={shop} />
+
       <SectionTitle
         title={`Your basket · ${totals.count} products`}
         action={cart.length ? "Clear cart" : undefined}
         onAction={confirmClear}
       />
+
       {loading ? (
         <Text style={styles.empty}>Loading your cart…</Text>
       ) : cart.length ? (
@@ -79,6 +85,7 @@ export default function Cart() {
                   alternatives[item.product.id],
                 )}
               />
+
               <View style={styles.controls}>
                 <Pressable
                   accessibilityLabel={`Remove ${item.product.name}`}
@@ -86,9 +93,14 @@ export default function Cart() {
                   onPress={() => removeItem(item.product.id)}
                   style={styles.remove}
                 >
-                  <FontAwesome name="trash-o" color={colors.coral} size={17} />
+                  <FontAwesome
+                    name="trash-o"
+                    color={colors.coral}
+                    size={17}
+                  />
                   <Text style={styles.removeText}>Remove</Text>
                 </Pressable>
+
                 <View style={styles.quantity}>
                   <Pressable
                     accessibilityLabel={`Decrease ${item.product.name} quantity`}
@@ -96,22 +108,40 @@ export default function Cart() {
                     onPress={() =>
                       item.quantity === 1
                         ? removeItem(item.product.id)
-                        : setQuantity(item.product.id, item.quantity - 1)
+                        : setQuantity(
+                            item.product.id,
+                            item.quantity - 1,
+                          )
                     }
                     style={styles.quantityButton}
                   >
-                    <FontAwesome name="minus" color={colors.ink} size={12} />
+                    <FontAwesome
+                      name="minus"
+                      color={colors.ink}
+                      size={12}
+                    />
                   </Pressable>
-                  <Text style={styles.quantityText}>{item.quantity}</Text>
+
+                  <Text style={styles.quantityText}>
+                    {item.quantity}
+                  </Text>
+
                   <Pressable
                     accessibilityLabel={`Increase ${item.product.name} quantity`}
                     accessibilityRole="button"
                     onPress={() =>
-                      setQuantity(item.product.id, item.quantity + 1)
+                      setQuantity(
+                        item.product.id,
+                        item.quantity + 1,
+                      )
                     }
                     style={styles.quantityButton}
                   >
-                    <FontAwesome name="plus" color={colors.ink} size={12} />
+                    <FontAwesome
+                      name="plus"
+                      color={colors.ink}
+                      size={12}
+                    />
                   </Pressable>
                 </View>
               </View>
@@ -127,18 +157,26 @@ export default function Cart() {
                 color={colors.muted}
                 size={29}
               />
-              <Text style={styles.emptyTitle}>Your basket is empty</Text>
+              <Text style={styles.emptyTitle}>
+                Your basket is empty
+              </Text>
               <Text style={styles.empty}>
                 Add a few fresh picks to start your order.
               </Text>
             </View>
           </Card>
+
           <SectionTitle title="Fresh picks 🌿" />
+
           <Card>
             {products.map((product) => (
               <ProductLine
                 key={product.id}
-                item={{ product, quantity: 1, substitution: { type: "call" } }}
+                item={{
+                  product,
+                  quantity: 1,
+                  substitution: { type: "call" },
+                }}
                 trailing={
                   <Pressable
                     accessibilityLabel={`Add ${product.name} to cart`}
@@ -146,7 +184,11 @@ export default function Cart() {
                     onPress={() => addItem(product)}
                     style={styles.add}
                   >
-                    <FontAwesome name="plus" color={colors.white} size={13} />
+                    <FontAwesome
+                      name="plus"
+                      color={colors.white}
+                      size={13}
+                    />
                   </Pressable>
                 }
               />
@@ -154,15 +196,24 @@ export default function Cart() {
           </Card>
         </>
       )}
+
       {cart.length ? (
         <>
           <Card style={styles.saving}>
-            <FontAwesome name="tag" size={15} color="#087A60" />
+            <FontAwesome
+              name="tag"
+              size={15}
+              color="#087A60"
+            />
             <Text style={styles.savingText}>
               You’re saving {money(totals.savings)} on this basket
             </Text>
           </Card>
-          <PriceSummary subtotal={totals.subtotal} savings={totals.savings} />
+
+          <PriceSummary
+            subtotal={totals.subtotal}
+            savings={totals.savings}
+          />
         </>
       ) : null}
     </OrderPage>

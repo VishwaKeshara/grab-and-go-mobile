@@ -9,7 +9,17 @@ export default function OrderConfirmation() {
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { orders, loading } = useOrders();
   const order = orders.find(value => value.id === id);
-  if (!order) return <OrderPage title="Order confirmation" back={() => router.replace("/(customer)/my-orders")}><Card><Text style={styles.missing}>{loading ? "Loading your order…" : "We couldn't find this order. Check My Orders for your latest purchases."}</Text><LinkButton label="My orders" onPress={() => router.replace("/(customer)/my-orders")} /></Card></OrderPage>;
+  if (!order) return (
+    <OrderPage title="Order confirmation" back={() => router.replace("/(customer)/home")}>
+      <Card>
+        <Text style={styles.missing}>
+          {loading ? "Loading your order…" : "We couldn't find this order. Check My Orders for your latest purchases."}
+        </Text>
+        <LinkButton label="My orders" onPress={() => router.replace("/(customer)/my-orders")} />
+      </Card>
+    </OrderPage>
+  );
+
   const details = () => router.push({ pathname: "/(customer)/order-details", params: { id: order.id } });
   const tracking = () => router.push({ pathname: "/(customer)/order-tracking", params: { id: order.id } });
   return <OrderPage title="Order confirmed" eyebrow="YOU'RE ALL SET" back={() => router.replace("/(customer)/my-orders")} footer={<View style={styles.footerActions}><ActionButton label="Track your order" icon="arrow-right" onPress={tracking} /><LinkButton label="Continue Shopping" icon="shopping-basket" onPress={() => router.replace("/(customer)/home")} /></View>}>
