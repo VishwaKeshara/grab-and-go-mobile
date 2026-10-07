@@ -36,47 +36,129 @@ export default function Login() {
   const isValid = email.trim().length > 0 && password.length > 0;
 
   const handleAuth = async () => {
-    setError("");
-    setLoading(true);
+  setError("");
+  setLoading(true);
+  try {
+    // Clear any staff session first
+    await clearLocalStaffSession();
+    // Sign in with email & password
+    await signIn(email.trim(), password);
 
-    try {
-      await clearLocalStaffSession();
-      await signIn(email.trim(), password);
-
-      const profile = await getProfile();
-
-      if (!profile) {
-        await supabase.auth.signOut();
-        throw new Error("Could not fetch profile.");
-      }
-
-      if (profile.role === "customer") {
-        router.replace("/(customer)/home");
-      } else if (profile.role === "shop") {
-        const shop = await getShopByProfileId(profile.id);
-        if (!shop) {
-          // If no shop, maybe they need to register one, but they have 'shop' role?
-          // For now, let's just go to shop-dashboard, it might handle no shop.
-          router.replace("/(shop)/shop-dashboard");
-        } else {
-          router.replace("/(shop)/shop-dashboard");
-        }
-      } else if (profile.role === "admin") {
-        router.replace("/(admin)/admin-dashboard");
-      } else {
-        await supabase.auth.signOut();
-        throw new Error("Unknown account role.");
-      }
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "We could not sign you in. Please try again."
-      );
-    } finally {
-      setLoading(false);
+    // Verify signed‑in user via Supabase auth
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw userError ?? new Error("Could not verify signed‑in user.");
     }
-  };
+
+    // ---------- Shop intent recovery ----------
+    if (user.user_metadata?.registration_intent === "shop") {
+      const pending = user.user_metadata?.pending_shop_registration;
+      const validPending =
+        pending &&
+        typeof pending.shopName === "string" && !!pending.shopName.trim() &&
+        typeof pending.shopAddress === "string" && !!pending.shopAddress.trim() &&
+        typeof pending.shopPhone === "string" && !!pending.shopPhone.trim() &&
+        typeof pending.pickupCounter === "string" && !!pending.pickupCounter.trim() &&
+        typeof pending.prepMinutes === "number" &&
+        Number.isInteger(pending.prepMinutes) &&
+        pending.prepMinutes >= 1 && pending.prepMinutes <= 180;
+
+      if (!validPending) {
+        setError(
+          "Your saved shop registration details are incomplete. Please return to Register Shop."
+        );
+        return;
+      }
+
+      // Check if shop is already completed for this user
+      const currentProfile = await getProfile();
+      if (currentProfile?.role === "shop") {
+        const existingShop = await getShopByProfileId(currentProfile.id);
+        if (!existingShop) {
+          setError(
+            "Your shop account exists, but the shop record could not be found."
+          );
+          return;
+        }
+        // Clear onboarding metadata and route to dashboard
+        await supabase.auth.updateUser({
+          data: { registration_intent: null, pending_shop_registration: null },
+        });
+        router.replace("/(shop)/shop-dashboard" as any);
+        return;
+      }
+
+      // Register shop via RPC
+      const { error: rpcError } = await supabase.rpc("register_shop", {
+        p_shop_name: pending.shopName.trim(),
+        p_address: pending.shopAddress.trim(),
+        p_phone: pending.shopPhone.trim(),
+        p_pickup_counter: pending.pickupCounter.trim(),
+        p_prep_minutes: pending.prepMinutes,
+      });
+
+      if (rpcError) {
+        if (!rpcError.message.toLowerCase().includes("already owns a shop")) {
+          setError(rpcError.message);
+          return;
+        }
+        // else fall through to verification below
+      }
+
+      // Verify database state before clearing metadata
+      const freshProfile = await getProfile();
+      if (freshProfile?.role !== "shop") {
+        setError(
+          "Your shop account could not be verified. Please sign out and try again."
+        );
+        return;
+      }
+      const shop = await getShopByProfileId(freshProfile.id);
+      if (!shop) {
+        setError("Shop not found after registration.");
+        return;
+      }
+      // Clear onboarding metadata and route to dashboard
+      await supabase.auth.updateUser({
+        data: { registration_intent: null, pending_shop_registration: null },
+      });
+      router.replace("/(shop)/shop-dashboard" as any);
+      return;
+    }
+
+    // ---------- Normal role routing ----------
+    const profile = await getProfile();
+    if (!profile) {
+      await supabase.auth.signOut();
+      throw new Error("Could not fetch profile.");
+    }
+    if (profile.role === "customer") {
+      router.replace("/(customer)/home");
+    } else if (profile.role === "shop") {
+      const shop = await getShopByProfileId(profile.id);
+      if (!shop) {
+        router.replace("/(shop)/shop-dashboard");
+      } else {
+        router.replace("/(shop)/shop-dashboard");
+      }
+    } else if (profile.role === "admin") {
+      router.replace("/(admin)/admin-dashboard");
+    } else {
+      await supabase.auth.signOut();
+      throw new Error("Unknown account role.");
+    }
+  } catch (submitError) {
+    setError(
+      submitError instanceof Error
+        ? submitError.message
+        : "We could not sign you in. Please try again."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   const continueWithGoogle = async () => {
     setError("");
