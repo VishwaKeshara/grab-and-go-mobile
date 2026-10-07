@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable, ActivityIn
 import { router, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { ShopOrder, ShopOrderItem } from "@/types/shopOrder";
-import { getShopOrderById, updateOrderStatus } from "@/services/shopService";
+import { getShopOrderById, updateOrderStatus, staffGetOrderDetails, staffAcceptOrder, staffSetOrderStatus, getLocalStaffSession } from "@/services/shopService";
+
 
 export default function ShopOrderDetails() {
   const { orderId } = useLocalSearchParams<{ orderId?: string }>();
@@ -24,7 +25,8 @@ export default function ShopOrderDetails() {
     setLoading(true);
     setError("");
     try {
-      const data = await getShopOrderById(id);
+      const staffToken = await getLocalStaffSession();
+      const data = staffToken ? await staffGetOrderDetails(staffToken, id) : await getShopOrderById(id);
       if (!data) {
         setError("Order not found");
       } else {
@@ -41,7 +43,12 @@ export default function ShopOrderDetails() {
     if (!order) return;
     setActionLoading(true);
     try {
-      await updateOrderStatus(order.id, "accepted");
+      const staffToken = await getLocalStaffSession();
+      if (staffToken) {
+        await staffAcceptOrder(staffToken, order.id);
+      } else {
+        await updateOrderStatus(order.id, "accepted");
+      }
       await loadOrder(order.id);
     } catch (err: any) {
       alert(err.message || "Failed to accept order");
@@ -54,7 +61,12 @@ export default function ShopOrderDetails() {
     if (!order) return;
     setActionLoading(true);
     try {
-      await updateOrderStatus(order.id, "packing");
+      const staffToken = await getLocalStaffSession();
+      if (staffToken) {
+        await staffSetOrderStatus(staffToken, order.id, "packing");
+      } else {
+        await updateOrderStatus(order.id, "packing");
+      }
       router.push({ pathname: "/(shop)/packing", params: { orderId: order.id } });
     } catch (err: any) {
       alert(err.message || "Failed to start packing");

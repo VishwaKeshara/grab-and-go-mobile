@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pre
 import { router } from "expo-router";
 import { ShopOrder, ShopOrderStatus, ShopOrderItem } from "@/types/shopOrder";
 import { supabase } from "@/lib/supabase";
-import { getShopByProfileId, getIncomingOrders, updateOrderStatus } from "@/services/shopService";
+import { getShopByProfileId, getIncomingOrders, updateOrderStatus, staffGetOrders, staffAcceptOrder, staffSetOrderStatus, getStaffProfile, getLocalStaffSession, clearLocalStaffSession } from "@/services/shopService";
+
 import { FontAwesome } from "@expo/vector-icons";
 
 // --- Types ---
@@ -43,6 +44,30 @@ export default function NewOrders() {
 
   const checkSessionAndFetch = async () => {
     try {
+      const staffToken = await getLocalStaffSession();
+      if (staffToken) {
+        setSessionChecked(true);
+        setLoading(true);
+        setError("");
+        try {
+          const profile = await getStaffProfile(staffToken);
+          if (!profile) {
+            await clearLocalStaffSession();
+            router.replace("/(auth)/login?accountType=shop&shopMode=staff");
+            return;
+          }
+          setShopName(profile.shopName || "");
+          const incoming = (await staffGetOrders(staffToken)) as ExtendedShopOrder[];
+          setOrders(incoming || []);
+          setLastSyncedAt(new Date());
+        } catch (err: any) {
+          setError(err.message || "Failed to load orders");
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) {
         router.replace("/(auth)/login?accountType=shop&shopMode=owner");
@@ -60,6 +85,21 @@ export default function NewOrders() {
   }, []);
 
   const handleRefresh = async () => {
+    const staffToken = await getLocalStaffSession();
+    if (staffToken) {
+      setLoading(true);
+      setError("");
+      try {
+        const incoming = (await staffGetOrders(staffToken)) as ExtendedShopOrder[];
+        setOrders(incoming || []);
+        setLastSyncedAt(new Date());
+      } catch (err: any) {
+        setError(err.message || "Failed to load orders");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
     const { data: { session } } = await supabase.auth.getSession();
     if (session) {
       await fetchOrders(session.user.id);
@@ -68,6 +108,16 @@ export default function NewOrders() {
 
   const handleStatusChange = async (orderId: string, newStatus: ShopOrderStatus) => {
     try {
+      const staffToken = await getLocalStaffSession();
+      if (staffToken) {
+        if (newStatus === "accepted") {
+          await staffAcceptOrder(staffToken, orderId);
+        } else {
+          await staffSetOrderStatus(staffToken, orderId, newStatus);
+        }
+        await handleRefresh();
+        return;
+      }
       await updateOrderStatus(orderId, newStatus);
       const { data: { session } } = await supabase.auth.getSession();
       if (session) await fetchOrders(session.user.id);
