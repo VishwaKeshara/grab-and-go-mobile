@@ -21,6 +21,8 @@ import {
   updateStock,
   deleteShopProduct,
 } from "@/services/shopService";
+import { router } from "expo-router";
+import { getLocalStaffSession, getStaffProfile } from "@/services/shopService";
 import type { Product } from "@/types/product";
 import type { Shop } from "@/types/shop";
 import { useCallback, useEffect, useState, useMemo } from "react";
@@ -41,6 +43,20 @@ import { formatCurrencyShort } from "@/utils/formatters";
 type Mode = "product-create" | "product-edit";
 
 export default function ShopManagement() {
+    useEffect(() => {
+    const check = async () => {
+      const token = await getLocalStaffSession();
+      if (token) {
+        const staffProfile = await getStaffProfile(token);
+        if (staffProfile) {
+          router.replace("/(shop)/new-orders");
+          return;
+        }
+      }
+    };
+    void check();
+  }, []);
+
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);

@@ -6,18 +6,35 @@ import { router } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
-import { getShopByProfileId } from "@/services/shopService";
-import type { ShopProfile } from "@/types/shop";
-
+import { getShopByProfileId, getLocalStaffSession, clearLocalStaffSession, getStaffProfile } from "@/services/shopService";
 export default function ShopProfileScreen() {
-  const [shop, setShop] = useState<ShopProfile | null>(null);
+  const [shop, setShop] = useState<any>(null);
   const [email, setEmail] = useState<string>("");
+  const [ownerName, setOwnerName] = useState("");
+  const [isStaff, setIsStaff] = useState(false);
+  const [staffData, setStaffData] = useState<any>(null);
 
   useEffect(() => {
     async function load() {
       try {
+        const staffToken = await getLocalStaffSession();
+        if (staffToken) {
+          setIsStaff(true);
+          const profile = await getStaffProfile(staffToken);
+          if (profile) {
+            setStaffData({ staff_code: profile.staffCode });
+            setShop({ name: profile.shopName, prepMinutes: 25 });
+          } else {
+            setStaffData({ staff_code: "STAFF" });
+            setShop({ name: "Shop", prepMinutes: 25 });
+          }
+          return;
+        }
+
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user?.email) setEmail(session.user.email);
+        if (session?.user?.user_metadata?.full_name) setOwnerName(session.user.user_metadata.full_name);
+
         if (session?.user?.id) {
           const profile = await getShopByProfileId(session.user.id);
           setShop(profile);
@@ -31,7 +48,11 @@ export default function ShopProfileScreen() {
 
   const handleLogout = async () => {
     try {
-      await supabase.auth.signOut();
+      if (isStaff) {
+        await clearLocalStaffSession();
+      } else {
+        await supabase.auth.signOut();
+      }
       router.replace("/");
     } catch (err) {
       console.error("[ShopProfile] logout error", err);
@@ -55,16 +76,39 @@ export default function ShopProfileScreen() {
           <View style={styles.avatar}>
             <FontAwesome name="user" size={32} color={colors.paper} />
           </View>
-          <Text style={styles.shopName}>{shop?.name || "Loading..."}</Text>
+          <Text style={styles.shopName}>{isStaff ? staffData?.full_name || staffData?.staff_code : shop?.name || "Loading..."}</Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>Shop Owner</Text>
+            <Text style={styles.roleText}>{isStaff ? "STAFF" : "SHOP OWNER"}</Text>
           </View>
         </View>
+
+        {!isStaff && (
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <Text style={styles.cardTitle}>Owner Information</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Full Name</Text>
+              <Text style={styles.infoValue}>{ownerName || "Not set"}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Email</Text>
+              <Text style={styles.infoValue}>{email || "Loading..."}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Shop Code</Text>
+              <Text style={styles.infoValue}>{shop?.shopCode || "Not generated yet"}</Text>
+            </View>
+          </View>
+        )}
 
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.cardTitle}>Shop Information</Text>
           </View>
+
           <View style={styles.infoRow}>
             <Text style={styles.infoLabel}>Status</Text>
             <View style={shop?.isOpen ? styles.openBadge : styles.closedBadge}>
@@ -73,45 +117,53 @@ export default function ShopProfileScreen() {
                </Text>
             </View>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Address</Text>
-            <Text style={styles.infoValue}>{shop?.address || "Not set"}</Text>
-          </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Phone</Text>
-            <Text style={styles.infoValue}>{shop?.phone || "Not set"}</Text>
-          </View>
+
+          {!isStaff && (
+            <>
+              <View style={styles.divider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Address</Text>
+                <Text style={styles.infoValue}>{shop?.address || "Not set"}</Text>
+              </View>
+              <View style={styles.divider} />
+              <View style={styles.infoRow}>
+                <Text style={styles.infoLabel}>Phone</Text>
+                <Text style={styles.infoValue}>{shop?.phone || "Not set"}</Text>
+              </View>
+            </>
+          )}
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Pickup Information</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Pickup Counter</Text>
-            <Text style={styles.infoValue}>{shop?.pickupCounter || "N/A"}</Text>
+        {!isStaff && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Pickup Information</Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Pickup Counter</Text>
+              <Text style={styles.infoValue}>{shop?.pickupCounter || "N/A"}</Text>
+            </View>
+            <View style={styles.divider} />
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Prep Time</Text>
+              <Text style={styles.infoValue}>{shop?.prepMinutes ? `${shop.prepMinutes} mins` : "N/A"}</Text>
+            </View>
           </View>
-          <View style={styles.divider} />
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Prep Time</Text>
-            <Text style={styles.infoValue}>{shop?.prepMinutes ? `${shop.prepMinutes} mins` : "N/A"}</Text>
-          </View>
+        )}
 
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Account</Text>
-          <View style={styles.infoRow}>
-            <Text style={styles.infoLabel}>Email</Text>
-            <Text style={styles.infoValue}>{email || "Loading..."}</Text>
+        {isStaff && (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Staff Information</Text>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>Staff ID</Text>
+              <Text style={styles.infoValue}>{staffData?.staff_code}</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         <Pressable 
           style={({pressed}) => [styles.logoutButton, pressed && styles.logoutButtonPressed]} 
           onPress={handleLogout}
         >
-          <Text style={styles.logoutButtonText}>Log Out</Text>
+          <Text style={styles.logoutButtonText}>{isStaff ? "End Shift" : "Log Out"}</Text>
         </Pressable>
 
       </ScrollView>

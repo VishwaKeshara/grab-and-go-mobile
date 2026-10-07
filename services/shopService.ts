@@ -1,3 +1,4 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 /**
  * shopService.ts — Shop Operations & Administration service layer
  *
@@ -91,10 +92,7 @@ export async function getShopByProfileId(
 ): Promise<ShopProfile | null> {
   const { data, error } = await supabase
     .from("customer_shops")
-    .select(
-      "id, profile_id, hub_id, name, address, phone, pickup_counter, " +
-      "preparation_minutes, active, is_open, opened_at",
-    )
+    .select("id, profile_id, hub_id, name, address, phone, pickup_counter, preparation_minutes, active, is_open, opened_at, shop_code")
     .eq("profile_id", profileId)
     .eq("active", true)
     .maybeSingle();
@@ -115,6 +113,7 @@ export async function getShopByProfileId(
     active:        row.active as boolean,
     isOpen:        row.is_open as boolean,
     openedAt:      (row.opened_at as string | null) ?? null,
+    shopCode:      (row.shop_code as string | null) ?? null,
   } satisfies ShopProfile;
 }
 
@@ -149,12 +148,12 @@ export async function getShopProfile(): Promise<ShopProfile | null> {
 export async function verifyStaffPin(
   staffCode: string,
   pin: string,
-  shopId: string,
-): Promise<StaffLoginResult | null> {
+  shopCode: string,
+): Promise<{ token: string, staffCode: string, shopName: string } | null> {
   const { data, error } = await supabase.rpc("verify_staff_pin", {
     p_staff_code: staffCode,
     p_pin_plain:  pin,
-    p_shop_id:    shopId,
+    p_shop_code:  shopCode,
   });
 
   if (error) throw error;
@@ -162,23 +161,18 @@ export async function verifyStaffPin(
   const result = data as {
     success: boolean;
     reason?: string;
-    staff_id?: string;
+    token?: string;
     staff_code?: string;
-    full_name?: string;
-    role?: string;
-    shift?: string;
+    shop_name?: string;
   };
 
-  if (!result.success) return null;
+  if (!result.success || !result.token || !result.staff_code || !result.shop_name) return null;
 
   return {
-    success:   true,
-    staffId:   result.staff_id!,
-    staffCode: result.staff_code!,
-    fullName:  result.full_name!,
-    role:      result.role as StaffLoginResult["role"],
-    shift:     result.shift as StaffLoginResult["shift"],
-  } satisfies StaffLoginResult;
+    token: result.token,
+    staffCode: result.staff_code,
+    shopName: result.shop_name,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -857,5 +851,131 @@ export async function deleteShopProduct(productId: string): Promise<void> {
   const { error } = await supabase.rpc("archive_shop_product", {
     p_product_id: productId,
   });
+  if (error) throw error;
+}
+
+export const STAFF_SESSION_KEY = 'staff_session_token';
+
+export async function getLocalStaffSession(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(STAFF_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setLocalStaffSession(token: string): Promise<void> {
+  await AsyncStorage.setItem(STAFF_SESSION_KEY, token);
+}
+
+export async function clearLocalStaffSession(): Promise<void> {
+  await AsyncStorage.removeItem(STAFF_SESSION_KEY);
+}
+
+export async function endStaffSession(token: string) {
+  const { error } = await supabase.rpc("end_staff_session", { p_token: token });
+  if (error) throw error;
+}
+
+export async function getStaffProfile(token: string) {
+  const { data, error } = await supabase.rpc("get_staff_profile", { p_token: token });
+
+  if (error || !data?.success) {
+    return null;
+  }
+
+  return {
+    staffCode: data.staff_code as string,
+    shopName: data.shop_name as string,
+  };
+}
+
+export async function staffGetOrders(token: string, status?: string): Promise<ShopOrder[]> {
+  const { data, error } = await supabase.rpc('staff_get_orders', { p_token: token, p_status: status });
+  if (error) throw error;
+  return (data || []).map((row: any) => ({
+    id: row.id,
+    shopId: row.shop_id,
+    customerId: row.customer_id,
+    reference: row.id.substring(0,8), // fallback
+    pickupPin: '***',
+    status: row.status,
+    paymentMethod: 'card',
+    paymentStatus: 'paid',
+    customerName: row.customer_name,
+    customerPhone: row.customer_phone,
+    packingInstructions: '',
+    travelMethod: 'walking',
+    pickupStartAt: '',
+    pickupEndAt: '',
+    subtotalLkr: 0,
+    savingsLkr: 0,
+    serviceFeeLkr: 0,
+    totalLkr: row.total_lkr,
+    createdAt: row.created_at,
+    updatedAt: row.created_at,
+    acceptedAt: null,
+    packingStartedAt: null,
+    readyAt: null,
+  }));
+}
+
+export async function staffGetOrderDetails(token: string, orderId: string): Promise<ShopOrder> {
+  const { data, error } = await supabase.rpc('staff_get_order_details', { p_token: token, p_order_id: orderId });
+  if (error) throw error;
+  if (!data) throw new Error("Order not found");
+  const row: any = data;
+  return {
+    id: row.id,
+    shopId: '',
+    customerId: '',
+    reference: row.id.substring(0,8),
+    pickupPin: '***',
+    status: row.status,
+    paymentMethod: 'card',
+    paymentStatus: 'paid',
+    customerName: 'Customer',
+    customerPhone: '',
+    packingInstructions: '',
+    travelMethod: 'walking',
+    pickupStartAt: '',
+    pickupEndAt: '',
+    subtotalLkr: row.subtotal_lkr || 0,
+    savingsLkr: 0,
+    serviceFeeLkr: 0,
+    totalLkr: row.total_lkr || 0,
+    createdAt: row.created_at,
+    updatedAt: row.created_at,
+    acceptedAt: null,
+    packingStartedAt: null,
+    readyAt: null,
+    items: (row.items || []).map((item: any) => ({
+      id: item.id,
+      orderId: row.id,
+      productId: item.product_id,
+      productName: item.product_name,
+      productUnit: 'Unit',
+      imageUrl: null,
+      quantity: item.quantity,
+      unitPriceLkr: item.unit_price_lkr,
+      substitution: { type: 'call' },
+      isPacked: item.is_packed,
+      packedAt: null,
+    }))
+  };
+}
+
+export async function staffAcceptOrder(token: string, orderId: string): Promise<void> {
+  const { error } = await supabase.rpc('staff_accept_order', { p_token: token, p_order_id: orderId });
+  if (error) throw error;
+}
+
+export async function staffSetOrderStatus(token: string, orderId: string, status: string): Promise<void> {
+  const { error } = await supabase.rpc('staff_set_order_status', { p_token: token, p_order_id: orderId, p_status: status });
+  if (error) throw error;
+}
+
+export async function staffSetOrderItemPacked(token: string, orderItemId: string, packed: boolean): Promise<void> {
+  const { error } = await supabase.rpc('staff_set_order_item_packed', { p_token: token, p_order_item_id: orderItemId, p_packed: packed });
   if (error) throw error;
 }

@@ -9,7 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
+
 import { Alert } from "react-native";
+
+import { ShopSwitchModal } from "@/components/ShopSwitchModal";
 
 import { getProfile } from "@/services/authService";
 import {
@@ -29,6 +32,7 @@ import {
   setOrderStatus,
 } from "@/services/orderService";
 import { processDemoPayment } from "@/services/paymentService";
+
 import type {
   CartItem,
   CheckoutDraft,
@@ -36,7 +40,13 @@ import type {
   GroceryShop,
   SubstitutePreference,
 } from "@/types/cart";
-import type { Order, OrderAdditionItem, OrderStatus } from "@/types/order";
+
+import type {
+  Order,
+  OrderAdditionItem,
+  OrderStatus,
+} from "@/types/order";
+
 import { addProductToCart } from "@/utils/ordering";
 
 type Store = {
@@ -173,6 +183,16 @@ export function OrderingProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
+
+  type ShopSwitchPrompt = { currentShopName: string; newShopName: string } | null;
+  const [shopSwitchPrompt, setShopSwitchPrompt] = useState<ShopSwitchPrompt>(null);
+  const shopSwitchResolver = useRef<((confirmed: boolean) => void) | null>(null);
+
+  const askToSwitchShop = (currentShopName: string, newShopName: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      shopSwitchResolver.current = resolve;
+      setShopSwitchPrompt({ currentShopName, newShopName });
+    });
 
   const lock = useRef(false);
   const addInFlight = useRef(false);
@@ -363,7 +383,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
   };
 
   const addItem = async (requested: GroceryProduct): Promise<boolean> => {
-    const product = products.find((value) => value.id === requested.id);
+    let product = products.find((value) => value.id === requested.id);
 
     if (__DEV__) {
       console.log("[Cart] addItem entered", {
@@ -428,12 +448,75 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       );
     }
 
-    if (!product) {
+    const targetShopId = product?.shopId || requested.shopId || (requested as any).shop_id;
+
+    if (__DEV__) {
+      console.log("[Cart] add item check:", {
+        requestedId: requested.id,
+        requestedShopId: requested.shopId,
+        requestedAsAnyShopId: (requested as any).shop_id,
+        requestedAsAnyShopName: (requested as any).shop_name,
+        currentCartShopId: cart.length > 0 ? cart[0].product.shopId : "empty",
+        targetShopId,
+      });
+    }
+
+    if (!product && !targetShopId) {
       return blocked(
         "product-not-in-catalog",
         "Product unavailable",
         "This product is not available in the ordering catalog.",
       );
+    }
+
+    if (!product) {
+      product = {
+        id: requested.id,
+        shopId: targetShopId,
+        name: requested.name,
+        unit: requested.unit || (requested as any).unit || "",
+        price: requested.price || (requested as any).price_lkr || 0,
+        regularPrice: requested.regularPrice || (requested as any).regular_price_lkr || 0,
+        image: requested.image || (requested as any).image_url || ""
+      };
+    }
+
+    if (cart.length > 0) {
+      const currentShopId = cart[0].product.shopId;
+      if (currentShopId && targetShopId && currentShopId !== targetShopId) {
+        const currentShopName = shop && shop.id === currentShopId ? shop.name : "another shop";
+        const newShopName = (requested as any).shop_name || "this shop";
+
+        const confirmed = await askToSwitchShop(currentShopName, newShopName);
+
+        if (!confirmed) {
+          return false;
+        }
+
+        try {
+          addInFlight.current = true;
+          setAdding(true);
+
+          await enqueue(() => changeCart("clear"));
+          setCart([]);
+
+          if (__DEV__) {
+            console.log("[Cart] sending add RPC (switch)", product!.id);
+          }
+          await enqueue(() => changeCart("add", product!.id, 1));
+
+          await reload();
+
+          setCartSheetOpen(true);
+          return true;
+        } catch (e) {
+          mutationFailed(e, ++cartVersion.current);
+          return false;
+        } finally {
+          addInFlight.current = false;
+          setAdding(false);
+        }
+      }
     }
 
     // Keep shop/cart rules enforced by the server RPC.
@@ -443,29 +526,45 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     setError("");
 
     const version = ++cartVersion.current;
+    const wasEmpty = cart.length === 0;
 
     try {
       if (__DEV__) {
-        console.log("[Cart] sending add RPC", product.id);
+        console.log("[Cart] sending add RPC", product!.id);
       }
 
-      await enqueue(() => changeCart("add", product.id, 1));
+      await enqueue(() => changeCart("add", product!.id, 1));
 
       if (__DEV__) {
-        console.log("[Cart] add RPC succeeded", product.id);
+        console.log("[Cart] add RPC succeeded", product!.id);
       }
 
-      setCart((previous) => addProductToCart(previous, product));
+      setCart((previous) => addProductToCart(previous, product!));
 
-      setCartSheetOpen(true);
-
-      void loadWithTimeout(syncCart(version)).catch(() => {
+      try {
+        await loadWithTimeout(
+          (async () => {
+            await syncCart(version);
+            if (wasEmpty) {
+              const catalog = await loadCatalog();
+              if (version === cartVersion.current) {
+                setShop(catalog.shop);
+                setProducts(catalog.products);
+                setAlternatives(catalog.alternatives);
+              }
+            }
+          })()
+        );
+      } catch (e) {
+        if (__DEV__) console.warn("Could not refresh shop on first add", e);
         if (version === cartVersion.current) {
           setError(
             "Added to cart, but the cart could not be refreshed. Please try again.",
           );
         }
-      });
+      }
+
+      setCartSheetOpen(true);
 
       return true;
     } catch (cause) {
@@ -721,7 +820,24 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     reloadOrders,
   };
 
-  return createElement(Context.Provider, { value }, children);
+  return createElement(Context.Provider, { value },
+    children,
+    createElement(ShopSwitchModal, {
+      visible: !!shopSwitchPrompt,
+      currentShopName: shopSwitchPrompt?.currentShopName || "",
+      newShopName: shopSwitchPrompt?.newShopName || "",
+      onConfirm: () => {
+        if (shopSwitchResolver.current) shopSwitchResolver.current(true);
+        setShopSwitchPrompt(null);
+        shopSwitchResolver.current = null;
+      },
+      onCancel: () => {
+        if (shopSwitchResolver.current) shopSwitchResolver.current(false);
+        setShopSwitchPrompt(null);
+        shopSwitchResolver.current = null;
+      }
+    })
+  );
 }
 
 export function useCart(): Store {
