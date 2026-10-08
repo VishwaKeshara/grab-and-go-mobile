@@ -18,7 +18,7 @@ import {
 } from "@/services/adminNotificationService";
 import { listManagedUsers, ManagedUser } from "@/services/adminService";
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 type Form = AdminNotificationInput;
 const emptyForm: Form = {
@@ -39,6 +39,7 @@ export default function NotificationManagement() {
   const [success, setSuccess] = useState("");
   const [visible, setVisible] = useState(false);
   const [editing, setEditing] = useState<AdminNotification | null>(null);
+  const [deleting, setDeleting] = useState<AdminNotification | null>(null);
   const [form, setForm] = useState<Form>(emptyForm);
 
   const load = useCallback(async () => {
@@ -112,26 +113,25 @@ export default function NotificationManagement() {
   };
 
   const remove = (notification: AdminNotification) => {
-    Alert.alert("Delete notification", "This permanently removes this sent notification for every recipient.", [
-      { text: "Cancel", style: "cancel" },
-      {
-        text: "Delete",
-        style: "destructive",
-        onPress: async () => {
-          try {
-            const result = await deleteAdminNotification(notification.id);
-            setNotifications((items) => items.filter((item) =>
-              result.campaignId
-                ? item.campaign_id !== result.campaignId
-                : item.id !== notification.id,
-            ));
-            setSuccess("Notification deleted.");
-          } catch (deleteError) {
-            setError(deleteError instanceof Error ? deleteError.message : "Could not delete notification.");
-          }
-        },
-      },
-    ]);
+    setError("");
+    setDeleting(notification);
+  };
+
+  const confirmRemove = async () => {
+    if (!deleting) return;
+    const notification = deleting;
+    setDeleting(null);
+    try {
+      const result = await deleteAdminNotification(notification.id);
+      setNotifications((items) => items.filter((item) =>
+        result.campaignId
+          ? item.campaign_id !== result.campaignId
+          : item.id !== notification.id,
+      ));
+      setSuccess("Notification deleted.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not delete notification.");
+    }
   };
 
   const toggleRead = async (notification: AdminNotification) => {
@@ -170,6 +170,30 @@ export default function NotificationManagement() {
       ))}
       <SecondaryButton onPress={() => void load()}>Refresh notifications</SecondaryButton>
       <NotificationForm visible={visible} editing={Boolean(editing)} form={form} users={users} saving={saving} onChange={(changes) => setForm((current) => ({ ...current, ...changes }))} onClose={() => setVisible(false)} onSave={() => void save()} />
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(deleting)}
+        onRequestClose={() => setDeleting(null)}
+      >
+        <View style={styles.confirmBackdrop}>
+          <View style={styles.confirmCard}>
+            <Text style={styles.confirmEyebrow}>REMOVE MESSAGE</Text>
+            <Text style={styles.confirmTitle}>Delete notification?</Text>
+            <Text style={styles.confirmText}>
+              This permanently removes this sent notification for every recipient.
+            </Text>
+            <View style={styles.confirmActions}>
+              <Pressable onPress={() => setDeleting(null)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => void confirmRemove()} style={styles.confirmDeleteButton}>
+                <Text style={styles.confirmDeleteText}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AuthFrame>
   );
 }
@@ -246,4 +270,14 @@ const styles = StyleSheet.create({
   actionRow: { flexDirection: "row", gap: 7, marginTop: 11 }, actionButton: { backgroundColor: "#ECEEFC", borderRadius: 7, paddingHorizontal: 9, paddingVertical: 6 }, actionText: { color: colors.ink, fontSize: 9, fontWeight: "800" }, deleteButton: { backgroundColor: "#FFE8E4", borderRadius: 7, paddingHorizontal: 9, paddingVertical: 6 }, deleteText: { color: colors.coral, fontSize: 9, fontWeight: "800" },
   loading: { alignItems: "center", padding: 24 }, empty: { alignItems: "center", backgroundColor: "#F0F1FC", borderRadius: 14, padding: 22 }, emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" }, emptyText: { color: colors.muted, fontSize: 11, marginTop: 6, textAlign: "center" },
   backdrop: { backgroundColor: "rgba(17,15,61,0.5)", flex: 1, justifyContent: "flex-end" }, modal: { backgroundColor: colors.paper, borderTopLeftRadius: 22, borderTopRightRadius: 22, maxHeight: "94%", padding: 22 }, modalHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginBottom: 14 }, modalEyebrow: { color: "#0E8067", fontSize: 9, fontWeight: "800", letterSpacing: 1 }, modalTitle: { color: colors.ink, fontSize: 21, fontWeight: "900", marginTop: 3 }, close: { color: colors.ink, fontSize: 30 }, formLabel: { color: colors.ink, fontSize: 11, fontWeight: "700", marginBottom: 6 }, chips: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginBottom: 12 }, chip: { backgroundColor: "#ECEEFC", borderRadius: 14, paddingHorizontal: 9, paddingVertical: 6 }, chipActive: { backgroundColor: colors.ink }, chipText: { color: colors.ink, fontSize: 9, fontWeight: "700" }, chipTextActive: { color: colors.white },
+  confirmBackdrop: { alignItems: "center", backgroundColor: "rgba(17,15,61,0.55)", flex: 1, justifyContent: "center", padding: 22 },
+  confirmCard: { backgroundColor: colors.white, borderRadius: 18, padding: 22, width: "100%" },
+  confirmEyebrow: { color: colors.coral, fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  confirmTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", marginTop: 5 },
+  confirmText: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 8 },
+  confirmActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end", marginTop: 18 },
+  cancelButton: { backgroundColor: "#ECEEFC", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  cancelText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+  confirmDeleteButton: { backgroundColor: colors.coral, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  confirmDeleteText: { color: colors.white, fontSize: 10, fontWeight: "800" },
 });
