@@ -82,11 +82,12 @@ Deno.serve(async (request) => {
         .eq("id", id)
         .single();
       if (findError) throw findError;
-      const deleteQuery = adminClient.from("notifications").delete();
-      const { error } = notification.campaign_id
+      const deleteQuery = adminClient.from("notifications").delete().select("id");
+      const { data: deleted, error } = notification.campaign_id
         ? await deleteQuery.eq("campaign_id", notification.campaign_id)
         : await deleteQuery.eq("id", id);
       if (error) throw error;
+      if (!deleted?.length) throw new Error("Notification was already deleted.");
       return json({ success: true, campaignId: notification.campaign_id ?? null });
     }
     if (action === "mark-read") {

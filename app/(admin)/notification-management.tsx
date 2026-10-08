@@ -112,7 +112,7 @@ export default function NotificationManagement() {
   };
 
   const remove = (notification: AdminNotification) => {
-    Alert.alert("Delete notification", "This permanently removes the notification for the recipient.", [
+    Alert.alert("Delete notification", "This permanently removes this sent notification for every recipient.", [
       { text: "Cancel", style: "cancel" },
       {
         text: "Delete",
