@@ -18,7 +18,6 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
-  Alert,
   Modal,
   Pressable,
   StyleSheet,
@@ -50,6 +49,7 @@ export default function UserManagement() {
   const [success, setSuccess] = useState("");
   const [formVisible, setFormVisible] = useState(false);
   const [editingUser, setEditingUser] = useState<ManagedUser | null>(null);
+  const [deletingUser, setDeletingUser] = useState<ManagedUser | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
 
   const loadUsers = useCallback(async () => {
@@ -144,27 +144,21 @@ export default function UserManagement() {
   };
 
   const confirmDelete = (user: ManagedUser) => {
-    Alert.alert(
-      "Delete user",
-      `Delete ${user.full_name || user.email || "this account"} permanently? This also removes their authentication account.`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Delete",
-          style: "destructive",
-          onPress: async () => {
-            setError("");
-            try {
-              await deleteManagedUser(user.id);
-              setUsers((items) => items.filter((item) => item.id !== user.id));
-              setSuccess("User deleted successfully.");
-            } catch (deleteError) {
-              setError(deleteError instanceof Error ? deleteError.message : "Could not delete this user.");
-            }
-          },
-        },
-      ],
-    );
+    setError("");
+    setDeletingUser(user);
+  };
+
+  const deleteUser = async () => {
+    if (!deletingUser) return;
+    const user = deletingUser;
+    setDeletingUser(null);
+    try {
+      await deleteManagedUser(user.id);
+      setUsers((items) => items.filter((item) => item.id !== user.id));
+      setSuccess("User deleted successfully.");
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "Could not delete this user.");
+    }
   };
 
   return (
@@ -232,6 +226,30 @@ export default function UserManagement() {
         onClose={() => setFormVisible(false)}
         onSave={saveUser}
       />
+      <Modal
+        animationType="fade"
+        transparent
+        visible={Boolean(deletingUser)}
+        onRequestClose={() => setDeletingUser(null)}
+      >
+        <View style={styles.deleteBackdrop}>
+          <View style={styles.deleteCard}>
+            <Text style={styles.deleteEyebrow}>REMOVE ACCOUNT</Text>
+            <Text style={styles.deleteTitle}>Delete user?</Text>
+            <Text style={styles.deleteMessage}>
+              Delete {deletingUser?.full_name || deletingUser?.email || "this account"} permanently? This also removes their authentication account.
+            </Text>
+            <View style={styles.deleteActions}>
+              <Pressable onPress={() => setDeletingUser(null)} style={styles.cancelButton}>
+                <Text style={styles.cancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable onPress={() => void deleteUser()} style={styles.confirmDeleteButton}>
+                <Text style={styles.confirmDeleteText}>Delete</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </AuthFrame>
   );
 }
@@ -372,4 +390,14 @@ const styles = StyleSheet.create({
   modalTitle: { color: colors.ink, fontSize: 22, fontWeight: "900", marginTop: 3 },
   close: { color: colors.ink, fontSize: 30, fontWeight: "300" },
   formLabel: { color: colors.ink, fontSize: 11, fontWeight: "800", marginBottom: 7 },
+  deleteBackdrop: { alignItems: "center", backgroundColor: "rgba(17,15,61,0.55)", flex: 1, justifyContent: "center", padding: 22 },
+  deleteCard: { backgroundColor: colors.white, borderRadius: 18, padding: 22, width: "100%" },
+  deleteEyebrow: { color: colors.coral, fontSize: 9, fontWeight: "800", letterSpacing: 1 },
+  deleteTitle: { color: colors.ink, fontSize: 20, fontWeight: "900", marginTop: 5 },
+  deleteMessage: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 8 },
+  deleteActions: { flexDirection: "row", gap: 8, justifyContent: "flex-end", marginTop: 18 },
+  cancelButton: { backgroundColor: "#ECEEFC", borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  cancelText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+  confirmDeleteButton: { backgroundColor: colors.coral, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 9 },
+  confirmDeleteText: { color: colors.white, fontSize: 10, fontWeight: "800" },
 });
