@@ -1,90 +1,87 @@
+import { BrowseProductCard, toCartProduct } from "@/components/BrowseProductCard";
+import { canShowAlert } from "@/components/ShopSwitchModal";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
-import { homeFeaturedProducts, HOME_SHOP_NAME } from "@/services/cartService";
-import type { GroceryProduct } from "@/types/cart";
+import {
+  listBrowseCategories,
+  listNearbyShops,
+  listOffers,
+} from "@/services/discoveryService";
 import { getHomeContext } from "@/services/homeService";
+import type {
+  BrowseCategory,
+  DiscoveredProduct,
+  NearbyShop,
+} from "@/types/discovery";
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
-import type { ComponentProps } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
-    Alert,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Alert,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
 } from "react-native";
 
-type IconName = ComponentProps<typeof FontAwesome>["name"];
-type Category = { icon: IconName; label: string; tint: string };
-type Product = Pick<GroceryProduct, "name" | "unit" | "price" | "image"> & {
-  catalogProduct: GroceryProduct | null;
-  shop: string;
-  tag: string;
-  tagColor: string;
-};
-
-const categories: Category[] = [
-  { icon: "leaf", label: "Fresh produce", tint: colors.mintSoft },
-  { icon: "cutlery", label: "Rice & grains", tint: "#FFF0D5" },
-  { icon: "tint", label: "Dairy & chilled", tint: "#E8ECFF" },
-  { icon: "heart", label: "Spices & pantry", tint: "#FFE6E0" },
-  { icon: "shopping-basket", label: "Bakery & bites", tint: "#ECE8FF" },
-  { icon: "glass", label: "Beverages", tint: "#DFF7F1" },
-];
-
 export default function Home() {
-  const { addItem, adding, loading: cartLoading, error: cartError, products: catalogProducts, shop } = useCart();
-  const [homeAddError, setHomeAddError] = useState("");
-  const preferred = homeFeaturedProducts
-    .map(display => catalogProducts.find(value => value.name === display.name && value.shopId === shop?.id))
-    .filter((value): value is GroceryProduct => Boolean(value));
-  const featured = [...preferred, ...catalogProducts.filter(value => !preferred.some(item => item.id === value.id))]
-    .slice(0, homeFeaturedProducts.length);
-  const products: Product[] = featured.length ? featured.map((catalogProduct, index) => ({
-    ...catalogProduct,
-    image: catalogProduct.image || homeFeaturedProducts.find(value => value.name === catalogProduct.name)?.image || "",
-    catalogProduct,
-    shop: shop?.name ?? HOME_SHOP_NAME,
-    tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
-    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
-  })) : homeFeaturedProducts.map((display, index) => ({
-    ...display,
-    catalogProduct: null,
-    shop: HOME_SHOP_NAME,
-    tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
-    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
-  }));
-  const addFeaturedProduct = async (product: Product) => {
-    if (__DEV__) console.log("[Home cart] add callback", { product: product.name, productId: product.catalogProduct?.id ?? null });
-    if (!product.catalogProduct) {
-      const message = shop
-        ? `${product.name} is not available for ordering right now.`
-        : cartError || "Ordering is unavailable right now. Please try again later.";
-      setHomeAddError(message);
-      Alert.alert("Product unavailable", message);
-      return;
-    }
-    setHomeAddError("");
-    if (!await addItem(product.catalogProduct)) {
-      setHomeAddError("Could not add this product. Check your cart and try again.");
-    }
-  };
-  const [search, setSearch] = useState("");
+  const {
+    addItem,
+    adding,
+    loading: cartLoading,
+    error: cartError,
+    shop,
+  } = useCart();
+
   const [firstName, setFirstName] = useState("Dilshan");
   const [pickupHub, setPickupHub] = useState("Malabe Bazaar Hub");
+  const [categories, setCategories] = useState<BrowseCategory[]>([]);
+  const [shops, setShops] = useState<NearbyShop[]>([]);
+  const [offers, setOffers] = useState<DiscoveredProduct[]>([]);
+  const [addingId, setAddingId] = useState<string | null>(null);
+  const [addError, setAddError] = useState("");
+  const [browseError, setBrowseError] = useState("");
+  const [offersOnly, setOffersOnly] = useState(false);
+
+  /**
+   * The rails load together but independently.
+   *
+   * AllSettled rather than Promise.all so one failing query -- categories need a
+   * migration applied, say -- hides its own section instead of blanking the whole
+   * home screen. The remaining rails are still worth showing.
+   */
+  const loadRails = useCallback(() => {
+    Promise.allSettled([listBrowseCategories(), listNearbyShops()])
+      .then(([categoriesResult, shopsResult]) => {
+        if (categoriesResult.status === "fulfilled") {
+          setCategories(categoriesResult.value);
+        }
+        if (shopsResult.status === "fulfilled") {
+          setShops(shopsResult.value);
+        }
+
+        const failure = [categoriesResult, shopsResult].find(
+          (result) => result.status === "rejected",
+        );
+
+        setBrowseError(
+          failure?.status === "rejected" && failure.reason instanceof Error
+            ? failure.reason.message
+            : "",
+        );
+      })
+      .catch(() => {
+        // allSettled never rejects, so this is unreachable in practice. Kept so a
+        // future change to the query list cannot leave an unhandled rejection.
+        setBrowseError("We could not load what is near you right now.");
+      });
+  }, []);
 
   useEffect(() => {
-    if (__DEV__) console.log("[Home cart] add button state", {
-      cartLoading, adding, catalogCount: catalogProducts.length,
-      shopId: shop?.id ?? null, error: cartError || null,
-    });
-  }, [cartLoading, adding, catalogProducts.length, shop?.id, cartError]);
+    void loadRails();
 
-  useEffect(() => {
     getHomeContext()
       .then((context) => {
         if (!context) return;
@@ -92,7 +89,64 @@ export default function Home() {
         setPickupHub(context.pickupHub);
       })
       .catch(() => undefined);
-  }, []);
+  }, [loadRails]);
+
+  /**
+   * Offers is the one rail that reacts to a tap, so it loads separately from the
+   * rest and only refetches when the filter actually changes. The unfiltered pass
+   * runs once on mount so the section is populated before anyone taps.
+   */
+  useEffect(() => {
+    let active = true;
+
+    listOffers(offersOnly ? 20 : 6)
+      .then((products) => {
+        if (active) setOffers(products);
+      })
+      .catch(() => {
+        // A failed offers query just leaves the section empty; the rest of the
+        // home screen is unaffected and the user can still search.
+        if (active) setOffers([]);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [offersOnly]);
+
+  const handleAdd = async (product: DiscoveredProduct) => {
+    setAddingId(product.id);
+    setAddError("");
+
+    try {
+      const { added, reason } = await addItem(toCartProduct(product));
+
+      if (!added && reason) {
+        // addItem raises its own Alert on native. On web Alert.alert is a no-op,
+        // so this message is what the shopper actually sees there.
+        setAddError(reason);
+        if (canShowAlert()) {
+          Alert.alert("Could not add", reason);
+        }
+      }
+    } finally {
+      setAddingId(null);
+    }
+  };
+
+  const openShop = (target: NearbyShop) =>
+    router.push({
+      pathname: "/(customer)/shop-products",
+      params: { shopId: target.id, shopName: target.name },
+    });
+
+  const openCategory = (category: BrowseCategory) =>
+    router.push({
+      pathname: "/(customer)/category-products",
+      params: { categoryId: category.id, categoryName: category.name },
+    });
+
+  const shownOffers = offers.slice(0, 6);
 
   return (
     <View style={styles.screen}>
@@ -101,7 +155,7 @@ export default function Home() {
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.greetingRow}>
-          <View>
+          <View style={styles.greetingCopy}>
             <Text style={styles.kicker}>
               GOOD MORNING, {firstName.toUpperCase()}
             </Text>
@@ -122,14 +176,9 @@ export default function Home() {
           style={styles.searchBox}
         >
           <FontAwesome color={colors.muted} name="search" size={15} />
-          <TextInput
-            editable={false}
-            onChangeText={setSearch}
-            placeholder="Search groceries, shops or brands"
-            placeholderTextColor="#9693A6"
-            style={styles.searchInput}
-            value={search}
-          />
+          <Text style={styles.searchPlaceholder}>
+            Search groceries, shops or brands
+          </Text>
           <View style={styles.filterButton}>
             <FontAwesome color={colors.white} name="sliders" size={13} />
           </View>
@@ -139,10 +188,21 @@ export default function Home() {
           <QuickAction
             icon="bolt"
             label="Express pickup"
+            onPress={() => router.push("/(customer)/search")}
             tint={colors.mintSoft}
           />
-          <QuickAction icon="repeat" label="Buy again" tint="#FFF0D5" />
-          <QuickAction icon="map-marker" label="Nearby shops" tint="#E8ECFF" />
+          <QuickAction
+            icon="repeat"
+            label="Buy again"
+            onPress={() => router.push("/(customer)/my-orders")}
+            tint="#FFF0D5"
+          />
+          <QuickAction
+            icon="map-marker"
+            label="Nearby shops"
+            onPress={() => router.push("/(customer)/nearby-shops")}
+            tint="#E8ECFF"
+          />
         </View>
 
         <Pressable
@@ -150,101 +210,222 @@ export default function Home() {
           onPress={() => router.push("/(customer)/search")}
           style={styles.hero}
         >
-          <Image
-            accessibilityLabel="Fresh produce at a market"
-            contentFit="cover"
-            source="https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=1000&q=85"
-            style={styles.heroImage}
-            transition={250}
-          />
-          <View style={styles.heroShade} />
+          <View style={styles.heroGlow} />
           <View style={styles.heroContent}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>THIS WEEK</Text>
+            <View style={styles.heroColumn}>
+              <View style={styles.heroBadge}>
+                <Text style={styles.heroBadgeText}>THIS WEEK</Text>
+              </View>
+              <Text style={styles.heroTitle}>
+                Fresh picks,{"\n"}better prices.
+              </Text>
+              <Text style={styles.heroNote}>
+                Fresh produce from shops near {pickupHub}.
+              </Text>
+              <View style={styles.heroCta}>
+                <Text style={styles.heroCtaText}>Explore deals</Text>
+                <FontAwesome color={colors.ink} name="arrow-right" size={12} />
+              </View>
             </View>
-            <Text style={styles.heroTitle}>
-              Fresh picks,{"\n"}better prices.
-            </Text>
-            <Text style={styles.heroCopy}>
-              Hand-picked produce from shops near {pickupHub}.
-            </Text>
-            <View style={styles.heroCta}>
-              <Text style={styles.heroCtaText}>Explore deals</Text>
-              <FontAwesome color={colors.ink} name="arrow-right" size={12} />
-            </View>
+
+            {/* The source is 1:1, so a square frame shows the whole hamper
+                instead of slicing its top and bottom off. Kept beside the copy
+                rather than full-bleed behind it for the same reason. */}
+            <Image
+              accessibilityLabel="A grocery hamper ready for pickup"
+              contentFit="cover"
+              source="https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQGClgGmPf_quyvhv6vvHCTOFWL3pH7wypTqXKD1NcWXg&s=10"
+              style={styles.heroShot}
+              transition={250}
+            />
           </View>
         </Pressable>
 
+        {/* Categories come from product_categories, with the count of live
+            listings behind each one. Nothing here is hard-coded, so a category a
+            shop fills up shows up on its own. */}
         <SectionHeader
           title="Browse categories"
           action="See all"
           onPress={() => router.push("/(customer)/search")}
         />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryRow}
-        >
-          {categories.map((category) => (
-            <Pressable
-              key={category.label}
-              onPress={() => router.push("/(customer)/search")}
-              style={styles.category}
-            >
-              <View
-                style={[
-                  styles.categoryIcon,
-                  { backgroundColor: category.tint },
-                ]}
+
+        {categories.length ? (
+          <ScrollView
+            contentContainerStyle={styles.categoryRow}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {categories.map((category) => (
+              <Pressable
+                accessibilityLabel={`Browse ${category.name}`}
+                accessibilityRole="button"
+                key={category.id}
+                onPress={() => openCategory(category)}
+                style={styles.category}
               >
-                <FontAwesome
-                  color={colors.ink}
-                  name={category.icon}
-                  size={17}
-                />
-              </View>
-              <Text numberOfLines={2} style={styles.categoryLabel}>
-                {category.label}
-              </Text>
-            </Pressable>
-          ))}
-        </ScrollView>
+                <View
+                  style={[styles.categoryIcon, { backgroundColor: category.tint }]}
+                >
+                  <FontAwesome
+                    color={colors.ink}
+                    name={categoryIcon(category.icon)}
+                    size={17}
+                  />
+                </View>
+                <Text numberOfLines={2} style={styles.categoryLabel}>
+                  {category.name}
+                </Text>
+                <Text style={styles.categoryCount}>
+                  {category.productCount} item{category.productCount === 1 ? "" : "s"}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : (
+          <Text style={styles.railEmpty}>
+            Categories will appear here once shops list products.
+          </Text>
+        )}
+
+        {/* Offers, filtered live from customer_products.discount_*. The chip
+            toggles between the biggest cuts and everything on offer. */}
+        <SectionHeader
+          title="Offers near you"
+          action={offersOnly ? "All products" : "See all"}
+          onPress={() =>
+            offersOnly
+              ? setOffersOnly(false)
+              : router.push({ pathname: "/(customer)/search", params: { offers: "1" } })
+          }
+        />
+
+        <Pressable
+          accessibilityLabel={
+            offersOnly ? "Show only the biggest discounts" : "Show all offers"
+          }
+          accessibilityRole="switch"
+          accessibilityState={{ checked: offersOnly }}
+          onPress={() => setOffersOnly((value) => !value)}
+          style={[styles.offersToggle, offersOnly && styles.offersToggleOn]}
+        >
+          <FontAwesome
+            color={offersOnly ? colors.white : colors.coral}
+            name="tag"
+            size={11}
+          />
+          <Text style={[styles.offersToggleText, offersOnly && styles.offersToggleTextOn]}>
+            {offersOnly ? "Showing every discount" : "Biggest discounts first"}
+          </Text>
+        </Pressable>
+
+        {shownOffers.length ? (
+          <ScrollView
+            contentContainerStyle={styles.productRow}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+          >
+            {shownOffers.map((product) => (
+              <BrowseProductCard
+                addDisabled={cartLoading || adding}
+                addingId={addingId}
+                key={product.id}
+                mode="rail"
+                onAdd={handleAdd}
+                product={product}
+              />
+            ))}
+          </ScrollView>
+        ) : (
+          <Text style={styles.railEmpty}>
+            No discounts are running right now. Check back soon.
+          </Text>
+        )}
 
         <SectionHeader
           title="Popular near you"
-          action="View map"
-          onPress={() => router.push("/(customer)/search")}
+          action="All shops"
+          onPress={() => router.push("/(customer)/nearby-shops")}
         />
-        <View style={styles.shopCard}>
-          <View style={styles.shopIcon}>
-            <FontAwesome color={colors.ink} name="shopping-basket" size={18} />
-          </View>
-          <View style={styles.shopCopy}>
-            <View style={styles.shopTitleRow}>
-              <Text style={styles.shopName}>{HOME_SHOP_NAME}</Text>
-              <Text style={styles.open}>Open now</Text>
-            </View>
-            <Text style={styles.shopMeta}>0.8 km · Fresh produce & pantry</Text>
-            <Text style={styles.shopDelivery}>Free pickup from 4:30 PM</Text>
-          </View>
-          <FontAwesome color={colors.muted} name="chevron-right" size={12} />
-        </View>
 
-        <SectionHeader
-          title="Picked for your basket"
-          action="See all"
-          onPress={() => router.push("/(customer)/search")}
-        />
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.productRow}
-        >
-          {products.map((product) => (
-            <ProductCard key={product.name} product={product} onAdd={addFeaturedProduct} addingDisabled={cartLoading || adding} />
-          ))}
-        </ScrollView>
-        {(cartError || homeAddError) ? <Text style={styles.cartError}>{cartError || homeAddError}</Text> : null}
+        {shops.length ? (
+          <View style={styles.shopList}>
+            {shops.slice(0, 4).map((item) => {
+              const isCartShop = item.id === shop?.id;
+
+              return (
+                <Pressable
+                  accessibilityLabel={`Browse ${item.name}`}
+                  accessibilityRole="button"
+                  key={item.id}
+                  onPress={() => openShop(item)}
+                  style={({ pressed }) => [
+                    styles.shopCard,
+                    pressed && styles.pressed,
+                  ]}
+                >
+                  <View style={styles.shopIcon}>
+                    <FontAwesome
+                      color={colors.ink}
+                      name="shopping-basket"
+                      size={18}
+                    />
+                  </View>
+
+                  <View style={styles.shopCopy}>
+                    <View style={styles.shopTitleRow}>
+                      <Text numberOfLines={1} style={styles.shopName}>
+                        {item.name}
+                      </Text>
+                      <View
+                        style={[
+                          styles.pill,
+                          item.is_open ? styles.pillOpen : styles.pillShut,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.pillText,
+                            !item.is_open && styles.pillTextShut,
+                          ]}
+                        >
+                          {item.is_open ? "Open now" : "Closed"}
+                        </Text>
+                      </View>
+                    </View>
+
+                    <Text numberOfLines={1} style={styles.shopMeta}>
+                      {item.productCount} item{item.productCount === 1 ? "" : "s"} · Ready in{" "}
+                      {item.preparation_minutes} min · {item.pickup_counter}
+                    </Text>
+
+                    {isCartShop ? (
+                      <Text style={styles.shopDelivery}>Your current cart shop</Text>
+                    ) : item.offerCount > 0 ? (
+                      <Text style={styles.shopOffers}>
+                        {item.offerCount} offer{item.offerCount === 1 ? "" : "s"} on
+                      </Text>
+                    ) : (
+                      <Text style={styles.shopDelivery}>
+                        Pickup from {item.pickup_counter}
+                      </Text>
+                    )}
+                  </View>
+
+                  <FontAwesome color={colors.muted} name="chevron-right" size={12} />
+                </Pressable>
+              );
+            })}
+          </View>
+        ) : (
+          <Text style={styles.railEmpty}>
+            No shops are open for pickup yet. Check again shortly.
+          </Text>
+        )}
+
+        {addError ? <Text style={styles.cartError}>{addError}</Text> : null}
+        {!addError && cartError ? <Text style={styles.cartError}>{cartError}</Text> : null}
+        {browseError ? <Text style={styles.cartError}>{browseError}</Text> : null}
         <View style={styles.bottomSpace} />
       </ScrollView>
     </View>
@@ -255,16 +436,15 @@ function QuickAction({
   icon,
   label,
   tint,
+  onPress,
 }: {
-  icon: IconName;
+  icon: React.ComponentProps<typeof FontAwesome>["name"];
   label: string;
   tint: string;
+  onPress: () => void;
 }) {
   return (
-    <Pressable
-      onPress={() => router.push("/(customer)/search")}
-      style={styles.quickAction}
-    >
+    <Pressable onPress={onPress} style={styles.quickAction}>
       <View style={[styles.quickIcon, { backgroundColor: tint }]}>
         <FontAwesome color={colors.ink} name={icon} size={14} />
       </View>
@@ -292,37 +472,27 @@ function SectionHeader({
   );
 }
 
-function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onAdd: (product: Product) => void | Promise<void>; addingDisabled: boolean }) {
-  return (
-    <View style={styles.productCard}>
-      <View style={styles.productImageWrap}>
-        <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")} style={styles.productImageTouch}>
-          <Image contentFit="cover" source={product.image} style={styles.productImage} transition={200} />
-        </Pressable>
-        <View
-          style={[styles.productTag, { backgroundColor: product.tagColor }]}
-        >
-          <Text style={styles.productTagText}>{product.tag}</Text>
-        </View>
-        <Pressable accessibilityLabel={`Add ${product.name} to cart`} accessibilityRole="button" accessibilityState={{ disabled: addingDisabled }} disabled={addingDisabled} onPress={() => {
-          if (__DEV__) console.log("[Home ProductCard] + pressed", product.name);
-          onAdd(product);
-        }} style={[styles.addButton, addingDisabled && styles.addButtonDisabled]}>
-          <FontAwesome color={colors.white} name="plus" size={12} />
-        </Pressable>
-      </View>
-      <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")}>
-        <Text numberOfLines={1} style={styles.productName}>{product.name}</Text>
-      </Pressable>
-      <Text numberOfLines={1} style={styles.productShop}>
-        {product.shop}
-      </Text>
-      <View style={styles.priceRow}>
-        <Text style={styles.productPrice}>LKR {product.price.toLocaleString("en-LK")}</Text>
-        <Text style={styles.productUnit}>{product.unit}</Text>
-      </View>
-    </View>
-  );
+/**
+ * Maps a product_categories.icon onto a FontAwesome name.
+ *
+ * The seeded rows all say "basket", which would render six identical circles, so
+ * the category name is used to pick something distinguishable. Unknown names fall
+ * back to the basket rather than crashing on an icon that may not exist.
+ */
+function categoryIcon(icon: string): React.ComponentProps<typeof FontAwesome>["name"] {
+  const known: Record<string, React.ComponentProps<typeof FontAwesome>["name"]> = {
+    basket: "shopping-basket",
+    leaf: "leaf",
+    glass: "glass",
+    heart: "heart",
+    cutlery: "cutlery",
+    car: "car",
+    bolt: "bolt",
+    coffee: "coffee",
+    snowflake: "snowflake-o",
+  };
+
+  return known[icon] ?? "shopping-basket";
 }
 
 const styles = StyleSheet.create({
@@ -333,6 +503,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
+  greetingCopy: { flex: 1, minWidth: 0 },
   kicker: {
     color: "#07856A",
     fontSize: 10,
@@ -368,8 +539,8 @@ const styles = StyleSheet.create({
     marginTop: 18,
     paddingLeft: 15,
   },
-  searchInput: {
-    color: colors.ink,
+  searchPlaceholder: {
+    color: "#9693A6",
     flex: 1,
     fontSize: 12,
     paddingHorizontal: 10,
@@ -403,15 +574,37 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginLeft: 6,
   },
-  hero: { borderRadius: 22, height: 188, marginTop: 20, overflow: "hidden" },
-  heroImage: { height: "100%", position: "absolute", width: "100%" },
-  heroShade: {
-    backgroundColor: "rgba(19, 18, 61, 0.62)",
-    height: "100%",
-    position: "absolute",
-    width: "100%",
+  hero: {
+    backgroundColor: colors.ink,
+    borderRadius: 22,
+    marginTop: 20,
+    minHeight: 200,
+    overflow: "hidden",
   },
-  heroContent: { padding: 20 },
+  /* A soft mint wash stands in for a gradient, which keeps the card from
+     reading as a flat black block without pulling in another dependency. */
+  heroGlow: {
+    backgroundColor: colors.mint,
+    borderRadius: 95,
+    height: 190,
+    left: -60,
+    opacity: 0.13,
+    position: "absolute",
+    top: -55,
+    width: 190,
+  },
+  heroContent: {
+    alignItems: "center",
+    flexDirection: "row",
+    padding: 18,
+  },
+  heroColumn: { flex: 1, minWidth: 0 },
+  heroShot: {
+    aspectRatio: 1,
+    borderRadius: 16,
+    marginLeft: 14,
+    width: 148,
+  },
   heroBadge: {
     alignSelf: "flex-start",
     backgroundColor: colors.mint,
@@ -427,22 +620,22 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: colors.white,
-    fontSize: 25,
+    fontSize: 20,
     fontWeight: "900",
-    lineHeight: 27,
-    marginTop: 12,
+    lineHeight: 23,
+    marginTop: 11,
   },
-  heroCopy: { color: "#E9E8F6", fontSize: 10, marginTop: 7, maxWidth: 180 },
+  heroNote: { color: "#E9E8F6", fontSize: 9.5, lineHeight: 13, marginTop: 7 },
   heroCta: {
     alignItems: "center",
     backgroundColor: colors.white,
     borderRadius: 13,
     flexDirection: "row",
-    gap: 9,
-    marginTop: 14,
-    paddingHorizontal: 12,
+    gap: 8,
+    marginTop: 13,
+    paddingHorizontal: 11,
     paddingVertical: 8,
-    width: 112,
+    width: 106,
   },
   heroCtaText: { color: colors.ink, fontSize: 10, fontWeight: "900" },
   sectionHeader: {
@@ -454,7 +647,7 @@ const styles = StyleSheet.create({
   sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
   sectionAction: { color: "#07856A", fontSize: 10, fontWeight: "900" },
   categoryRow: { gap: 12, paddingTop: 14 },
-  category: { alignItems: "center", width: 68 },
+  category: { alignItems: "center", width: 70 },
   categoryIcon: {
     alignItems: "center",
     borderRadius: 18,
@@ -470,6 +663,30 @@ const styles = StyleSheet.create({
     marginTop: 7,
     textAlign: "center",
   },
+  categoryCount: { color: colors.muted, fontSize: 8, marginTop: 3 },
+  railEmpty: {
+    color: colors.muted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 13,
+    paddingHorizontal: 2,
+  },
+  offersToggle: {
+    alignItems: "center",
+    alignSelf: "flex-start",
+    backgroundColor: "#FFF0ED",
+    borderRadius: 14,
+    flexDirection: "row",
+    gap: 5,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  offersToggleOn: { backgroundColor: colors.ink },
+  offersToggleText: { color: colors.coral, fontSize: 10, fontWeight: "900" },
+  offersToggleTextOn: { color: colors.white },
+  productRow: { gap: 12, paddingTop: 13 },
+  shopList: { gap: 11, marginTop: 13 },
   shopCard: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -477,9 +694,9 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     flexDirection: "row",
-    marginTop: 13,
     padding: 13,
   },
+  pressed: { opacity: 0.75 },
   shopIcon: {
     alignItems: "center",
     backgroundColor: colors.mintSoft,
@@ -488,76 +705,17 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 42,
   },
-  shopCopy: { flex: 1, marginLeft: 11 },
-  shopTitleRow: { alignItems: "center", flexDirection: "row" },
-  shopName: { color: colors.ink, fontSize: 12, fontWeight: "900" },
-  open: {
-    backgroundColor: colors.mintSoft,
-    borderRadius: 5,
-    color: "#07856A",
-    fontSize: 8,
-    fontWeight: "900",
-    marginLeft: 7,
-    paddingHorizontal: 5,
-    paddingVertical: 3,
-  },
+  shopCopy: { flex: 1, marginLeft: 11, minWidth: 0 },
+  shopTitleRow: { alignItems: "center", flexDirection: "row", gap: 7 },
+  shopName: { color: colors.ink, flexShrink: 1, fontSize: 12, fontWeight: "900" },
+  pill: { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3 },
+  pillOpen: { backgroundColor: colors.mintSoft },
+  pillShut: { backgroundColor: colors.lilac },
+  pillText: { color: "#07856A", fontSize: 8, fontWeight: "900" },
+  pillTextShut: { color: colors.muted },
   shopMeta: { color: colors.muted, fontSize: 9, marginTop: 4 },
-  shopDelivery: {
-    color: "#07856A",
-    fontSize: 9,
-    fontWeight: "800",
-    marginTop: 5,
-  },
-  productRow: { gap: 12, paddingTop: 13 },
-  productCard: {
-    backgroundColor: colors.white,
-    borderColor: colors.line,
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 8,
-    width: 150,
-  },
-  productImageWrap: {
-    borderRadius: 11,
-    height: 112,
-    overflow: "hidden",
-    position: "relative",
-  },
-  productImageTouch: { height: "100%", width: "100%" },
-  productImage: { height: "100%", width: "100%" },
-  productTag: {
-    borderRadius: 5,
-    left: 6,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
-    position: "absolute",
-    top: 6,
-  },
-  productTagText: { color: colors.ink, fontSize: 7, fontWeight: "900" },
-  addButton: {
-    alignItems: "center",
-    backgroundColor: colors.ink,
-    borderColor: colors.white,
-    borderRadius: 19,
-    borderWidth: 2,
-    bottom: 5,
-    height: 38,
-    justifyContent: "center",
-    position: "absolute",
-    right: 5,
-    width: 38,
-  },
-  addButtonDisabled: { opacity: 0.45 },
+  shopDelivery: { color: "#07856A", fontSize: 9, fontWeight: "800", marginTop: 5 },
+  shopOffers: { color: colors.coral, fontSize: 9, fontWeight: "800", marginTop: 5 },
   cartError: { color: "#A43A32", fontSize: 12, marginTop: 10 },
-  productName: {
-    color: colors.ink,
-    fontSize: 11,
-    fontWeight: "900",
-    marginTop: 9,
-  },
-  productShop: { color: colors.muted, fontSize: 9, marginTop: 3 },
-  priceRow: { alignItems: "baseline", flexDirection: "row", marginTop: 7 },
-  productPrice: { color: colors.ink, fontSize: 12, fontWeight: "900" },
-  productUnit: { color: colors.muted, fontSize: 8, marginLeft: 4 },
   bottomSpace: { height: 105 },
 });

@@ -90,6 +90,17 @@ export interface InventoryItem {
   /** Computed client-side — not stored in the database. */
   stockStatus: StockStatus;
 }
+/**
+ * Which of the two discount options a shop picked.
+ *
+ *   "percent" → discount_percent is the applied value, 0-100
+ *   "fixed"   → discount_amount_lkr is the applied value, whole rupees off
+ *
+ * Only one option is ever stored on a row. null means no discount.
+ * Added by migration 021; see supabase/migrations/021_product_fixed_discount.sql.
+ */
+export type DiscountType = "percent" | "fixed";
+
 export type Product = {
   id: string;
   shop_id: string;
@@ -100,9 +111,17 @@ export type Product = {
   price: number;
   stock_quantity: number;
   image_url: string | null;
+  /** FK to product_categories.id, nullable when a product is uncategorised. */
+  category_id?: string | null;
   is_available: boolean;
   active?: boolean;
   regular_price?: number;
+  /** Discount applied, 0-100. Added by migration 019. */
+  discount_percent?: number | null;
+  /** Which discount option is stored. Added by migration 021. */
+  discount_type?: DiscountType | null;
+  /** Whole rupees off, used only when discount_type is "fixed". Migration 021. */
+  discount_amount_lkr?: number | null;
   created_at: string;
   updated_at: string;
 };
@@ -143,6 +162,20 @@ export type ProductFilters = {
   maxPrice?: number;
   inStockOnly?: boolean;
   sort?: ProductSort;
+  /**
+   * product_categories.id, for the customer browse screens.
+   *
+   * Distinct from `category`, which matches the legacy free-text `category`
+   * column on the old products table and is used by the legacy searchProducts().
+   */
+  categoryId?: string;
+  /**
+   * Only listings running a discount. Drives the Offers filter.
+   * @see utils/discounts.ts
+   */
+  offersOnly?: boolean;
+  /** Set by discoveryService so a screen can tell which extra fields it can use. */
+  supportsCategoryId?: boolean;
 };
 
 export type ProductSort = "relevance" | "price_asc" | "price_desc" | "name";

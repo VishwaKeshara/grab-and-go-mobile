@@ -11,16 +11,21 @@ const items = [
   { icon: "user", label: "Profile", path: "/profile" },
 ] as const;
 
+// Screens that drill into a shop or category are browsing, not a tab, so the
+// bottom bar stays out of the way and the screen's own back button is the way out.
 const hiddenPaths = [
   "/add-more-items",
   "/cart",
+  "/category-products",
   "/checkout",
+  "/nearby-shops",
   "/order-confirmation",
   "/order-details",
   "/order-tracking",
   "/payment",
   "/pickup-schedule",
   "/product-details",
+  "/shop-products",
   "/substitute-selection",
 ];
 

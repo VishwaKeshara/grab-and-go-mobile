@@ -20,7 +20,7 @@ data into a different environment.
 
 | File | Rows | Notes |
 |---|---|---|
-| `product_categories.csv` | 6 | Fruits, Vegetables, Dairy & Chilled, Pantry Staples, Beverages, Household |
+| `product_categories.csv` | 6 | Fruits, Vegetables, Dairy & Chilled, Pantry & Dry Goods, Beverages, Biscuits & Snacks |
 | `settlement_batches.csv` | 1 | LankaPay Batch #992-BOC, LKR 384,200 |
 | `node_metrics.csv` | 7 | One row per day for the SLA sparkline |
 | `report_manifests.csv` | 4 | The four manifest cards on Reports |

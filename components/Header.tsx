@@ -8,7 +8,9 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 const focusedPaths = [
   "/add-more-items",
   "/cart",
+  "/category-products",
   "/checkout",
+  "/nearby-shops",
   "/notifications",
   "/my-orders",
   "/order-confirmation",
@@ -18,6 +20,7 @@ const focusedPaths = [
   "/pickup-schedule",
   "/product-details",
   "/profile",
+  "/shop-products",
   "/substitute-selection",
 ];
 

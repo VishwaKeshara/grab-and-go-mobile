@@ -185,14 +185,17 @@ grant select, insert, update, delete on public.support_tickets to authenticated;
 
 -- ------------------------------------------------------------------ seeds
 
+-- Names are the client's final wording: "Pantry Staples" and "Household" were
+-- both renamed. Seeding the old names here would only leave migration 019 with
+-- two rows to rename for no reason.
 insert into public.product_categories (name, slug, icon, tint, sort_order)
 values
   ('Fruits', 'fruits', 'basket', '#EF7E69', 10),
   ('Vegetables', 'vegetables', 'basket', '#55E5BA', 20),
   ('Dairy & Chilled', 'dairy-chilled', 'basket', '#8B7BF0', 30),
-  ('Pantry Staples', 'pantry-staples', 'basket', '#F6B84B', 40),
+  ('Pantry & Dry Goods', 'pantry-dry-goods', 'basket', '#F6B84B', 40),
   ('Beverages', 'beverages', 'basket', '#5B7CFA', 50),
-  ('Household', 'household', 'basket', '#171543', 60)
+  ('Biscuits & Snacks', 'biscuits-snacks', 'basket', '#171543', 60)
 on conflict (slug) do update set
   name = excluded.name,
   icon = excluded.icon,

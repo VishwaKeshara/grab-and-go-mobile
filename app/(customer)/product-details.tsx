@@ -1,437 +1,765 @@
-import {
-  AuthFrame,
-  AuthHeader,
-  ErrorBanner,
-  PrimaryButton,
-} from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
-import {
-  addFavourite,
-  createProductReview,
-  getProduct,
-  listFavouriteIds,
-  listProductReviews,
-  removeFavourite,
-} from "@/services/productService";
-import type { ProductWithShop, Review } from "@/types/product";
-import { useLocalSearchParams } from "expo-router";
-import { useCallback, useEffect, useState } from "react";
+import { Image } from "expo-image";
+import { useLocalSearchParams, router } from "expo-router";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
-import { formatCurrency, formatRelativeTime } from "@/utils/formatters";
+import {
+  addFavourite,
+  getProduct,
+  listFavouriteIds,
+  removeFavourite,
+} from "@/services/productService";
+import {
+  compareAcrossShops,
+  type ComparisonResult,
+  type ShopOffer,
+} from "@/services/productComparisonService";
+import type { ProductWithShop } from "@/types/product";
+import type { GroceryProduct } from "@/types/cart";
+import { useCart } from "@/hooks/useCart";
+import { supabase } from "@/lib/supabase";
+import { formatCurrency } from "@/utils/formatters";
+
+/**
+ * Product Details (Member 2).
+ *
+ * Shows one product plus what every other active shop charges for the same or
+ * a related item. See productComparisonService for how listings are matched --
+ * customer_products has no shared catalogue id, so matching is name based and
+ * the two tiers are labelled separately.
+ */
+
+type UnitPrice = { amount: number; label: string };
+
+/**
+ * Price per base unit, e.g. 490 rupees for "200g" is LKR 2,450 / kg.
+ * Grams are converted to kilograms and millilitres to litres so the figure is
+ * comparable across products.
+ */
+function unitPriceOf(priceLkr: number, unit: string): UnitPrice | null {
+    const match = /^(\d+(?:\.\d+)?)\s*(kg|kgs|g|grams?|l|ltr|litre|liter|litres|ml)?/i.exec(
+        unit.trim(),
+    );
+    if (!match) return null;
+
+    const amount = Number(match[1]);
+    const kind = (match[2] ?? "").toLowerCase();
+
+    if (!amount || amount <= 0) return null;
+
+    if (kind.startsWith("g")) return { amount: priceLkr / (amount / 1000), label: "kg" };
+    if (kind === "ml") return { amount: priceLkr / (amount / 1000), label: "L" };
+    if (kind.startsWith("l")) return { amount: priceLkr / amount, label: "L" };
+    if (kind.startsWith("k")) return { amount: priceLkr / amount, label: "kg" };
+
+    return { amount: priceLkr / amount, label: "unit" };
+}
 
 export default function ProductDetails() {
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const [product, setProduct] = useState<ProductWithShop | null>(null);
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [isFavourite, setIsFavourite] = useState(false);
-  const [rating, setRating] = useState(0);
-  const [comment, setComment] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [savingFavourite, setSavingFavourite] = useState(false);
-  const [error, setError] = useState("");
-  const [notice, setNotice] = useState("");
+    const { id } = useLocalSearchParams<{ id: string }>();
 
-  useEffect(() => {
-    if (!id) return;
+    const [product, setProduct] = useState<ProductWithShop | null>(null);
+    const [comparison, setComparison] = useState<ComparisonResult | null>(null);
+    const [isFavourite, setIsFavourite] = useState(false);
+    const [quantity, setQuantity] = useState(1);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [notice, setNotice] = useState("");
+    const [needsSignIn, setNeedsSignIn] = useState(false);
+    const [ordering, setOrdering] = useState(false);
 
-    let active = true;
-    getProduct(id)
-      .then((item) => {
-        if (active) setProduct(item);
-      })
-      .catch((loadError) => {
-        if (active)
-          setError(
-            loadError instanceof Error
-              ? loadError.message
-              : "We could not load this product.",
-          );
-      })
-      .finally(() => {
-        if (active) setLoading(false);
-      });
+    const { addItem, setQuantity: setCartQuantity } = useCart();
 
-    listProductReviews(id)
-      .then((items) => {
-        if (active) setReviews(items);
-      })
-      .catch(() => undefined);
+    const load = useCallback(() => {
+        // Every state update happens inside a promise callback. Setting state
+        // directly in this function would cascade a render when the effect below
+        // calls it.
+        const run = id
+            ? getProduct(id).then((item: ProductWithShop) => {
+                  setProduct(item);
 
-    listFavouriteIds()
-      .then((ids) => {
-        if (active) setIsFavourite(ids.includes(id));
-      })
-      .catch(() => undefined);
+                  // Comparison is secondary: if it fails the product still shows.
+                  return compareAcrossShops(item.name, item.shop_id, item.price)
+                      .then(setComparison)
+                      .catch(() => setComparison(null));
+              })
+            : Promise.reject(new Error("No product was selected."));
 
-    return () => {
-      active = false;
+        run.catch((loadError: unknown) => {
+            setError(
+                loadError instanceof Error
+                    ? loadError.message
+                    : "We could not load this product.",
+            );
+        }).finally(() => setLoading(false));
+    }, [id]);
+
+    useEffect(() => {
+        load();
+    }, [load]);
+
+    useEffect(() => {
+        listFavouriteIds()
+            .then((ids) => setIsFavourite(ids.includes(id)))
+            // Favourites need a signed-in user; ignoring the failure keeps the
+            // page usable for guests.
+            .catch(() => undefined);
+    }, [id]);
+
+    const toggleFavourite = async () => {
+        if (!id) return;
+
+        const next = !isFavourite;
+        setIsFavourite(next);
+        setNotice("");
+
+        try {
+            if (next) {
+                await addFavourite(id);
+            } else {
+                await removeFavourite(id);
+            }
+        } catch (favError) {
+            setIsFavourite(!next);
+            setNotice(
+                favError instanceof Error
+                    ? favError.message
+                    : "Sign in to save favourites.",
+            );
+        }
     };
-  }, [id]);
 
-  const toggleFavourite = useCallback(async () => {
-    if (!id || savingFavourite) return;
-    const next = !isFavourite;
-    setIsFavourite(next);
-    setSavingFavourite(true);
-    setError("");
-    try {
-      if (next) await addFavourite(id);
-      else await removeFavourite(id);
-    } catch (favError) {
-      setIsFavourite(!next);
-      setError(
-        favError instanceof Error
-          ? favError.message
-          : "We could not update your favourites.",
-      );
-    } finally {
-      setSavingFavourite(false);
+    const unitPrice = useMemo(() => {
+        if (!product) return null;
+        return unitPriceOf(product.price, product.unit);
+    }, [product]);
+
+    /**
+     * Adds the product to the cart then opens it.
+     *
+     * addItem reports `added: false` when it refuses -- an empty catalog because
+     * the user is signed out, a checkout lock, or a declined shop switch -- and
+     * shows its own alert in those cases. Only navigate once it reports success,
+     * otherwise the cart would open empty.
+     */
+    const placePreOrder = async () => {
+        if (!product || ordering) return;
+
+        setOrdering(true);
+        setNotice("");
+
+        // The cart belongs to a user account, so a guest cannot start an order.
+        // Checking here gives a clear reason instead of addItem's generic
+        // refusal, which also fires an Alert on native.
+        const { data: sessionData } = await supabase.auth.getSession();
+        if (!sessionData.session) {
+            setOrdering(false);
+            setNeedsSignIn(true);
+            setNotice("Sign in to place an order.");
+            return;
+        }
+
+        const addable: GroceryProduct = {
+            id: product.id,
+            shopId: product.shop_id,
+            name: product.name,
+            unit: product.unit,
+            price: product.price,
+            regularPrice: product.regular_price ?? product.price,
+            image: product.image_url ?? "",
+        };
+
+        try {
+            const { added, reason } = await addItem(addable);
+            if (!added) {
+                // A declined shop switch reports no reason -- that was the
+                // shopper's choice, so nothing is shown.
+                setNotice(reason || "That item could not be added to your cart.");
+                return;
+            }
+
+            // addItem always adds a single unit, so apply the stepper choice.
+            if (quantity > 1) setCartQuantity(product.id, quantity);
+
+            router.push("/(customer)/cart");
+        } catch (orderError) {
+            setNotice(
+                orderError instanceof Error
+                    ? orderError.message
+                    : "We could not start that order.",
+            );
+        } finally {
+            setOrdering(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <View style={styles.centre}>
+                <ActivityIndicator color={colors.ink} size="large" />
+                <Text style={styles.muted}>Loading product...</Text>
+            </View>
+        );
     }
-  }, [id, isFavourite, savingFavourite]);
 
-  const submitReview = async () => {
-    if (!id) return;
-    if (rating === 0) {
-      setError("Choose a star rating before posting your review.");
-      return;
-    }
-
-    setSubmitting(true);
-    setError("");
-    setNotice("");
-    try {
-      await createProductReview(id, rating, comment);
-      setReviews(await listProductReviews(id));
-      setComment("");
-      setRating(0);
-      setNotice("✓ Review posted");
-    } catch (reviewError) {
-      setError(
-        reviewError instanceof Error
-          ? reviewError.message
-          : "We could not post your review.",
-      );
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const averageRating =
-    reviews.length > 0
-      ? reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length
-      : 0;
-
-  const missingId = !id;
-  const showLoading = loading && !missingId;
-
-  return (
-    <AuthFrame>
-      <AuthHeader title="Product Details" />
-      {missingId ? (
-        <ErrorBanner message="This product could not be found." />
-      ) : error ? (
-        <ErrorBanner message={error} />
-      ) : null}
-      {showLoading ? (
-        <View style={styles.loading}>
-          <ActivityIndicator color={colors.ink} />
-          <Text style={styles.loadingText}>Loading product...</Text>
-        </View>
-      ) : product ? (
-        <>
-          <View style={styles.hero}>
-            <View style={styles.heroThumb}>
-              <Text style={styles.heroThumbText}>
-                {product.name.slice(0, 1)}
-              </Text>
-            </View>
-            <View style={styles.heroCopy}>
-              <Text style={styles.category}>{product.category}</Text>
-              <Text style={styles.name}>{product.name}</Text>
-              <Text style={styles.shop}>🏪 {product.shop_name}</Text>
-              <Text style={styles.price}>{formatCurrency(product.price)}</Text>
-              <Text style={styles.unit}>per {product.unit}</Text>
-            </View>
-          </View>
-          <Pressable
-            accessibilityRole="button"
-            onPress={toggleFavourite}
-            style={({ pressed }) => [
-              styles.favourite,
-              isFavourite && styles.favouriteOn,
-              pressed && styles.pressed,
-            ]}
-          >
-            <Text style={[styles.favouriteText, isFavourite && styles.favouriteTextOn]}>
-              {isFavourite ? "♥ Saved to favourites" : "♡ Add to favourites"}
-            </Text>
-          </Pressable>
-          <View style={styles.metaRow}>
-            <View style={styles.metaCard}>
-              <Text style={styles.metaLabel}>Availability</Text>
-              <Text
-                style={[
-                  styles.metaValue,
-                  product.stock_quantity === 0 && styles.metaValueWarn,
-                ]}
-              >
-                {product.stock_quantity === 0
-                  ? "Out of stock"
-                  : `${product.stock_quantity} ${product.unit} left`}
-              </Text>
-            </View>
-            <View style={styles.metaCard}>
-              <Text style={styles.metaLabel}>Rating</Text>
-              <Text style={styles.metaValue}>
-                {reviews.length > 0
-                  ? `${averageRating.toFixed(1)} ★ (${reviews.length})`
-                  : "No reviews yet"}
-              </Text>
-            </View>
-          </View>
-          <Text style={styles.sectionTitle}>About this product</Text>
-          <Text style={styles.description}>
-            {product.description || "No description provided for this product."}
-          </Text>
-          <Text style={styles.sectionTitle}>
-            Reviews {reviews.length > 0 ? `(${reviews.length})` : ""}
-          </Text>
-          <View style={styles.reviewForm}>
-            <Text style={styles.formLabel}>Your rating</Text>
-            <View style={styles.stars}>
-              {[1, 2, 3, 4, 5].map((value) => (
-                <Pressable
-                  accessibilityLabel={`${value} star${value === 1 ? "" : "s"}`}
-                  key={value}
-                  onPress={() => setRating(value)}
-                  style={styles.star}
-                >
-                  <Text
-                    style={[
-                      styles.starText,
-                      value <= rating && styles.starTextOn,
-                    ]}
-                  >
-                    ★
-                  </Text>
+    if (!product) {
+        return (
+            <View style={styles.centre}>
+                <Text style={styles.emptyTitle}>Product unavailable</Text>
+                <Text style={styles.muted}>{error}</Text>
+                <Pressable onPress={() => router.back()} style={styles.backAction}>
+                    <Text style={styles.backActionText}>Go back</Text>
                 </Pressable>
-              ))}
             </View>
-            <TextInput
-              multiline
-              onChangeText={setComment}
-              placeholder="Share your experience with this product"
-              placeholderTextColor="#9A98AA"
-              style={styles.comment}
-              value={comment}
-            />
-            <PrimaryButton loading={submitting} onPress={submitReview}>
-              Post review
-            </PrimaryButton>
-            {notice ? <Text style={styles.notice}>{notice}</Text> : null}
-          </View>
-          {reviews.map((review) => (
-            <View key={review.id} style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <Text style={styles.reviewStars}>
-                  {"★".repeat(review.rating)}
-                  <Text style={styles.reviewStarsOff}>
-                    {"★".repeat(5 - review.rating)}
-                  </Text>
-                </Text>
-                <Text style={styles.reviewTime}>
-                  {formatRelativeTime(review.created_at)}
-                </Text>
-              </View>
-              {review.comment ? (
-                <Text style={styles.reviewComment}>{review.comment}</Text>
-              ) : null}
+        );
+    }
+
+    const saving = (product.regular_price ?? product.price) > product.price;
+    const savedLkr = saving ? (product.regular_price ?? product.price) - product.price : 0;
+    const inStock = product.stock_quantity > 0 && product.is_available !== false;
+
+    const sameNameOthers = (comparison?.sameName ?? []).filter((o) => !o.isCurrent);
+    const similarOthers = (comparison?.similar ?? []).filter((o) => !o.isCurrent);
+    const totalLkr = product.price * quantity;
+
+    return (
+        <View style={styles.screen}>
+            <View style={styles.header}>
+                <Pressable
+                    accessibilityLabel="Go back"
+                    onPress={() => router.back()}
+                    style={styles.iconButton}
+                >
+                    <Text style={styles.headerIcon}>←</Text>
+                </Pressable>
+                <Text style={styles.headerTitle}>Product Details</Text>
+                <Pressable
+                    accessibilityLabel={isFavourite ? "Remove from favourites" : "Save to favourites"}
+                    onPress={toggleFavourite}
+                    style={styles.iconButton}
+                >
+                    <Text style={styles.headerIcon}>{isFavourite ? "♥" : "♡"}</Text>
+                </Pressable>
             </View>
-          ))}
-        </>
-      ) : (
-        <View style={styles.empty}>
-          <Text style={styles.emptyIcon}>▣</Text>
-          <Text style={styles.emptyTitle}>Product unavailable</Text>
-          <Text style={styles.emptyText}>
-            This product may have been removed or is not currently listed.
-          </Text>
+
+            <ScrollView contentContainerStyle={styles.body}>
+                <View style={styles.hero}>
+                    {product.image_url ? (
+                        <Image
+                            contentFit="contain"
+                            source={{ uri: product.image_url }}
+                            style={styles.heroImage}
+                            transition={200}
+                        />
+                    ) : (
+                        <View style={styles.heroPlaceholder}>
+                            <Text style={styles.heroPlaceholderText}>
+                                {product.name.slice(0, 1)}
+                            </Text>
+                        </View>
+                    )}
+                </View>
+
+                <View style={styles.titleBlock}>
+                    <Text style={styles.name}>{product.name}</Text>
+                    <Text style={styles.subtitle}>
+                        {product.unit ? `${product.unit} pack` : "Pack"}
+                        {product.shop_name ? ` · ${product.shop_name}` : ""}
+                    </Text>
+                </View>
+
+                <View style={styles.priceCard}>
+                    <View style={styles.priceRow}>
+                        <Text style={styles.priceMain}>{formatCurrency(product.price)}</Text>
+                        {saving ? (
+                            <View style={styles.saveBadge}>
+                                <Text style={styles.saveBadgeText}>Save {formatCurrency(savedLkr)}</Text>
+                            </View>
+                        ) : null}
+                    </View>
+
+                    {saving ? (
+                        <Text style={styles.wasPrice}>{formatCurrency((product.regular_price ?? product.price))}</Text>
+                    ) : null}
+
+                    {unitPrice ? (
+                        <Text style={styles.unitPrice}>
+                            Unit price: {formatCurrency(Math.round(unitPrice.amount))} /{" "}
+                            {unitPrice.label}
+                        </Text>
+                    ) : null}
+
+                    {notice ? (
+                        <View style={styles.noticeRow}>
+                            <Text style={styles.notice}>{notice}</Text>
+                            {needsSignIn ? (
+                                <Pressable
+                                    onPress={() => router.replace("/(auth)/login")}
+                                    style={styles.signInButton}
+                                >
+                                    <Text style={styles.signInText}>Sign in</Text>
+                                </Pressable>
+                            ) : null}
+                        </View>
+                    ) : null}
+                </View>
+
+                <View style={styles.stockCard}>
+                    <View style={styles.stockHead}>
+                        <Text style={styles.stockBadge}>
+                            {inStock ? "IN STOCK" : "OUT OF STOCK"}
+                        </Text>
+                        {inStock ? (
+                            <Text style={styles.stockCount}>
+                                {product.stock_quantity} left
+                            </Text>
+                        ) : null}
+                    </View>
+                    <Text style={styles.stockLine}>
+                        Counter: {product.shop_name}
+                        {product.unit ? ` · ${product.unit}` : ""}
+                    </Text>
+                    <Text style={styles.stockFoot}>
+                        {inStock
+                            ? "Pickup from this shop"
+                            : "Hidden from customer search until restocked"}
+                    </Text>
+                </View>
+
+                {error ? (
+                    <View style={styles.errorBanner}>
+                        <Text style={styles.errorText}>{error}</Text>
+                    </View>
+                ) : null}
+
+                <ComparisonSection
+                    currentPriceLkr={product.price}
+                    currentShopName={product.shop_name}
+                    sameName={sameNameOthers}
+                    similar={similarOthers}
+                    spreadLkr={comparison?.spreadLkr ?? 0}
+                />
+
+                <View style={styles.guarantee}>
+                    <Text style={styles.guaranteeTitle}>Smart Substitution Guarantee</Text>
+                    <Text style={styles.guaranteeBody}>
+                        If an item is unavailable, our team calls you first. Nothing is
+                        substituted without your approval.
+                    </Text>
+                </View>
+            </ScrollView>
+
+            <View style={styles.bottomBar}>
+                <View style={styles.stepper}>
+                    <Pressable
+                        accessibilityLabel="Decrease quantity"
+                        disabled={quantity <= 1}
+                        onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+                        style={styles.stepButton}
+                    >
+                        <Text style={styles.stepText}>−</Text>
+                    </Pressable>
+                    <Text style={styles.stepValue}>{quantity}</Text>
+                    <Pressable
+                        accessibilityLabel="Increase quantity"
+                        onPress={() => setQuantity((q) => q + 1)}
+                        style={styles.stepButton}
+                    >
+                        <Text style={styles.stepText}>+</Text>
+                    </Pressable>
+                </View>
+
+                <Pressable
+                    disabled={ordering}
+                    onPress={placePreOrder}
+                    style={[styles.preOrder, ordering && styles.preOrderDisabled]}
+                >
+                    <Text style={styles.preOrderText}>
+                        {ordering ? "Adding..." : "Pre-Order"}
+                    </Text>
+                    <Text style={styles.preOrderPrice}>{formatCurrency(totalLkr)}</Text>
+                </Pressable>
+            </View>
         </View>
-      )}
-    </AuthFrame>
-  );
+    );
+}
+
+function ComparisonSection({
+    currentPriceLkr,
+    currentShopName,
+    sameName,
+    similar,
+    spreadLkr,
+}: {
+    currentPriceLkr: number;
+    currentShopName: string;
+    sameName: ShopOffer[];
+    similar: ShopOffer[];
+    spreadLkr: number;
+}) {
+    const others = [...sameName, ...similar];
+
+    return (
+        <View style={styles.comparison}>
+            <View style={styles.comparisonHead}>
+                <Text style={styles.comparisonTitle}>
+                    {others.length > 0
+                        ? `Compare ${others.length} other ${others.length === 1 ? "shop" : "shops"}`
+                        : "Price comparison"}
+                </Text>
+                {spreadLkr > 0 ? (
+                    <Text style={styles.comparisonSpread}>
+                        Spread {formatCurrency(spreadLkr)}
+                    </Text>
+                ) : null}
+            </View>
+
+            {others.length === 0 ? (
+                <View style={styles.comparisonEmpty}>
+                    <Text style={styles.comparisonEmptyText}>
+                        No other active shop lists this product. {currentShopName} is the
+                        only listing at {formatCurrency(currentPriceLkr)}.
+                    </Text>
+                </View>
+            ) : (
+                <View style={styles.offerGrid}>
+                    {sameName.length > 0 ? (
+                        <>
+                            <Text style={styles.tierLabel}>Same product, other shops</Text>
+                            {sameName.map((offer) => (
+                                <OfferCard
+                                    currentPriceLkr={currentPriceLkr}
+                                    key={`${offer.shopId}-same`}
+                                    offer={offer}
+                                />
+                            ))}
+                        </>
+                    ) : null}
+
+                    {similar.length > 0 ? (
+                        <>
+                            <Text style={styles.tierLabel}>
+                                Related products, other brands
+                            </Text>
+                            {similar.map((offer) => (
+                                <OfferCard
+                                    currentPriceLkr={currentPriceLkr}
+                                    key={`${offer.shopId}-sim`}
+                                    offer={offer}
+                                />
+                            ))}
+                        </>
+                    ) : null}
+                </View>
+            )}
+        </View>
+    );
+}
+
+function OfferCard({
+    currentPriceLkr,
+    offer,
+}: {
+    currentPriceLkr: number;
+    offer: ShopOffer;
+}) {
+    const difference = offer.priceLkr - currentPriceLkr;
+    const isCheaper = difference < 0;
+    const isSame = difference === 0;
+
+    return (
+        <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`View ${offer.productName} at ${offer.shopName}`}
+            onPress={() =>
+                router.push({
+                    pathname: "/(customer)/product-details",
+                    params: { id: offer.productId },
+                })
+            }
+            style={({ pressed }) => [styles.offerCard, pressed && styles.pressed]}
+        >
+            <View style={styles.offerHead}>
+                <Text numberOfLines={1} style={styles.offerShop}>
+                    {offer.shopName}
+                </Text>
+                <Text style={styles.offerChevron}>›</Text>
+            </View>
+            <Text numberOfLines={2} style={styles.offerProduct}>
+                {offer.productName}
+            </Text>
+            <Text numberOfLines={1} style={styles.offerMeta}>
+                {offer.pickupCounter || offer.address || "Pickup counter"}
+                {offer.isOpen ? " · Open" : " · Closed"}
+            </Text>
+            <Text style={styles.offerPrice}>{formatCurrency(offer.priceLkr)}</Text>
+            <Text style={styles.offerUnit}>{offer.unit}</Text>
+
+            <Text
+                style={[
+                    styles.offerDelta,
+                    {
+                        color: isSame
+                            ? colors.muted
+                            : isCheaper
+                              ? "#0A7D5F"
+                              : "#A33D2F",
+                    },
+                ]}
+            >
+                {isSame
+                    ? "Same price as here"
+                    : `${isCheaper ? "-" : "+"} ${formatCurrency(Math.abs(difference))} vs here`}
+            </Text>
+
+            <Text
+                style={[
+                    styles.offerStock,
+                    { color: offer.stockQuantity > 0 ? "#0A7D5F" : "#A33D2F" },
+                ]}
+            >
+                {offer.stockQuantity > 0
+                    ? `${offer.stockQuantity} in stock`
+                    : "Out of stock"}
+            </Text>
+        </Pressable>
+    );
 }
 
 const styles = StyleSheet.create({
-  loading: { alignItems: "center", paddingVertical: 40 },
-  loadingText: { color: colors.muted, fontSize: 12, marginTop: 10 },
-  hero: {
-    backgroundColor: "#E7E9FC",
-    borderRadius: 15,
-    flexDirection: "row",
-    marginBottom: 14,
-    padding: 14,
-  },
-  heroThumb: {
-    alignItems: "center",
-    backgroundColor: colors.mint,
-    borderRadius: 14,
-    height: 74,
-    justifyContent: "center",
-    width: 74,
-  },
-  heroThumbText: { color: colors.ink, fontSize: 30, fontWeight: "900" },
-  heroCopy: { flex: 1, marginLeft: 13 },
-  category: {
-    color: "#07856A",
-    fontSize: 9,
-    fontWeight: "800",
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-  },
-  name: {
-    color: colors.ink,
-    fontSize: 18,
-    fontWeight: "800",
-    lineHeight: 23,
-    marginTop: 5,
-  },
-  shop: { color: colors.muted, fontSize: 10, marginTop: 5 },
-  price: {
-    color: colors.ink,
-    fontSize: 19,
-    fontWeight: "900",
-    marginTop: 7,
-  },
-  unit: { color: colors.muted, fontSize: 9, marginTop: 2 },
-  favourite: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.line,
-    borderRadius: 11,
-    borderWidth: 1,
-    justifyContent: "center",
-    marginBottom: 14,
-    minHeight: 48,
-  },
-  favouriteOn: { backgroundColor: colors.mintSoft, borderColor: colors.mint },
-  favouriteText: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "800",
-  },
-  favouriteTextOn: { color: "#07856A" },
-  metaRow: { flexDirection: "row", gap: 10, marginBottom: 18 },
-  metaCard: {
-    backgroundColor: "#F0F1FC",
-    borderRadius: 11,
-    flex: 1,
-    padding: 12,
-  },
-  metaLabel: { color: colors.muted, fontSize: 9, fontWeight: "700" },
-  metaValue: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "800",
-    marginTop: 5,
-  },
-  metaValueWarn: { color: colors.coral },
-  sectionTitle: {
-    color: colors.ink,
-    fontSize: 13,
-    fontWeight: "800",
-    marginBottom: 9,
-  },
-  description: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 18,
-    marginBottom: 18,
-  },
-  reviewForm: {
-    backgroundColor: colors.white,
-    borderColor: colors.line,
-    borderRadius: 13,
-    borderWidth: 1,
-    marginBottom: 14,
-    padding: 13,
-  },
-  formLabel: {
-    color: colors.ink,
-    fontSize: 11,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  stars: { flexDirection: "row", gap: 6, marginBottom: 12 },
-  star: { paddingHorizontal: 3 },
-  starText: { color: "#DEDDEC", fontSize: 25 },
-  starTextOn: { color: colors.amber },
-  comment: {
-    backgroundColor: "#F0F1FC",
-    borderRadius: 11,
-    color: colors.ink,
-    fontSize: 12,
-    minHeight: 76,
-    padding: 12,
-    textAlignVertical: "top",
-  },
-  notice: {
-    color: "#07856A",
-    fontSize: 11,
-    fontWeight: "800",
-    marginTop: 10,
-    textAlign: "center",
-  },
-  reviewCard: {
-    backgroundColor: colors.white,
-    borderColor: colors.line,
-    borderRadius: 12,
-    borderWidth: 1,
-    marginBottom: 9,
-    padding: 12,
-  },
-  reviewHeader: {
-    alignItems: "center",
-    flexDirection: "row",
-    justifyContent: "space-between",
-  },
-  reviewStars: { color: colors.amber, fontSize: 12 },
-  reviewStarsOff: { color: "#DEDDEC" },
-  reviewTime: { color: colors.muted, fontSize: 9 },
-  reviewComment: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 7,
-  },
-  empty: {
-    alignItems: "center",
-    backgroundColor: "#F0F1FC",
-    borderRadius: 16,
-    marginTop: 20,
-    padding: 28,
-  },
-  emptyIcon: { color: colors.mint, fontSize: 32 },
-  emptyTitle: {
-    color: colors.ink,
-    fontSize: 16,
-    fontWeight: "800",
-    marginTop: 10,
-  },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 11,
-    lineHeight: 17,
-    marginTop: 7,
-    textAlign: "center",
-  },
-  pressed: { opacity: 0.8 },
+    screen: { backgroundColor: colors.paper, flex: 1 },
+    centre: {
+        alignItems: "center",
+        backgroundColor: colors.paper,
+        flex: 1,
+        gap: 10,
+        justifyContent: "center",
+        padding: 24,
+    },
+    header: {
+        alignItems: "center",
+        flexDirection: "row",
+        paddingHorizontal: 16,
+        paddingVertical: 12,
+    },
+    iconButton: { padding: 6 },
+    headerIcon: { color: colors.ink, fontSize: 20 },
+    headerTitle: { color: colors.ink, flex: 1, fontSize: 16, fontWeight: "800" },
+    body: {
+        gap: 14,
+        paddingBottom: 30,
+        paddingHorizontal: 18,
+        // Caps the column on a wide browser window so the layout stays phone
+        // shaped instead of stretching to the full desktop width.
+        alignSelf: "center",
+        maxWidth: 460,
+        width: "100%",
+    },
+    pressed: { opacity: 0.7 },
+    // Fixed height rather than aspectRatio: the catalogue mixes square and
+    // non-square photos, and a set height keeps the block the same size on every
+    // product instead of jumping around as images load. contentFit="contain"
+    // means the whole photo is always visible, letterboxed rather than cropped.
+    hero: {
+        alignItems: "center",
+        backgroundColor: colors.white,
+        borderColor: colors.line,
+        borderRadius: 14,
+        borderWidth: 1,
+        height: 180,
+        justifyContent: "center",
+        overflow: "hidden",
+    },
+    heroImage: { height: "100%", width: "100%" },
+    heroPlaceholder: {
+        alignItems: "center",
+        backgroundColor: colors.mintSoft,
+        flex: 1,
+        justifyContent: "center",
+        width: "100%",
+    },
+    heroPlaceholderText: { color: colors.ink, fontSize: 52, fontWeight: "900" },
+    titleBlock: { gap: 3 },
+    name: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+    subtitle: { color: colors.muted, fontSize: 11 },
+    priceCard: {
+        backgroundColor: colors.white,
+        borderColor: colors.line,
+        borderRadius: 12,
+        borderWidth: 1,
+        padding: 13,
+    },
+    priceRow: { alignItems: "center", flexDirection: "row", gap: 10 },
+    priceMain: { color: colors.ink, fontSize: 24, fontWeight: "900" },
+    saveBadge: {
+        backgroundColor: "#BFF5DA",
+        borderRadius: 7,
+        paddingHorizontal: 9,
+        paddingVertical: 4,
+    },
+    saveBadgeText: { color: "#0A5C42", fontSize: 10, fontWeight: "800" },
+    wasPrice: {
+        color: colors.muted,
+        fontSize: 12,
+        marginTop: 2,
+        textDecorationLine: "line-through",
+    },
+    unitPrice: { color: colors.muted, fontSize: 11, marginTop: 6 },
+    notice: { color: "#9A6412", fontSize: 11, marginTop: 8 },
+    noticeRow: {
+        alignItems: "center",
+        flexDirection: "row",
+        gap: 10,
+        marginTop: 8,
+    },
+    signInButton: {
+        backgroundColor: colors.ink,
+        borderRadius: 7,
+        paddingHorizontal: 11,
+        paddingVertical: 5,
+    },
+    signInText: { color: colors.white, fontSize: 10, fontWeight: "800" },
+    stockCard: {
+        backgroundColor: colors.night,
+        borderRadius: 14,
+        padding: 14,
+    },
+    stockHead: { alignItems: "center", flexDirection: "row", gap: 8 },
+    stockBadge: {
+        backgroundColor: colors.mint,
+        borderRadius: 6,
+        color: colors.night,
+        fontSize: 10,
+        fontWeight: "900",
+        overflow: "hidden",
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+    },
+    stockCount: { color: colors.white, fontSize: 12, fontWeight: "800" },
+    stockLine: { color: "#C9C7E8", fontSize: 11, marginTop: 8 },
+    stockFoot: { color: colors.mint, fontSize: 10, marginTop: 6 },
+    errorBanner: {
+        backgroundColor: "#FFF0ED",
+        borderRadius: 10,
+        padding: 11,
+    },
+    errorText: { color: "#A33D2F", fontSize: 11, lineHeight: 16 },
+    comparison: {
+        backgroundColor: colors.white,
+        borderColor: colors.line,
+        borderRadius: 14,
+        borderWidth: 1,
+        padding: 13,
+    },
+    comparisonHead: {
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "space-between",
+    },
+    comparisonTitle: { color: colors.ink, fontSize: 14, fontWeight: "900" },
+    comparisonSpread: { color: "#0A7D5F", fontSize: 10, fontWeight: "800" },
+    comparisonEmpty: { marginTop: 10 },
+    comparisonEmptyText: { color: colors.muted, fontSize: 11, lineHeight: 17 },
+    offerGrid: { gap: 9, marginTop: 12 },
+    tierLabel: {
+        color: colors.muted,
+        fontSize: 9,
+        fontWeight: "800",
+        letterSpacing: 0.4,
+        marginTop: 4,
+        textTransform: "uppercase",
+    },
+    offerCard: {
+        backgroundColor: colors.paper,
+        borderColor: colors.line,
+        borderRadius: 10,
+        borderWidth: 1,
+        padding: 11,
+    },
+    offerShop: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+    offerHead: {
+        alignItems: "center",
+        flexDirection: "row",
+        justifyContent: "space-between",
+    },
+    offerChevron: { color: colors.muted, fontSize: 16, fontWeight: "800" },
+    offerProduct: { color: colors.ink, fontSize: 11, marginTop: 3 },
+    offerMeta: { color: colors.muted, fontSize: 9, marginTop: 2 },
+    offerPrice: { color: colors.ink, fontSize: 16, fontWeight: "900", marginTop: 6 },
+    offerUnit: { color: colors.muted, fontSize: 9 },
+    offerDelta: { fontSize: 10, fontWeight: "800", marginTop: 5 },
+    offerStock: { fontSize: 10, fontWeight: "800", marginTop: 5 },
+    guarantee: {
+        backgroundColor: colors.mintSoft,
+        borderRadius: 12,
+        padding: 13,
+    },
+    guaranteeTitle: { color: "#0A5C42", fontSize: 12, fontWeight: "800" },
+    guaranteeBody: {
+        color: "#0A5C42",
+        fontSize: 11,
+        lineHeight: 16,
+        marginTop: 4,
+    },
+    bottomBar: {
+        alignItems: "center",
+        backgroundColor: colors.white,
+        borderTopColor: colors.line,
+        borderTopWidth: 1,
+        flexDirection: "row",
+        gap: 12,
+        paddingBottom: 26,
+        paddingHorizontal: 18,
+        paddingTop: 12,
+    },
+    stepper: {
+        alignItems: "center",
+        backgroundColor: colors.paper,
+        borderRadius: 10,
+        flexDirection: "row",
+    },
+    stepButton: {
+        alignItems: "center",
+        height: 34,
+        justifyContent: "center",
+        width: 34,
+    },
+    stepText: { color: colors.ink, fontSize: 17, fontWeight: "800" },
+    stepValue: {
+        color: colors.ink,
+        fontSize: 13,
+        fontWeight: "800",
+        minWidth: 24,
+        textAlign: "center",
+    },
+    preOrder: {
+        alignItems: "center",
+        backgroundColor: colors.ink,
+        borderRadius: 11,
+        flex: 1,
+        flexDirection: "row",
+        justifyContent: "space-between",
+        paddingHorizontal: 15,
+        paddingVertical: 11,
+    },
+    preOrderText: { color: colors.white, fontSize: 13, fontWeight: "800" },
+    preOrderPrice: { color: colors.mint, fontSize: 14, fontWeight: "900" },
+    preOrderDisabled: { opacity: 0.6 },
+    backAction: {
+        backgroundColor: colors.ink,
+        borderRadius: 9,
+        marginTop: 10,
+        paddingHorizontal: 16,
+        paddingVertical: 9,
+    },
+    backActionText: { color: colors.white, fontSize: 12, fontWeight: "800" },
+    emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
+    muted: { color: colors.muted, fontSize: 12, textAlign: "center" },
 });
