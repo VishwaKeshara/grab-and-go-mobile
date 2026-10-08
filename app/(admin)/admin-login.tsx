@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { colors } from "@/constants/colors";
 import { Image, View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Pressable, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 import { signIn, getProfile, signOut } from "@/services/authService";
@@ -45,13 +46,21 @@ export default function AdminLogin() {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View pointerEvents="none" style={styles.backgroundOrb} />
       <View style={styles.header}>
-        <Image
-          accessibilityLabel="Grab And Go logo"
-          source={require("../../assets/images/grab-and-go-logo.png")}
-          style={styles.brandLogo}
-        />
-        <Text style={styles.brandText}>GRAB & GO</Text>
+        <View style={styles.brandLockup}>
+          <View style={styles.brandLogoFrame}>
+            <Image
+              accessibilityLabel="Grab And Go logo"
+              source={require("../../assets/images/grab-and-go-logo.png")}
+              style={styles.brandLogo}
+            />
+          </View>
+          <View>
+            <Text style={styles.brandText}>GRAB &amp; GO</Text>
+            <Text style={styles.brandCaption}>OPERATIONS CONSOLE</Text>
+          </View>
+        </View>
         <Text style={styles.portalTitle}>ADMIN PORTAL</Text>
         <View style={styles.statusBadge}>
           <Text style={styles.statusBadgeText}>Secure</Text>
@@ -146,21 +155,57 @@ export default function AdminLogin() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F8FC",
+    backgroundColor: colors.paper,
+    position: "relative",
+  },
+  backgroundOrb: {
+    backgroundColor: "#EAF8F3",
+    borderRadius: 160,
+    height: 260,
+    position: "absolute",
+    right: -100,
+    top: -80,
+    width: 260,
   },
   header: {
     paddingTop: 40,
     paddingHorizontal: 24,
     paddingBottom: 24,
   },
-  brandText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#8A8A9E",
-    letterSpacing: 1,
-    marginBottom: 4,
+  brandLockup: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginBottom: 24,
   },
-  brandLogo: { height: 64, marginBottom: 6, width: 64 },
+  brandLogoFrame: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: "#DDEBE5",
+    borderRadius: 14,
+    borderWidth: 1,
+    elevation: 2,
+    height: 52,
+    justifyContent: "center",
+    marginRight: 11,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    width: 52,
+  },
+  brandText: {
+    color: colors.ink,
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 1.1,
+  },
+  brandCaption: {
+    color: colors.muted,
+    fontSize: 8,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    marginTop: 3,
+  },
+  brandLogo: { height: 48, width: 48 },
   portalTitle: {
     fontSize: 28,
     fontWeight: "800",
@@ -186,8 +231,10 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#FFFFFF",
-    borderRadius: 16,
-    padding: 24,
+    borderColor: "#ECEBF4",
+    borderRadius: 20,
+    borderWidth: 1,
+    padding: 22,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.05,

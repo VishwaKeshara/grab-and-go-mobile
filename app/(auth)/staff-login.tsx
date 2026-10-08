@@ -19,8 +19,6 @@ import {
   View,
 } from "react-native";
 
-import AsyncStorage from "@react-native-async-storage/async-storage";
-
 export default function StaffLogin() {
   const [shopCode, setShopCode] = useState("");
   const [staffId, setStaffId] = useState("");
@@ -69,13 +67,24 @@ export default function StaffLogin() {
     <AuthFrame>
       <AuthHeader
         title="Staff Login"
-        eyebrow="GRAB & GO"
-        subtitle="Start your shift"
+        eyebrow="TEAM ACCESS"
+        subtitle="Start your shift at the pickup hub"
       />
       
       {error ? <ErrorBanner message={error} /> : null}
 
       <View style={styles.roleContainer}>
+        <View style={styles.shiftCard}>
+          <View style={styles.shiftIcon}>
+            <Text style={styles.shiftIconText}>↗</Text>
+          </View>
+          <View style={styles.shiftCopy}>
+            <Text style={styles.shiftTitle}>Ready for a smooth shift?</Text>
+            <Text style={styles.shiftText}>
+              Use the code provided by your shop owner to access orders.
+            </Text>
+          </View>
+        </View>
         <View style={{ marginTop: 14 }}>
           <Field
             autoCapitalize="none"
@@ -155,6 +164,28 @@ const styles = StyleSheet.create({
   roleContainer: {
     flex: 1,
   },
+  shiftCard: {
+    alignItems: "center",
+    backgroundColor: "#EAF8F3",
+    borderColor: "#CBEDE1",
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    padding: 12,
+  },
+  shiftIcon: {
+    alignItems: "center",
+    backgroundColor: colors.mint,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    marginRight: 10,
+    width: 36,
+  },
+  shiftIconText: { color: colors.ink, fontSize: 18, fontWeight: "800" },
+  shiftCopy: { flex: 1 },
+  shiftTitle: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  shiftText: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 },
   submitBtn: {
     alignItems: "center",
     backgroundColor: colors.mint,
@@ -209,4 +240,3 @@ const styles = StyleSheet.create({
   },
   link: { color: "#07856A", fontSize: 12, fontWeight: "800" },
 });
-
