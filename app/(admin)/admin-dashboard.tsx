@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert, View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from "react-native";
+import { Alert, Image, View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
 import { colors } from "@/constants/colors";
 import { signOut } from "@/services/authService";
@@ -54,7 +54,14 @@ export default function AdminDashboard() {
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.brandText}>GRAB & GO</Text>
+          <View style={styles.brandRow}>
+            <Image
+              accessibilityLabel="Grab And Go logo"
+              source={require("../../assets/images/grab-and-go-logo.png")}
+              style={styles.brandLogo}
+            />
+            <Text style={styles.brandText}>GRAB & GO</Text>
+          </View>
           <Text style={styles.title}>Admin Dashboard</Text>
           <View style={styles.adminBadge}>
             <Text style={styles.adminBadgeText}>Platform Superadmin</Text>
@@ -259,8 +266,10 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: colors.muted,
     letterSpacing: 1,
-    marginBottom: 4,
+    marginLeft: 8,
   },
+  brandRow: { alignItems: "center", flexDirection: "row", marginBottom: 4 },
+  brandLogo: { backgroundColor: colors.white, borderRadius: 8, height: 34, width: 34 },
   title: {
     fontSize: 22,
     fontWeight: "800",

@@ -6,6 +6,7 @@ import {
     Platform,
     Pressable,
     ScrollView,
+    Image,
     StyleSheet,
     Text,
     TextInput,
@@ -66,7 +67,11 @@ export function AuthHeader({
         {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
       </View>
       <View style={styles.headerAvatar}>
-        <Text style={styles.avatarText}>◉</Text>
+        <Image
+          accessibilityLabel="Grab And Go logo"
+          source={require("../assets/images/grab-and-go-logo.png")}
+          style={styles.headerLogo}
+        />
       </View>
     </View>
   );
@@ -203,6 +208,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   avatarText: { color: colors.ink, fontSize: 15 },
+  headerLogo: { height: 32, width: 32 },
   fieldWrap: { marginBottom: 14 },
   fieldLabel: {
     color: colors.ink,

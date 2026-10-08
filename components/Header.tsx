@@ -2,7 +2,7 @@ import { colors } from "@/constants/colors";
 import { CartHeaderButton } from "@/components/CartHeaderButton";
 import { FontAwesome } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const focusedPaths = [
@@ -30,7 +30,11 @@ export function Header() {
   return (
     <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
       <View style={styles.brandMark}>
-        <Text style={styles.brandMarkText}>▣</Text>
+        <Image
+          accessibilityLabel="Grab And Go logo"
+          source={require("../assets/images/grab-and-go-logo.png")}
+          style={styles.brandLogo}
+        />
       </View>
       <View style={styles.brandCopy}>
         <Text style={styles.eyebrow}>GRAB &amp; GO</Text>
@@ -80,6 +84,7 @@ const styles = StyleSheet.create({
     width: 36,
   },
   brandMarkText: { color: colors.mint, fontSize: 19 },
+  brandLogo: { height: 34, width: 34 },
   brandCopy: { flex: 1, marginLeft: 10, minWidth: 0 },
   eyebrow: {
     color: "#07856A",

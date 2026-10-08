@@ -48,7 +48,7 @@ export default function Splash() {
       >
         <View style={styles.logoCard}>
           <Image
-            source={require("../../assets/images/icon.png")}
+            source={require("../../assets/images/grab-and-go-logo.png")}
             style={styles.logo}
           />
         </View>

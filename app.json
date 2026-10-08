@@ -4,7 +4,7 @@
     "slug": "grab-and-go-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/images/grab-and-go-logo.png",
     "scheme": "grabandgomobile",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -21,7 +21,7 @@
     },
     "web": {
       "output": "static",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/images/grab-and-go-logo.png"
     },
     "plugins": [
       "expo-router",

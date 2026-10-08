@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Pressable, ActivityIndicator } from "react-native";
+import { Image, View, Text, StyleSheet, SafeAreaView, TextInput, TouchableOpacity, Pressable, ActivityIndicator } from "react-native";
 import { router } from "expo-router";
 import { signIn, getProfile, signOut } from "@/services/authService";
 
@@ -46,6 +46,11 @@ export default function AdminLogin() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <Image
+          accessibilityLabel="Grab And Go logo"
+          source={require("../../assets/images/grab-and-go-logo.png")}
+          style={styles.brandLogo}
+        />
         <Text style={styles.brandText}>GRAB & GO</Text>
         <Text style={styles.portalTitle}>ADMIN PORTAL</Text>
         <View style={styles.statusBadge}>
@@ -155,6 +160,7 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
     marginBottom: 4,
   },
+  brandLogo: { height: 64, marginBottom: 6, width: 64 },
   portalTitle: {
     fontSize: 28,
     fontWeight: "800",
