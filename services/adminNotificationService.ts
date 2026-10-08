@@ -2,6 +2,8 @@ import { supabase } from "@/lib/supabase";
 
 export type AdminNotification = {
   id: string;
+  campaign_id: string | null;
+  recipient_deleted_at: string | null;
   user_id: string;
   recipient_name: string | null;
   recipient_email: string | null;
@@ -75,7 +77,9 @@ export async function updateAdminNotification(
 }
 
 export async function deleteAdminNotification(id: string) {
-  await invokeNotificationManagement("delete", { id });
+  return invokeNotificationManagement<{ campaignId: string | null }>("delete", {
+    id,
+  });
 }
 
 export async function markAdminNotificationRead(id: string, isRead: boolean) {

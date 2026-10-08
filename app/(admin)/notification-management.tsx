@@ -119,8 +119,12 @@ export default function NotificationManagement() {
         style: "destructive",
         onPress: async () => {
           try {
-            await deleteAdminNotification(notification.id);
-            setNotifications((items) => items.filter((item) => item.id !== notification.id));
+            const result = await deleteAdminNotification(notification.id);
+            setNotifications((items) => items.filter((item) =>
+              result.campaignId
+                ? item.campaign_id !== result.campaignId
+                : item.id !== notification.id,
+            ));
             setSuccess("Notification deleted.");
           } catch (deleteError) {
             setError(deleteError instanceof Error ? deleteError.message : "Could not delete notification.");

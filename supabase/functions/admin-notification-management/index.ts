@@ -56,7 +56,7 @@ Deno.serve(async (request) => {
     const action = body.action as string;
     if (action === "list") {
       const { data, error } = await adminClient.from("notifications")
-        .select("id, user_id, kind, title, body, action_label, action_route, is_read, created_at")
+        .select("id, user_id, campaign_id, kind, title, body, action_label, action_route, is_read, created_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       const userIds = [...new Set((data ?? []).map((item) => item.user_id))];
@@ -76,15 +76,24 @@ Deno.serve(async (request) => {
     const id = typeof body.id === "string" ? body.id : "";
     if (action === "delete") {
       if (!id) throw new Error("Notification id is required.");
-      const { error } = await adminClient.from("notifications").delete().eq("id", id);
+      const { data: notification, error: findError } = await adminClient
+        .from("notifications")
+        .select("campaign_id")
+        .eq("id", id)
+        .single();
+      if (findError) throw findError;
+      const deleteQuery = adminClient.from("notifications").delete();
+      const { error } = notification.campaign_id
+        ? await deleteQuery.eq("campaign_id", notification.campaign_id)
+        : await deleteQuery.eq("id", id);
       if (error) throw error;
-      return json({ success: true });
+      return json({ success: true, campaignId: notification.campaign_id ?? null });
     }
     if (action === "mark-read") {
       if (!id) throw new Error("Notification id is required.");
       const { data, error } = await adminClient.from("notifications")
         .update({ is_read: Boolean(body.isRead) }).eq("id", id)
-        .select("id, user_id, kind, title, body, action_label, action_route, is_read, created_at").single();
+        .select("id, user_id, campaign_id, kind, title, body, action_label, action_route, is_read, created_at").single();
       if (error) throw error;
       return json({ notification: data });
     }
@@ -101,17 +110,22 @@ Deno.serve(async (request) => {
         ? (await adminClient.from("profiles").select("id").eq("role", audienceRole).eq("status", "active")).data ?? []
         : [{ id: input.user_id }];
       if (!recipients.length) throw new Error("No active customer recipients found.");
+      const campaignId = crypto.randomUUID();
       const { data, error } = await adminClient.from("notifications")
-        .insert(recipients.map((recipient) => ({ ...input, user_id: recipient.id })))
-        .select("id, user_id, kind, title, body, action_label, action_route, is_read, created_at");
+        .insert(recipients.map((recipient) => ({
+          ...input,
+          user_id: recipient.id,
+          campaign_id: campaignId,
+        })))
+        .select("id, user_id, campaign_id, kind, title, body, action_label, action_route, is_read, created_at");
       if (error) throw error;
       return json({ notifications: data ?? [] });
     }
     if (action === "update") {
       if (!id) throw new Error("Notification id is required.");
-      if (input.user_id === "all") throw new Error("Choose one recipient when editing a notification.");
+      if (input.user_id.startsWith("all-")) throw new Error("Choose one recipient when editing a notification.");
       const { data, error } = await adminClient.from("notifications").update(input).eq("id", id)
-        .select("id, user_id, kind, title, body, action_label, action_route, is_read, created_at").single();
+        .select("id, user_id, campaign_id, kind, title, body, action_label, action_route, is_read, created_at").single();
       if (error) throw error;
       return json({ notification: data });
     }

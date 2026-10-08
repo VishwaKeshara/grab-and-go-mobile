@@ -17,6 +17,7 @@ export async function listNotifications() {
     .select(
       "id, kind, title, body, action_label, action_route, is_read, created_at",
     )
+    .is("recipient_deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -45,6 +46,9 @@ export async function markAllNotificationsRead() {
 }
 
 export async function deleteNotification(id: string) {
-  const { error } = await supabase.from("notifications").delete().eq("id", id);
+  const { error } = await supabase
+    .from("notifications")
+    .update({ recipient_deleted_at: new Date().toISOString() })
+    .eq("id", id);
   if (error) throw error;
 }
