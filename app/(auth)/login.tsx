@@ -11,6 +11,7 @@ import {
   signInWithApple,
   signInWithGoogle,
   getProfile,
+  resendSignupConfirmation,
 } from "@/services/authService";
 import { getShopByProfileId, clearLocalStaffSession } from "@/services/shopService";
 import { FontAwesome } from "@expo/vector-icons";
@@ -29,6 +30,7 @@ export default function Login() {
   const [password, setPassword] = useState("");
 
   const [error, setError] = useState("");
+  const [confirmationNeeded, setConfirmationNeeded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
@@ -37,12 +39,22 @@ export default function Login() {
 
   const handleAuth = async () => {
   setError("");
+  setConfirmationNeeded(false);
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    setError("Enter a valid email address.");
+    return;
+  }
+  if (!password) {
+    setError("Enter your password.");
+    return;
+  }
   setLoading(true);
   try {
     // Clear any staff session first
     await clearLocalStaffSession();
     // Sign in with email & password
-    await signIn(email.trim(), password);
+    await signIn(normalizedEmail, password);
 
     // Verify signed‑in user via Supabase auth
     const { data: { user }, error: userError } = await supabase.auth.getUser();
@@ -148,10 +160,33 @@ export default function Login() {
       throw new Error("Unknown account role.");
     }
   } catch (submitError) {
+    const message = submitError instanceof Error ? submitError.message : "";
+    const lowerMessage = message.toLowerCase();
+    const needsConfirmation = lowerMessage.includes("email not confirmed");
+    setConfirmationNeeded(needsConfirmation);
     setError(
-      submitError instanceof Error
-        ? submitError.message
-        : "We could not sign you in. Please try again."
+      needsConfirmation
+        ? "Please confirm your email using the link we sent you before signing in."
+        : lowerMessage.includes("invalid login credentials")
+          ? "The email or password is incorrect."
+          : message || "We could not sign you in. Please try again.",
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+const resendConfirmation = async () => {
+  setError("");
+  setLoading(true);
+  try {
+    await resendSignupConfirmation(email);
+    setError("A new confirmation email has been sent. Please check your inbox.");
+  } catch (resendError) {
+    setError(
+      resendError instanceof Error
+        ? resendError.message
+        : "We could not resend the confirmation email.",
     );
   } finally {
     setLoading(false);
@@ -219,6 +254,11 @@ export default function Login() {
       />
 
       {error ? <ErrorBanner message={error} /> : null}
+      {confirmationNeeded ? (
+        <Pressable disabled={loading} onPress={() => void resendConfirmation()}>
+          <Text style={styles.resendLink}>Resend confirmation email</Text>
+        </Pressable>
+      ) : null}
 
       <View style={styles.formContainer}>
         <Field
@@ -343,6 +383,14 @@ function SocialButton({
 }
 
 const styles = StyleSheet.create({
+  resendLink: {
+    color: "#07856A",
+    fontSize: 11,
+    fontWeight: "800",
+    marginBottom: 10,
+    marginTop: 8,
+    textAlign: "center",
+  },
   formContainer: {
     marginBottom: 10,
   },

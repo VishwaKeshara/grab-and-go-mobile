@@ -1,7 +1,8 @@
 import React from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from "react-native";
+import { Alert, View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
 import { colors } from "@/constants/colors";
+import { signOut } from "@/services/authService";
 
 // --- Mock Data ---
 
@@ -39,6 +40,15 @@ const RECENT_EVENTS = [
 ];
 
 export default function AdminDashboard() {
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.replace("/(auth)/login");
+    } catch {
+      Alert.alert("Logout failed", "We could not end your admin session. Please try again.");
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -61,6 +71,13 @@ export default function AdminDashboard() {
           <View style={styles.iconPlaceholder}>
             <Text style={styles.iconText}>👤</Text>
           </View>
+          <Pressable
+            accessibilityLabel="Log out"
+            onPress={() => void handleLogout()}
+            style={({ pressed }) => [styles.logoutButton, pressed && styles.pressedState]}
+          >
+            <Text style={styles.logoutText}>Log out</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -264,6 +281,7 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   headerIcons: {
+    alignItems: "center",
     flexDirection: "row",
     gap: 12,
   },
@@ -277,6 +295,17 @@ const styles = StyleSheet.create({
   },
   iconText: {
     fontSize: 16,
+  },
+  logoutButton: {
+    backgroundColor: "#FFE8E4",
+    borderRadius: 9,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  logoutText: {
+    color: colors.coral,
+    fontSize: 10,
+    fontWeight: "800",
   },
   scrollContent: {
     padding: 16,

@@ -30,6 +30,14 @@ export async function signUp(input: SignUpInput) {
   return data;
 }
 
+export async function resendSignupConfirmation(email: string) {
+  const { error } = await supabase.auth.resend({
+    type: "signup",
+    email: email.trim().toLowerCase(),
+  });
+  if (error) throw error;
+}
+
 export async function listPickupHubs() {
   const { data, error } = await supabase
     .from("pickup_hubs")

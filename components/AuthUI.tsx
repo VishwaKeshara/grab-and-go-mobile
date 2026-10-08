@@ -44,16 +44,18 @@ export function AuthHeader({
   title,
   eyebrow = "GRAB & GO",
   subtitle,
+  backRoute,
 }: {
   title: string;
   eyebrow?: string;
   subtitle?: string;
+  backRoute?: Parameters<typeof router.replace>[0];
 }) {
   return (
     <View style={styles.header}>
       <Pressable
         accessibilityLabel="Go back"
-        onPress={() => router.back()}
+        onPress={() => (backRoute ? router.replace(backRoute) : router.back())}
         style={styles.backButton}
       >
         <Text style={styles.backIcon}>←</Text>

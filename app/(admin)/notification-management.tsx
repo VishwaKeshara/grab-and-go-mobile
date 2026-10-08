@@ -145,7 +145,12 @@ export default function NotificationManagement() {
 
   return (
     <AuthFrame>
-      <AuthHeader eyebrow="ADMIN • MALABE" title="Notification Management" subtitle="Create and maintain customer updates." />
+      <AuthHeader
+        backRoute="/(admin)/admin-dashboard"
+        eyebrow="ADMIN • MALABE"
+        title="Notification Management"
+        subtitle="Create and maintain customer updates."
+      />
       <View style={styles.hero}>
         <View style={{ flex: 1 }}>
           <Text style={styles.heroEyebrow}>NOTIFICATION REGISTRY</Text>
