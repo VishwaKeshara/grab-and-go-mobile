@@ -420,16 +420,24 @@ export async function searchCanonicalProducts(filters: ProductFilters = {}) {
     .from("customer_products")
     .select(`
       id, shop_id, name, unit, price_lkr, regular_price_lkr, image_url, active,
+      available, stock_quantity,
       customer_shops!inner(name),
-      shop_inventory!inner(quantity, is_available)
+      shop_inventory(quantity, is_available)
     `)
     .eq("active", true)
-    .eq("customer_shops.active", true)
-    .eq("shop_inventory.is_available", true)
-    .gt("shop_inventory.quantity", 0);
+    .eq("customer_shops.active", true);
 
+  // shop_inventory is joined with a LEFT join on purpose. It is the stock
+  // source of truth, but rows only exist for products a shop has stocked, so
+  // an inner join here silently hides every product the moment that table is
+  // empty. Availability is applied per row further down instead.
   if (filters.query?.trim()) {
-    q = q.ilike("name", `%${filters.query.trim()}%`);
+    // Commas, quotes and parentheses are filter syntax inside a PostgREST
+    // `ilike` pattern, so a search like "milk, bread" would otherwise be
+    // parsed as extra conditions and fail the whole query. Product names never
+    // need them, so they are stripped rather than escaped.
+    const term = filters.query.trim().replace(/[,"'()\\]/g, " ").trim();
+    q = q.ilike("name", `%${term}%`);
   }
 
   if (filters.shopId) {
@@ -451,18 +459,35 @@ export async function searchCanonicalProducts(filters: ProductFilters = {}) {
   const { data, error } = await q;
   if (error) throw error;
 
-  return data.map((row: any) => ({
-    id: row.id,
-    shop_id: row.shop_id,
-    shop_name: row.customer_shops.name,
-    name: row.name,
-    unit: row.unit,
-    price: row.price_lkr,
-    stock_quantity: row.shop_inventory[0]?.quantity || 0,
-    is_available: row.shop_inventory[0]?.is_available || false,
-    image_url: row.image_url,
-    category: "Grocery", // stub for compatibility
-  })) as ProductWithShop[];
+  return (data ?? []).map((row: any) => {
+    // PostgREST returns the LEFT join as an array; it is empty when the shop
+    // has no inventory row for this product.
+    const inventory = Array.isArray(row.shop_inventory)
+      ? row.shop_inventory[0]
+      : row.shop_inventory;
+
+    return {
+      id: row.id,
+      shop_id: row.shop_id,
+      shop_name: row.customer_shops?.name ?? "Unknown Shop",
+      name: row.name,
+      unit: row.unit,
+      price: Number(row.price_lkr ?? 0),
+      regular_price_lkr: Number(row.regular_price_lkr ?? 0),
+      image_url: row.image_url,
+      active: row.active,
+      available: row.available,
+      // Fall back to the denormalised copy on customer_products when the shop
+      // has no inventory row, otherwise every product would read as sold out.
+      stock_quantity: inventory?.quantity ?? Number(row.stock_quantity ?? 0),
+      is_available: inventory?.is_available ?? row.available !== false,
+      category: "Grocery", // stub for compatibility
+    };
+    // `Product` still declares description/created_at/updated_at, which
+    // customer_products does not have, so this row cannot structurally match
+    // it. Cast via unknown rather than widen the shared type, which other
+    // screens depend on.
+  }) as unknown as ProductWithShop[];
 }
 
 export async function deleteCanonicalProduct(id: string) {

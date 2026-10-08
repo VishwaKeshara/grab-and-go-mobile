@@ -1,0 +1,5 @@
+title,subtitle,tag,icon,tone,file_formats,size_label,status_label,status_tone,detail,metrics,locked,sort_order
+Merchant Payout & Settlement,LankaPay Clearing,LankaPay Clearing,payout,ink,"{CSV,PDF}",2.4MB,"Reconciled • 0 Discrepancies detected",good,,"{""actions"": [""download-pdf"", ""share-boc""]}",false,10
+Stock Discrepancy & Substitution,Inventory Quality,Inventory Quality,stock,amber,"{PDF}",1.1MB,,neutral,,"{""approved_substitutions"": 12, ""phone_contact"": 1, ""disputes"": 0, ""actions"": [""download-log""]}",false,20
+Malabe Commuter Transit & SLA,Ops & Telemetry,Ops & Telemetry,transit,mint,"{XLSX}",3.8MB,,neutral,Rush hour pickup distribution along Kaduwela,"{""actions"": [""download-xlsx""]}",false,30
+Monthly Tax & IRD VAT Compliance,Sri Lanka IRD,Sri Lanka IRD,tax,coral,"{Encrypted PDF}",4.2 MB,,neutral,,"{""ramis_compliant"": true, ""vat_rate"": 18, ""actions"": [""export-ird""]}",true,40

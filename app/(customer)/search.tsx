@@ -255,8 +255,13 @@ export default function Search() {
         data={results}
         numColumns={numColumns}
         renderItem={renderItem}
-        ListHeaderComponent={renderHeader}
-        ListEmptyComponent={renderEmpty}
+        // Called rather than passed as a reference. VirtualizedList renders a
+        // component-type header as <ListHeaderComponent />, so a function whose
+        // identity changes every render remounts the subtree on each keystroke
+        // and the TextInput loses focus after one character. Handing it an
+        // element keeps the element type stable, so React updates in place.
+        ListHeaderComponent={renderHeader()}
+        ListEmptyComponent={renderEmpty()}
         contentContainerStyle={styles.listContent}
         columnWrapperStyle={results.length > 0 ? styles.columnWrapper : undefined}
       />
