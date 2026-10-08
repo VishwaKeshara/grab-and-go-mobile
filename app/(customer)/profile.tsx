@@ -9,9 +9,20 @@ import {
 import { colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { getProfile, updateProfile } from "@/services/authService";
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Alert,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
+
+const profilePhotoKey = (profileId: string) => `profile-photo:${profileId}`;
 
 export default function Profile() {
   const [fullName, setFullName] = useState("");
@@ -22,12 +33,15 @@ export default function Profile() {
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [profileId, setProfileId] = useState("");
+  const [photoUri, setPhotoUri] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     getProfile()
       .then((profile) => {
         if (!active || !profile) return;
+        setProfileId(profile.id);
         setFullName(profile.full_name);
         setPhone(profile.phone ?? "");
         setEmail(profile.email ?? "");
@@ -36,6 +50,9 @@ export default function Profile() {
             ? "Preferred pickup hub"
             : "Malabe Bazaar Hub",
         );
+        AsyncStorage.getItem(profilePhotoKey(profile.id)).then((uri) => {
+          if (active && uri) setPhotoUri(uri);
+        });
       })
       .catch((loadError) => {
         if (active)
@@ -52,6 +69,43 @@ export default function Profile() {
       active = false;
     };
   }, []);
+
+  const changePhoto = async () => {
+    if (!profileId) return;
+
+    try {
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        Alert.alert(
+          "Photo access needed",
+          "Allow photo access in your device settings to choose a profile picture.",
+        );
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        mediaTypes: ["images"],
+        quality: 0.85,
+      });
+
+      if (result.canceled) return;
+
+      const uri = result.assets[0]?.uri;
+      if (!uri) return;
+
+      await AsyncStorage.setItem(profilePhotoKey(profileId), uri);
+      setPhotoUri(uri);
+    } catch (photoError) {
+      setError(
+        photoError instanceof Error
+          ? photoError.message
+          : "We could not update your profile picture.",
+      );
+    }
+  };
 
   const save = async () => {
     setError("");
@@ -80,11 +134,25 @@ export default function Profile() {
     <AuthFrame>
       <AuthHeader eyebrow="PROFILE" title="Grab & Go" />
       <View style={styles.profileHero}>
-        <View style={styles.avatar}>
-          <Text style={styles.avatarText}>
-            {fullName.slice(0, 2).toUpperCase() || "DP"}
-          </Text>
-        </View>
+        <Pressable
+          accessibilityLabel="Change profile picture"
+          accessibilityRole="button"
+          onPress={() => void changePhoto()}
+          style={styles.avatarButton}
+        >
+          {photoUri ? (
+            <Image source={{ uri: photoUri }} style={styles.avatarImage} />
+          ) : (
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText}>
+                {fullName.slice(0, 2).toUpperCase() || "DP"}
+              </Text>
+            </View>
+          )}
+          <View style={styles.cameraBadge}>
+            <Text style={styles.cameraIcon}>✎</Text>
+          </View>
+        </Pressable>
         <View style={styles.heroCopy}>
           <Text style={styles.heroName}>{fullName || "Your profile"}</Text>
           <Text style={styles.heroEmail}>
@@ -95,6 +163,9 @@ export default function Profile() {
             <Text style={styles.activeText}>Verified commuter</Text>
           </View>
         </View>
+        <Pressable onPress={() => void changePhoto()} style={styles.changePhoto}>
+          <Text style={styles.changePhotoText}>Change{"\n"}photo</Text>
+        </Pressable>
       </View>
       {error ? <ErrorBanner message={error} /> : null}
       {loading ? (
@@ -166,24 +237,56 @@ export default function Profile() {
 const styles = StyleSheet.create({
   profileHero: {
     alignItems: "center",
-    backgroundColor: "#E7E9FC",
+    backgroundColor: colors.night,
+    borderColor: "#2D2A64",
+    borderWidth: 1,
     borderRadius: 15,
     flexDirection: "row",
     marginBottom: 20,
     padding: 14,
   },
+  avatarButton: {
+    alignItems: "center",
+    height: 64,
+    justifyContent: "center",
+    position: "relative",
+    width: 64,
+  },
   avatar: {
     alignItems: "center",
     backgroundColor: colors.mint,
-    borderRadius: 29,
-    height: 58,
+    borderColor: colors.white,
+    borderRadius: 32,
+    borderWidth: 3,
+    height: 64,
     justifyContent: "center",
-    width: 58,
+    width: 64,
+  },
+  avatarImage: {
+    borderColor: colors.white,
+    borderRadius: 32,
+    borderWidth: 3,
+    height: 64,
+    width: 64,
   },
   avatarText: { color: colors.ink, fontSize: 18, fontWeight: "900" },
-  heroCopy: { flex: 1, marginLeft: 12 },
-  heroName: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  heroEmail: { color: colors.muted, fontSize: 10, marginTop: 3 },
+  cameraBadge: {
+    alignItems: "center",
+    backgroundColor: colors.mint,
+    borderColor: colors.night,
+    borderRadius: 11,
+    borderWidth: 2,
+    bottom: -1,
+    height: 22,
+    justifyContent: "center",
+    position: "absolute",
+    right: -1,
+    width: 22,
+  },
+  cameraIcon: { color: colors.ink, fontSize: 12, fontWeight: "900" },
+  heroCopy: { flex: 1, marginLeft: 12, minWidth: 0 },
+  heroName: { color: colors.white, fontSize: 16, fontWeight: "800" },
+  heroEmail: { color: "#C8C6DF", fontSize: 10, marginTop: 3 },
   activePill: { alignItems: "center", flexDirection: "row", marginTop: 8 },
   activeDot: {
     backgroundColor: "#07856A",
@@ -192,7 +295,24 @@ const styles = StyleSheet.create({
     marginRight: 5,
     width: 8,
   },
-  activeText: { color: "#07856A", fontSize: 9, fontWeight: "800" },
+  activeText: { color: colors.mint, fontSize: 9, fontWeight: "800" },
+  changePhoto: {
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.12)",
+    borderColor: "rgba(255,255,255,0.18)",
+    borderRadius: 10,
+    borderWidth: 1,
+    justifyContent: "center",
+    minHeight: 42,
+    paddingHorizontal: 9,
+  },
+  changePhotoText: {
+    color: colors.white,
+    fontSize: 9,
+    fontWeight: "800",
+    lineHeight: 12,
+    textAlign: "center",
+  },
   sectionTitle: {
     color: colors.ink,
     fontSize: 13,
