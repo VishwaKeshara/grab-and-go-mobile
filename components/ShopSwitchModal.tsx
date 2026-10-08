@@ -1,6 +1,6 @@
 import { colors } from "@/constants/colors";
 import { FontAwesome } from "@expo/vector-icons";
-import { Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Modal, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Props = {
@@ -10,6 +10,18 @@ type Props = {
   onConfirm: () => void;
   onCancel: () => void;
 };
+
+/**
+ * True when this platform can actually show an Alert.
+ *
+ * react-native-web ships `Alert.alert` as an empty function, so any code path
+ * that relies on it to explain a failure does nothing at all -- silently. Callers
+ * check this and fall back to an on-screen banner on web, so a blocked cart
+ * change never just leaves the button inert.
+ */
+export function canShowAlert(): boolean {
+  return Platform.OS !== "web";
+}
 
 export function ShopSwitchModal({ visible, currentShopName, newShopName, onConfirm, onCancel }: Props) {
   const insets = useSafeAreaInsets();

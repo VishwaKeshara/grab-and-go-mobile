@@ -46,7 +46,11 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "lint": "eslint .",
-    "test:ordering": "node --experimental-strip-types tests/ordering.test.mjs"
+    "test": "npm run test:ordering && npm run test:errors && npm run test:discounts && npm run test:offers",
+    "test:ordering": "node --experimental-strip-types tests/ordering.test.mjs",
+    "test:errors": "node --experimental-strip-types tests/errors.test.mjs",
+    "test:discounts": "node tests/discountConstraint.test.mjs",
+    "test:offers": "node --experimental-strip-types tests/offers.test.mjs"
   },
   "private": true
 }

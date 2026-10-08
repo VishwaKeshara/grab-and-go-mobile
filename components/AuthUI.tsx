@@ -127,18 +127,23 @@ export function PrimaryButton({
 
 export function SecondaryButton({
   children,
+  disabled,
   onPress,
 }: {
   children: ReactNode;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.secondaryButton,
         pressed && styles.pressed,
+        disabled && styles.disabled,
       ]}
     >
       <Text style={styles.secondaryText}>{children}</Text>

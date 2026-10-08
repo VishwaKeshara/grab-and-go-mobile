@@ -168,7 +168,23 @@ export async function loadCatalog(): Promise<{
   };
 }
 
-export async function loadCart(): Promise<CartItem[]> {
+/**
+ * The server's cart, plus the shop it is scoped to.
+ *
+ * `shopId` is deliberately not derived from the items. customer_carts.shop_id is
+ * its own column and it outlives the last item -- change_customer_cart only
+ * resets it on 'clear' or on removing the final line -- so a cart can be empty
+ * and still scoped to a shop. The RPC then rejects any add from a different shop
+ * with 'Cart contains products from another shop', so the client has to see this
+ * value to know it must clear before adding. See the shop-switch branch in
+ * useCart.addItem.
+ */
+export type LoadedCart = {
+  items: CartItem[];
+  shopId: string | null;
+};
+
+export async function loadCart(): Promise<LoadedCart> {
   const { data: userData, error: userError } = await supabase.auth.getUser();
   if (userError) throwOrderingRequestError("cart.auth", userError);
   if (!userData.user) throw new Error("Sign in to load your cart.");
@@ -178,8 +194,10 @@ export async function loadCart(): Promise<CartItem[]> {
   const cart = cartData as CustomerCartRow | null;
 
   if (!cart) {
-    return [];
+    return { items: [], shopId: null };
   }
+
+  const shopId = cart.shop_id ?? null;
 
   const { data, error } = await supabase
     .from("customer_cart_items")
@@ -190,7 +208,7 @@ export async function loadCart(): Promise<CartItem[]> {
   const rows = (data ?? []) as CustomerCartItemRow[];
 
   if (!rows.length) {
-    return [];
+    return { items: [], shopId };
   }
 
   const {
@@ -203,7 +221,7 @@ export async function loadCart(): Promise<CartItem[]> {
   if (productError) throwOrderingRequestError("cart.products", productError);
   const byId = new Map(((productData ?? []) as CustomerProductDetailsRow[])
     .map(row => [row.id, mapProduct(row)]));
-  return rows.map(row => {
+  const items = rows.map(row => {
     const product = byId.get(row.product_id);
 
     if (!product) {
@@ -218,6 +236,8 @@ export async function loadCart(): Promise<CartItem[]> {
       substitution: row.substitution,
     };
   });
+
+  return { items, shopId };
 }
 
 export async function changeCart(

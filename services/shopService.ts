@@ -36,7 +36,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
  */
 
 import { supabase } from "@/lib/supabase";
-import { currentUserId } from "@/services/productService";
+import { currentUserId, productWriteAccess } from "@/services/productService";
 import type {
   ShopOrderStatus,
   ShopOrder,
@@ -730,7 +730,57 @@ function mapItemRow(row: Record<string, unknown>): ShopOrderItem {
 
 
 /** Shops owned by the signed-in user, for the shop management screen. */
+/**
+ * The shops this screen can manage.
+ *
+ * Two sign-in models reach this page:
+ *   • a shop owner, via a Supabase session -- the shop is found by matching
+ *     customer_shops.profile_id to the auth user
+ *   • shop staff, via a PIN token in AsyncStorage -- there is no Supabase
+ *     session at all, so the owner lookup cannot work and staff_my_shop() is
+ *     used instead
+ *
+ * Previously this called currentUserId() unconditionally, which threw for staff
+ * and left the Shop Management screen unable to resolve a shop.
+ */
 export async function listMyShops(): Promise<Shop[]> {
+  const token = await getLocalStaffSession();
+
+  if (token) {
+    const { data, error } = await supabase.rpc("staff_my_shop", {
+      p_token: token,
+    });
+
+    if (error) throw error;
+
+    const row = (data ?? {}) as {
+      success?: boolean;
+      shop_id?: string;
+      shop_name?: string;
+      shop_address?: string;
+      shop_code?: string | null;
+    };
+
+    if (row.success && row.shop_id) {
+      return [
+        {
+          id: row.shop_id,
+          owner_id: null,
+          name: row.shop_name ?? "Your shop",
+          description: "",
+          category: "Grocery",
+          address: row.shop_address ?? "",
+          phone: null,
+          image_url: null,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+    }
+  }
+
+  // Owner path: falls back to this when there is no staff token.
   const userId = await currentUserId();
   const { data, error } = await supabase
     .from("customer_shops")
@@ -847,10 +897,42 @@ export async function deleteShop(id: string) {
   if (error) throw error;
 }
 
+/**
+ * Archives a listing for the shop this screen is managing.
+ *
+ * Staff go through staff_archive_product rather than archive_shop_product, which
+ * does not exist in the deployed database (PostgREST answers PGRST202) and so
+ * made every Delete fail. The owner writes active = false directly, which 022
+ * grants and scopes to their own shop.
+ *
+ * Archiving sets active = false rather than deleting the row: order history
+ * references the product, and it also removes it from customer search.
+ */
 export async function deleteShopProduct(productId: string): Promise<void> {
-  const { error } = await supabase.rpc("archive_shop_product", {
+  const access = await productWriteAccess();
+
+  if (access.kind === "owner") {
+    const { error } = await supabase
+      .from("customer_products")
+      .update({ active: false, available: false })
+      .eq("id", productId);
+
+    if (error) throw error;
+
+    const { error: inventoryError } = await supabase
+      .from("shop_inventory")
+      .update({ is_available: false, updated_at: new Date().toISOString() })
+      .eq("product_id", productId);
+
+    if (inventoryError) throw inventoryError;
+    return;
+  }
+
+  const { error } = await supabase.rpc("staff_archive_product", {
+    p_token: access.token,
     p_product_id: productId,
   });
+
   if (error) throw error;
 }
 
