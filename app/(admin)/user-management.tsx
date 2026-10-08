@@ -196,7 +196,7 @@ export default function UserManagement() {
       <Field label="Search users" onChangeText={setSearch} placeholder="Name, email or phone" value={search} />
       <Text style={styles.filterLabel}>Filter by role</Text>
       <FilterRow
-        items={["all", "customer", "shop", "admin"] as const}
+        items={["all", "customer", "shop", "staff", "admin"] as const}
         selected={roleFilter}
         onSelect={setRoleFilter}
       />
@@ -307,7 +307,7 @@ function UserFormModal({
           <Field keyboardType="phone-pad" label="Phone number" onChangeText={(phone) => onChange({ phone })} placeholder="Optional" value={form.phone} />
           <Field label={editing ? "New password (optional)" : "Temporary password"} onChangeText={(password) => onChange({ password })} placeholder={editing ? "Leave blank to keep current" : "At least 8 characters"} secureTextEntry value={form.password} />
           <Text style={styles.formLabel}>Role</Text>
-          <FilterRow items={["customer", "shop", "admin"] as const} selected={form.role} onSelect={(role) => onChange({ role })} />
+          <FilterRow items={["customer", "shop", "staff", "admin"] as const} selected={form.role} onSelect={(role) => onChange({ role })} />
           <Text style={styles.formLabel}>Status</Text>
           <FilterRow items={["active", "suspended"] as const} selected={form.status} onSelect={(status) => onChange({ status })} />
           <PrimaryButton loading={saving} onPress={onSave}>{editing ? "Save changes" : "Create user"}</PrimaryButton>

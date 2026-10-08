@@ -1,5 +1,5 @@
 import React from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable } from "react-native";
+import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from "react-native";
 import { router } from "expo-router";
 import { colors } from "@/constants/colors";
 
@@ -51,9 +51,13 @@ export default function AdminDashboard() {
           </View>
         </View>
         <View style={styles.headerIcons}>
-          <View style={styles.iconPlaceholder}>
+          <Pressable
+            accessibilityLabel="Manage notifications"
+            onPress={() => router.push("/(admin)/notification-management")}
+            style={styles.iconPlaceholder}
+          >
             <Text style={styles.iconText}>🔔</Text>
-          </View>
+          </Pressable>
           <View style={styles.iconPlaceholder}>
             <Text style={styles.iconText}>👤</Text>
           </View>
