@@ -1,6 +1,10 @@
-import type { CartItem, CheckoutDraft, GroceryShop } from "@/types/cart";
+import type { CartItem, CheckoutDraft, GroceryProduct, GroceryShop } from "@/types/cart";
 
 export type OrderStatus = "placed" | "accepted" | "packing" | "ready" | "collected" | "cancelled";
+
+export type OrderItem = CartItem & { id: string };
+export type AddableOrderProduct = { product: GroceryProduct; stock: number };
+export type OrderAdditionItem = { productId: string; quantity: number };
 
 export type Order = {
   id: string;
@@ -10,7 +14,7 @@ export type Order = {
   status: OrderStatus;
   paymentStatus: "paid" | "pay_at_pickup" | "failed" | "demo_unpaid";
   shop: GroceryShop;
-  items: CartItem[];
+  items: OrderItem[];
   draft: CheckoutDraft;
   subtotal: number;
   savings: number;

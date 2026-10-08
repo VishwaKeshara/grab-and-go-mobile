@@ -3,10 +3,20 @@ import { OrderActionDialog, type OrderDialogContent } from "@/components/OrderAc
 import { colors } from "@/constants/colors";
 import { useOrders } from "@/hooks/useOrders";
 import { callShop } from "@/services/shopContactService";
+import type { Order } from "@/types/order";
 import { shopTelUrl } from "@/utils/shopPhone";
 import { router, useLocalSearchParams } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import { StyleSheet, Text, View } from "react-native";
+
+function addMoreUnavailableReason(order: Order): string | null {
+  if (order.status === "cancelled") return "Cancelled orders cannot be changed.";
+  if (order.status === "collected") return "This order has already been collected.";
+  if (order.status !== "placed") return "The shop has started this order, so more items cannot be added.";
+  if (order.draft.paymentMethod !== "pickup") return "Only Pay at Pickup orders can have items added.";
+  if (order.paymentStatus !== "pay_at_pickup") return "This order is no longer awaiting payment at pickup.";
+  return null;
+}
 
 export default function OrderDetails() {
   const { id } = useLocalSearchParams<{ id?: string }>();
@@ -19,6 +29,9 @@ export default function OrderDetails() {
   const order = orders.find(value => value.id === id);
   if (!order) return <OrderPage title="Order details" back={() => router.back()}><ErrorText message={ordersError} /><Card><Text style={styles.empty}>{loading ? "Loading order details…" : "We couldn't find this order."}</Text><LinkButton label="My orders" onPress={() => router.replace("/(customer)/my-orders")} /></Card></OrderPage>;
   const canCancel = order.status === "placed" || order.status === "accepted";
+  const addMoreReason = addMoreUnavailableReason(order);
+  const canAddMore = addMoreReason === null;
+  const openAddMore = () => router.push({ pathname: "/(customer)/add-more-items", params: { id: order.id } });
   const cancelConfirmed = async () => {
     if (cancelInFlight.current) return;
     if (!canCancel) {
@@ -66,12 +79,12 @@ export default function OrderDetails() {
       setCalling(false);
     }
   };
-  return <><OrderPage title="Order details" eyebrow={order.reference} back={() => router.back()} footer={order.status !== "cancelled" && order.status !== "collected" ? <ActionButton label="Track this order" icon="arrow-right" onPress={() => router.push({ pathname: "/(customer)/order-tracking", params: { id: order.id } })} /> : <ActionButton label="Reorder items" icon="repeat" onPress={() => { reorder(order); router.push("/(customer)/cart"); }} />}>
+  return <><OrderPage title="Order details" eyebrow={order.reference} back={() => router.back()} footer={<View style={styles.footerActions}>{canAddMore ? <LinkButton label="Add more items" icon="plus-circle" onPress={openAddMore} /> : <Text style={styles.footerNote}>Add more items: {addMoreReason}</Text>}{order.status !== "cancelled" && order.status !== "collected" ? <ActionButton label="Track this order" icon="arrow-right" onPress={() => router.push({ pathname: "/(customer)/order-tracking", params: { id: order.id } })} /> : <ActionButton label="Reorder items" icon="repeat" onPress={() => { reorder(order); router.push("/(customer)/cart"); }} />}</View>}>
     <Card dark><Text style={styles.darkLabel}>ORDER REFERENCE</Text><Text style={styles.reference}>{order.reference}</Text><Text style={styles.darkMeta}>Placed {new Date(order.createdAt).toLocaleString("en-LK", { dateStyle: "medium", timeStyle: "short" })}</Text><View style={styles.badgeWrap}><StatusBadge status={order.status} /></View></Card>
     <SectionTitle title="Pickup and payment" />
     <Card><InfoRow icon="shopping-basket" label="Shop" value={order.shop.name} /><InfoRow icon="map-marker" label="Pickup point" value={`${order.shop.counter}, ${order.shop.address}`} /><InfoRow icon="calendar" label="Pickup window" value={prettySlot(order.draft.pickupSlot)} /><InfoRow icon="credit-card" label="Payment status" value={order.paymentStatus === "pay_at_pickup" ? "Pay at pickup" : order.paymentStatus === "paid" ? "Paid" : order.paymentStatus === "failed" ? "Payment failed" : "Demo · no payment collected"} /></Card>
     <SectionTitle title={`Items · ${order.items.reduce((sum, item) => sum + item.quantity, 0)} units`} />
-    <Card>{order.items.map(item => <ProductLine key={item.product.id} item={item} detail={`Substitution: ${preferenceText(item.substitution, alternatives[item.product.id])}`} />)}</Card>
+    <Card>{order.items.map(item => <ProductLine key={item.id} item={item} detail={`Substitution: ${preferenceText(item.substitution, alternatives[item.product.id])}`} />)}</Card>
     <SectionTitle title="Customer details" />
     <Card><InfoRow icon="user" label="Name" value={order.draft.customerName} /><InfoRow icon="phone" label="Mobile" value={order.draft.phone} /><InfoRow icon="road" label="Travelling by" value={order.draft.travelMethod === "car" ? "Car or tuk" : order.draft.travelMethod === "motorcycle" ? "Motorcycle" : "Walking"} /><InfoRow icon="sticky-note-o" label="Packing instructions" value={order.draft.packingInstructions || "No special instructions"} /></Card>
     <PriceSummary subtotal={order.subtotal} savings={order.savings} fee={order.serviceFee} />
@@ -81,4 +94,4 @@ export default function OrderDetails() {
     <Text style={styles.totalNote}>Order total: {money(order.total)}</Text>
   </OrderPage><OrderActionDialog dialog={dialog} onClose={() => setDialog(null)} primaryLabel={dialog?.tone === "confirm" ? "Cancel Order" : "Got it"} onPrimary={dialog?.tone === "confirm" ? () => { void cancelConfirmed(); } : undefined} secondaryLabel={dialog?.tone === "confirm" ? "Keep Order" : undefined} busy={cancelling} destructive={dialog?.tone === "confirm"} /></>;
 }
-const styles = StyleSheet.create({ darkLabel: { color: colors.mint, fontSize: 10, fontWeight: "800", letterSpacing: 1 }, reference: { color: colors.white, fontSize: 23, fontWeight: "900", marginTop: 7 }, darkMeta: { color: "#D6D4E8", fontSize: 11, marginTop: 7 }, badgeWrap: { marginTop: 14 }, empty: { color: colors.muted, fontSize: 13, marginBottom: 12 }, totalNote: { color: colors.muted, fontSize: 11, textAlign: "center", marginBottom: 5 } });
+const styles = StyleSheet.create({ footerActions: { gap: 10 }, footerNote: { color: colors.muted, fontSize: 12, lineHeight: 17, textAlign: "center" }, darkLabel: { color: colors.mint, fontSize: 10, fontWeight: "800", letterSpacing: 1 }, reference: { color: colors.white, fontSize: 23, fontWeight: "900", marginTop: 7 }, darkMeta: { color: "#D6D4E8", fontSize: 11, marginTop: 7 }, badgeWrap: { marginTop: 14 }, empty: { color: colors.muted, fontSize: 13, marginBottom: 12 }, totalNote: { color: colors.muted, fontSize: 11, textAlign: "center", marginBottom: 5 } });

@@ -6,6 +6,8 @@ import { router } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
 import { colors } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
+
+import { getLocalStaffSession, getStaffProfile } from "@/services/shopService";
 import {
   getShopByProfileId,
   getShopDashboardSummary,
@@ -52,16 +54,27 @@ export default function ShopDashboard() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(false);
 
+  const [staffSession, setStaffSession] = useState<any>(null);
+
   const loadData = useCallback(async () => {
     try {
       setError(false);
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session?.user?.id) return;
 
-      const profile = await getShopByProfileId(session.user.id);
-      setShop(profile);
+      let profile = null;
+      const token = await getLocalStaffSession();
+      if (token) {
+        const staffProfile = await getStaffProfile(token);
+        if (staffProfile) {
+          router.replace('/(shop)/new-orders');
+          return;
+        }
+      }
+      // Owner flow – get Supabase session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session?.user?.id) return;
+      profile = await getShopByProfileId(session.user.id);
+
+      setShop(profile as any);
 
       if (profile) {
         const [dashSummary, orders, inventory] = await Promise.all([
@@ -116,6 +129,10 @@ export default function ShopDashboard() {
     { label: "Stock", icon: "archive", route: "/(shop)/stock-update", tint: colors.mint },
     { label: "Products", icon: "tags", route: "/(shop)/shop-management", tint: colors.coral },
   ];
+
+  if (!staffSession) {
+    actions.push({ label: "Staff", icon: "users", route: "/(shop)/staff-management", tint: colors.night });
+  }
 
   return (
     <SafeAreaView edges={["top"]} style={styles.screen}>

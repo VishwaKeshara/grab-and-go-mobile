@@ -141,3 +141,37 @@ export async function signOut() {
   const { error } = await supabase.auth.signOut();
   if (error) throw error;
 }
+
+// New function for shop owner registration with intent metadata
+export async function signUpShopOwner(input: {
+  fullName: string;
+  phone: string;
+  email: string;
+  password: string;
+  shopName: string;
+  shopAddress: string;
+  shopPhone: string;
+  pickupCounter: string;
+  prepMinutes: number;
+}) {
+  const { data, error } = await supabase.auth.signUp({
+    email: input.email.trim().toLowerCase(),
+    password: input.password,
+    options: {
+      data: {
+        full_name: input.fullName.trim(),
+        phone: input.phone.trim(),
+        registration_intent: "shop",
+        pending_shop_registration: {
+          shopName: input.shopName.trim(),
+          shopAddress: input.shopAddress.trim(),
+          shopPhone: input.shopPhone.trim(),
+          pickupCounter: input.pickupCounter.trim(),
+          prepMinutes: input.prepMinutes,
+        },
+      },
+    },
+  });
+  if (error) throw error;
+  return data;
+}

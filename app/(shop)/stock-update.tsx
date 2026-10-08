@@ -1,5 +1,5 @@
 import { supabase } from "@/lib/supabase";
-import { getShopByProfileId, getInventory, updateStock, updateLowStockThreshold } from "@/services/shopService";
+import { getShopByProfileId, getInventory, updateStock, updateLowStockThreshold, getLocalStaffSession, getStaffProfile } from "@/services/shopService";
 import type { InventoryItem } from "@/types/product";
 import React, { useEffect, useMemo, useState } from "react";
 import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, TextInput, Switch, Pressable, Modal } from "react-native";
@@ -43,6 +43,21 @@ export default function StockUpdate() {
   const [thresholdModalVisible, setThresholdModalVisible] = useState(false);
   const [selectedThresholdItem, setSelectedThresholdItem] = useState<InventoryItem | null>(null);
   const [exactThreshold, setExactThreshold] = useState("");
+
+  useEffect(() => {
+    const check = async () => {
+      const token = await getLocalStaffSession();
+      if (token) {
+        const staffProfile = await getStaffProfile(token);
+        if (staffProfile) {
+          router.replace("/(shop)/new-orders");
+          return;
+        }
+      }
+    };
+    void check();
+  }, []);
+
 
   const fetchInventory = async (userId: string) => {
     setLoading(true);
