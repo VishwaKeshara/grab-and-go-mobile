@@ -132,7 +132,11 @@ export default function Profile() {
 
   return (
     <AuthFrame>
-      <AuthHeader eyebrow="PROFILE" title="Grab & Go" />
+      <AuthHeader
+        backRoute="/(customer)/home"
+        eyebrow="PROFILE"
+        title="Grab & Go"
+      />
       <View style={styles.profileHero}>
         <Pressable
           accessibilityLabel="Change profile picture"
@@ -229,7 +233,9 @@ export default function Profile() {
               <Text style={styles.danger}>Sign out</Text>
             </Pressable>
           </View>
-      <SecondaryButton onPress={() => router.back()}>← Back</SecondaryButton>
+      <SecondaryButton onPress={() => router.replace("/(customer)/home")}>
+        ← Back to Home
+      </SecondaryButton>
     </AuthFrame>
   );
 }
