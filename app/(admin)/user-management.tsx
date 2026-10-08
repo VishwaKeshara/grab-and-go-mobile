@@ -169,7 +169,11 @@ export default function UserManagement() {
 
   return (
     <AuthFrame>
-      <AuthHeader eyebrow="ADMIN • MALABE" title="User Management" />
+      <AuthHeader
+        backRoute="/(admin)/admin-dashboard"
+        eyebrow="ADMIN • MALABE"
+        title="User Management"
+      />
       <View style={styles.adminHero}>
         <View style={styles.heroCopy}>
           <Text style={styles.heroEyebrow}>LIVE USER REGISTRY</Text>
