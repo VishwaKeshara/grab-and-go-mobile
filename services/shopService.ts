@@ -1,0 +1,1039 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
+/**
+ * shopService.ts — Shop Operations & Administration service layer
+ *
+ * Member 4 — Reads from and writes to the shared customer_* tables
+ * defined in migration 005 and extended in migration 006.
+ *
+ * DATABASE PREREQUISITE:
+ *   Apply migrations in order:
+ *     1. supabase/migrations/005_customer_ordering.sql
+ *     2. supabase/migrations/006_shop_operations.sql
+ *
+ * TABLE MAPPING (no bare-name tables — all shared with customer side):
+ *   customer_shops         → shop identity + owner link
+ *   customer_products      → product catalog (read-only here)
+ *   customer_orders        → order queue; shop can READ + UPDATE status
+ *   customer_order_items   → line items; shop can READ + UPDATE is_packed
+ *   shop_staff             → staff members (006)
+ *   shop_inventory         → per-shop stock quantities (006)
+ *   pickup_verifications   → handover event log (006)
+ *   security_events        → admin monitoring feed (006)
+ *
+ * RPC FUNCTIONS (defined in migration 006):
+ *   verify_staff_pin(staff_code, pin_plain, shop_id) → jsonb
+ *   get_shop_dashboard_summary(shop_id)              → jsonb
+ *
+ * SECURITY:
+ *   - PIN hashes are NEVER returned to the client; verified via RPC only.
+ *   - All shop writes are guarded by is_shop_owner(shop_id) RLS.
+ *   - Admin writes are guarded by is_admin() RLS.
+ *   - Do NOT expose service-role keys in client code.
+ *
+ * DO NOT MODIFY:
+ *   services/orderService.ts, services/cartService.ts,
+ *   services/productService.ts — Member 2 / 3 files.
+ */
+
+import { supabase } from "@/lib/supabase";
+import { currentUserId, productWriteAccess } from "@/services/productService";
+import type {
+  ShopOrderStatus,
+  ShopOrder,
+  ShopOrderItem,
+  PickupVerification,
+  SecurityEvent,
+  SecurityEventType,
+  SecurityEventSeverity,
+} from "@/types/shopOrder";
+import type { InventoryItem } from "@/types/product";
+import type {
+  Shop,
+  ShopInput,
+  ShopUpdate,
+  ShopDashboardSummary,
+  ShopProfile,
+  StaffLoginResult,
+} from "@/types/shop";
+
+// ─────────────────────────────────────────────────────────────
+// Internal helpers
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Computes SLA timestamp fields to include when updating order status.
+ * Only sets a timestamp once (null-guarded on the DB side via the trigger).
+ */
+function slaTimestampFor(status: ShopOrderStatus): Record<string, string | null> {
+  const now = new Date().toISOString();
+  switch (status) {
+    case "accepted": return { accepted_at: now };
+    case "packing":  return { packing_started_at: now };
+    case "ready":    return { ready_at: now };
+    default:         return {};
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Shop Profile
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns the shop profile linked to the given profile ID.
+ * Called after the shop owner signs in via Supabase Auth.
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner() or is_admin().
+ *
+ * @param profileId - auth.users id of the signed-in shop owner.
+ */
+export async function getShopByProfileId(
+  profileId: string,
+): Promise<ShopProfile | null> {
+  const { data, error } = await supabase
+    .from("customer_shops")
+    .select("id, profile_id, hub_id, name, address, phone, pickup_counter, preparation_minutes, active, is_open, opened_at, shop_code")
+    .eq("profile_id", profileId)
+    .eq("active", true)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as unknown as Record<string, unknown>;
+  return {
+    id:            row.id as string,
+    profileId:     (row.profile_id as string | null) ?? null,
+    hubId:         (row.hub_id as string | null) ?? null,
+    name:          row.name as string,
+    address:       row.address as string,
+    phone:         (row.phone as string | null) ?? null,
+    pickupCounter: row.pickup_counter as string,
+    prepMinutes:   row.preparation_minutes as number,
+    active:        row.active as boolean,
+    isOpen:        row.is_open as boolean,
+    openedAt:      (row.opened_at as string | null) ?? null,
+    shopCode:      (row.shop_code as string | null) ?? null,
+  } satisfies ShopProfile;
+}
+
+/**
+ * @deprecated Use getShopByProfileId() instead.
+ * Kept for backward compatibility during refactor.
+ */
+export async function getShopProfile(): Promise<ShopProfile | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return null;
+  return getShopByProfileId(userData.user.id);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Staff Authentication
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Verifies a staff PIN via the verify_staff_pin() Supabase RPC.
+ *
+ * The RPC runs with SECURITY DEFINER — pin_hash is compared
+ * server-side and is NEVER sent to the client. Failed attempts
+ * are automatically logged to security_events by the RPC.
+ *
+ * Requires: migration 006 applied.
+ *
+ * @param staffCode - Human-readable staff ID, e.g. "KW-07".
+ * @param pin       - Raw 4-digit PIN (sent over TLS; never stored).
+ * @param shopId    - UUID of the shop this staff member belongs to.
+ * @returns StaffLoginResult on success, or null on invalid credentials.
+ */
+export async function verifyStaffPin(
+  staffCode: string,
+  pin: string,
+  shopCode: string,
+): Promise<{ token: string, staffCode: string, shopName: string } | null> {
+  const { data, error } = await supabase.rpc("verify_staff_pin", {
+    p_staff_code: staffCode,
+    p_pin_plain:  pin,
+    p_shop_code:  shopCode,
+  });
+
+  if (error) throw error;
+
+  const result = data as {
+    success: boolean;
+    reason?: string;
+    token?: string;
+    staff_code?: string;
+    shop_name?: string;
+  };
+
+  if (!result.success || !result.token || !result.staff_code || !result.shop_name) return null;
+
+  return {
+    token: result.token,
+    staffCode: result.staff_code,
+    shopName: result.shop_name,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Dashboard
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns aggregated order counts and low-stock metrics for the
+ * shop dashboard. Calls the get_shop_dashboard_summary() RPC.
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: caller must be shop owner or admin.
+ *
+ * @param shopId - UUID of the shop.
+ */
+export async function getShopDashboardSummary(
+  shopId: string,
+): Promise<ShopDashboardSummary> {
+  const { data, error } = await supabase.rpc("get_shop_dashboard_summary", {
+    p_shop_id: shopId,
+  });
+
+  if (error) throw error;
+
+  const d = data as {
+    liveOrderCount:      number;
+    pendingPackingCount: number;
+    readyForPickupCount: number;
+    completedToday:      number;
+    grossSalesToday:     number;
+    lowStockItemCount:   number;
+  };
+
+  return {
+    liveOrderCount:      d.liveOrderCount,
+    pendingPackingCount: d.pendingPackingCount,
+    readyForPickupCount: d.readyForPickupCount,
+    completedToday:      d.completedToday,
+    grossSalesToday:     d.grossSalesToday,
+    lowStockItemCount:   d.lowStockItemCount,
+  } satisfies ShopDashboardSummary;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Orders — Read
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns the list of orders for a shop, newest first.
+ * Optionally filtered to one or more statuses.
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
+ *
+ * @param shopId       - UUID of the shop.
+ * @param statusFilter - Optional array of statuses to filter by.
+ */
+export async function getIncomingOrders(
+  shopId: string,
+  statusFilter?: ShopOrderStatus[],
+): Promise<ShopOrder[]> {
+  let query = supabase
+    .from("customer_orders")
+    .select(
+      "id, shop_id, customer_id, reference, pickup_pin, status, " +
+      "payment_method, payment_status, customer_name, customer_phone, " +
+      "packing_instructions, travel_method, pickup_start_at, pickup_end_at, " +
+      "subtotal_lkr, savings_lkr, service_fee_lkr, total_lkr, " +
+      "created_at, updated_at, accepted_at, packing_started_at, ready_at",
+    )
+    .eq("shop_id", shopId)
+    .order("created_at", { ascending: false });
+
+  if (statusFilter && statusFilter.length > 0) {
+    query = query.in("status", statusFilter);
+  }
+
+  const { data, error } = await query;
+  if (error) throw error;
+
+  return ((data as unknown as Record<string, unknown>[]) ?? []).map(
+    (row) => mapOrderRow(row),
+  );
+}
+
+/**
+ * Returns full details for a single order, including all line items.
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
+ *
+ * @param orderId - UUID of the order.
+ */
+export async function getShopOrderById(
+  orderId: string,
+): Promise<ShopOrder | null> {
+  const { data, error } = await supabase
+    .from("customer_orders")
+    .select(
+      "id, shop_id, customer_id, reference, pickup_pin, status, " +
+      "payment_method, payment_status, customer_name, customer_phone, " +
+      "packing_instructions, travel_method, pickup_start_at, pickup_end_at, " +
+      "subtotal_lkr, savings_lkr, service_fee_lkr, total_lkr, " +
+      "created_at, updated_at, accepted_at, packing_started_at, ready_at, " +
+      "customer_order_items(id, order_id, product_id, product_name, " +
+      "product_unit, image_url, quantity, unit_price_lkr, substitution, " +
+      "is_packed, packed_at)",
+    )
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) return null;
+
+  const row = data as unknown as Record<string, unknown>;
+  const rawItems = (row["customer_order_items"] as Record<string, unknown>[]) ?? [];
+  const items: ShopOrderItem[] = rawItems.map(mapItemRow);
+
+  return mapOrderRow(row, items);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Orders — Update
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Transitions an order to a new lifecycle status.
+ * Automatically sets the corresponding SLA timestamp.
+ *
+ * Allowed transitions (enforced by canTransitionShopOrder()):
+ *   placed → accepted
+ *   accepted → packing
+ *   packing → ready
+ *   ready → collected
+ *   placed | accepted → cancelled
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
+ * Column grant: UPDATE (status, updated_at, accepted_at,
+ *               packing_started_at, ready_at) only.
+ *
+ * @param orderId   - UUID of the order.
+ * @param newStatus - Target status.
+ */
+export async function updateOrderStatus(
+  orderId: string,
+  newStatus: ShopOrderStatus,
+): Promise<void> {
+  const { error } = await supabase
+    .from("customer_orders")
+    .update({
+      status: newStatus,
+      ...slaTimestampFor(newStatus),
+    })
+    .eq("id", orderId);
+
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────
+// Packing
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Marks a single order item as packed (or unpacked).
+ * Writes to customer_order_items.is_packed and packed_at.
+ *
+ * Requires: migration 006 applied (is_packed, packed_at columns).
+ * RLS: shop owner can UPDATE is_packed / packed_at.
+ *
+ * @param itemId   - UUID of the customer_order_items row.
+ * @param isPacked - True to mark as packed; false to unmark.
+ */
+export async function updatePackingItem(
+  itemId: string,
+  isPacked: boolean,
+): Promise<void> {
+  const { error } = await supabase.rpc(
+    "set_shop_order_item_packed",
+    {
+      p_order_item_id: itemId,
+      p_packed: isPacked,
+    }
+  );
+
+  if (error) {
+    throw error;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// Inventory
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns all inventory items for a shop, joined with product details.
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: is_shop_owner(shop_id) or is_admin().
+ *
+ * @param shopId - UUID of the shop.
+ */
+export async function getInventory(shopId: string): Promise<InventoryItem[]> {
+  const { data, error } = await supabase
+    .from("shop_inventory")
+    .select(
+      "id, shop_id, product_id, quantity, low_stock_threshold, " +
+      "is_available, updated_at, " +
+      "customer_products(id, shop_id, name, unit, price_lkr, " +
+      "regular_price_lkr, image_url, active)",
+    )
+    .eq("shop_id", shopId)
+    .order("updated_at", { ascending: false });
+
+  if (error) throw error;
+
+  return ((data as unknown as Record<string, unknown>[]) ?? []).map((row) => {
+    const p = row.customer_products as Record<string, unknown> | null;
+    const qty = row.quantity as number;
+    const threshold = row.low_stock_threshold as number;
+
+    return {
+      id:                row.id as string,
+      shopId:            row.shop_id as string,
+      productId:         row.product_id as string,
+      quantity:          qty,
+      lowStockThreshold: threshold,
+      isAvailable:       row.is_available as boolean,
+      updatedAt:         row.updated_at as string,
+      product: p
+        ? {
+            id:              p.id as string,
+            shopId:          p.shop_id as string,
+            name:            p.name as string,
+            unit:            p.unit as string,
+            priceLkr:        p.price_lkr as number,
+            regularPriceLkr: p.regular_price_lkr as number,
+            imageUrl:        (p.image_url as string | null) ?? null,
+            active:          p.active as boolean,
+          }
+        : {
+            id: row.product_id as string, shopId, name: "Unknown product",
+            unit: "", priceLkr: 0, regularPriceLkr: 0,
+            imageUrl: null, active: false,
+          },
+      stockStatus:
+        qty === 0
+          ? "out_of_stock"
+          : qty <= threshold
+          ? "low_stock"
+          : "in_stock",
+    } satisfies InventoryItem;
+  });
+}
+
+/**
+ * Updates the stock quantity and per-shop availability for a product.
+ *
+ * Requires: migration 006 applied.
+ * RLS: is_shop_owner(shop_id).
+ * Column grant: UPDATE (quantity, is_available, updated_at) via shop policy.
+ *
+ * @param shopId      - UUID of the shop.
+ * @param productId   - UUID of the customer_product.
+ * @param quantity    - New stock quantity (non-negative integer).
+ * @param isAvailable - Whether the product is available for ordering.
+ */
+export async function updateStock(
+  shopId: string,
+  productId: string,
+  quantity: number,
+  isAvailable: boolean,
+): Promise<void> {
+  const { error } = await supabase
+    .from("shop_inventory")
+    .update({
+      quantity,
+      is_available: isAvailable,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId)
+    .eq("product_id", productId);
+
+  if (error) throw error;
+}
+
+/**
+ * Updates the low stock threshold for a product in a shop.
+ */
+export async function updateLowStockThreshold(
+  shopId: string,
+  productId: string,
+  threshold: number,
+): Promise<void> {
+  const { error } = await supabase
+    .from("shop_inventory")
+    .update({
+      low_stock_threshold: threshold,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("shop_id", shopId)
+    .eq("product_id", productId);
+
+  if (error) throw error;
+}
+
+// ─────────────────────────────────────────────────────────────
+// QR / PIN Pickup Verification
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Verifies a pickup PIN entered by the staff member on handover.
+ *
+ * Looks up the order by orderId, checks that the provided PIN
+ * matches customer_orders.pickup_pin, then:
+ *   1. Updates the order status to 'collected'.
+ *   2. Writes a pickup_verifications record.
+ *
+ * Requires: migrations 005 + 006 applied.
+ * RLS: shop owner can UPDATE order status; INSERT pickup_verifications.
+ *
+ * @param orderId    - UUID of the order being handed over.
+ * @param pin        - 4-digit PIN entered by staff (from customer).
+ * @param staffId    - UUID of the shop_staff row performing the handover.
+ * @param method     - Verification method (default: 'pin').
+ * @returns The matched order's reference and customer name, or null if PIN invalid.
+ */
+export async function verifyPickup(
+  orderId: string,
+  pin: string,
+  staffId?: string,
+  method: PickupVerification["verificationMethod"] = "pin",
+): Promise<{ orderId: string; reference: string; customerName: string } | null> {
+  // 1. Fetch order — confirm PIN matches
+  const { data: order, error: fetchError } = await supabase
+    .from("customer_orders")
+    .select("id, reference, customer_name, pickup_pin, status, shop_id")
+    .eq("id", orderId)
+    .maybeSingle();
+
+  if (fetchError) throw fetchError;
+  if (!order) return null;
+  if (order.pickup_pin !== pin) return null;
+  if (order.status === "collected" || order.status === "cancelled") return null;
+
+  // 2. Update order status to 'collected'
+  const { error: updateError } = await supabase
+    .from("customer_orders")
+    .update({ status: "collected", ...slaTimestampFor("collected") })
+    .eq("id", orderId);
+
+  if (updateError) throw updateError;
+
+  // 3. Write pickup verification record
+  const { error: verifyError } = await supabase
+    .from("pickup_verifications")
+    .insert({
+      order_id:            orderId,
+      verified_by:         staffId ?? null,
+      verification_method: method,
+      handover_status:     "completed",
+    });
+
+  if (verifyError) throw verifyError;
+
+  return {
+    orderId:      order.id,
+    reference:    order.reference,
+    customerName: order.customer_name,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Security Events
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Inserts a security event into the monitoring feed.
+ * Callable by any authenticated user (for client-side logging of
+ * failed logins before a session exists).
+ *
+ * Requires: migration 006 applied.
+ *
+ * @param event - Partial event payload (id, created_at auto-generated).
+ */
+export async function logSecurityEvent(event: {
+  eventType: SecurityEventType;
+  severity: SecurityEventSeverity;
+  title: string;
+  description?: string;
+  userId?: string;
+  shopId?: string;
+  staffId?: string;
+}): Promise<void> {
+  const { error } = await supabase.from("security_events").insert({
+    event_type:  event.eventType,
+    severity:    event.severity,
+    title:       event.title,
+    description: event.description ?? null,
+    user_id:     event.userId ?? null,
+    shop_id:     event.shopId ?? null,
+    staff_id:    event.staffId ?? null,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Returns the most recent security events for the admin dashboard.
+ * Admin-only: enforced by RLS on security_events.
+ *
+ * Requires: migration 006 applied.
+ *
+ * @param limit - Maximum number of events to return (default 50).
+ */
+export async function getSecurityEvents(
+  limit = 50,
+): Promise<SecurityEvent[]> {
+  const { data, error } = await supabase
+    .from("security_events")
+    .select(
+      "id, event_type, severity, title, description, " +
+      "user_id, shop_id, staff_id, status, created_at",
+    )
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) throw error;
+
+  return ((data as unknown as Record<string, unknown>[]) ?? []).map((row) => ({
+    id:          row.id as string,
+    eventType:   row.event_type as SecurityEventType,
+    severity:    row.severity as SecurityEventSeverity,
+    title:       row.title as string,
+    description: (row.description as string | null) ?? null,
+    userId:      (row.user_id as string | null) ?? null,
+    shopId:      (row.shop_id as string | null) ?? null,
+    staffId:     (row.staff_id as string | null) ?? null,
+    status:      row.status as SecurityEvent["status"],
+    createdAt:   row.created_at as string,
+  }));
+}
+
+// ─────────────────────────────────────────────────────────────
+// Admin Dashboard
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Returns top-level admin dashboard metrics.
+ * Admin-only (is_admin() RLS enforced on aggregated tables).
+ *
+ * Requires: migrations 005 + 006 applied.
+ */
+export async function getAdminDashboardSummary(): Promise<{
+  activeShops: number;
+  activeUsers: number;
+  ordersToday: number;
+  openSecurityAlerts: number;
+}> {
+  const [shops, orders, alerts, profiles] = await Promise.all([
+    supabase
+      .from("customer_shops")
+      .select("id", { count: "exact", head: true })
+      .eq("active", true),
+    supabase
+      .from("customer_orders")
+      .select("id", { count: "exact", head: true })
+      .gte("created_at", new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
+    supabase
+      .from("security_events")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "open"),
+    supabase
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "active"),
+  ]);
+
+  if (shops.error)    throw shops.error;
+  if (orders.error)   throw orders.error;
+  if (alerts.error)   throw alerts.error;
+  if (profiles.error) throw profiles.error;
+
+  return {
+    activeShops:        shops.count   ?? 0,
+    activeUsers:        profiles.count ?? 0,
+    ordersToday:        orders.count   ?? 0,
+    openSecurityAlerts: alerts.count   ?? 0,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+// Internal row mappers
+// ─────────────────────────────────────────────────────────────
+
+function mapOrderRow(
+  row: Record<string, unknown>,
+  items?: ShopOrderItem[],
+): ShopOrder {
+  const order: ShopOrder = {
+    id:                  row.id as string,
+    shopId:              row.shop_id as string,
+    customerId:          row.customer_id as string,
+    reference:           row.reference as string,
+    pickupPin:           row.pickup_pin as string,
+    status:              row.status as ShopOrderStatus,
+    paymentMethod:       row.payment_method as ShopOrder["paymentMethod"],
+    paymentStatus:       row.payment_status as ShopOrder["paymentStatus"],
+    customerName:        row.customer_name as string,
+    customerPhone:       row.customer_phone as string,
+    packingInstructions: row.packing_instructions as string,
+    travelMethod:        row.travel_method as ShopOrder["travelMethod"],
+    pickupStartAt:       row.pickup_start_at as string,
+    pickupEndAt:         row.pickup_end_at as string,
+    subtotalLkr:         row.subtotal_lkr as number,
+    savingsLkr:          row.savings_lkr as number,
+    serviceFeeLkr:       row.service_fee_lkr as number,
+    totalLkr:            row.total_lkr as number,
+    createdAt:           row.created_at as string,
+    updatedAt:           (row.updated_at as string) ?? (row.created_at as string),
+    acceptedAt:          (row.accepted_at as string | null) ?? null,
+    packingStartedAt:    (row.packing_started_at as string | null) ?? null,
+    readyAt:             (row.ready_at as string | null) ?? null,
+  };
+
+  if (items) {
+    order.items = items;
+    const packed = items.filter((i) => i.isPacked).length;
+    order.packingStatus =
+      packed === 0
+        ? "unpacked"
+        : packed === items.length
+        ? "fully_packed"
+        : "partial";
+  }
+
+  return order;
+}
+
+function mapItemRow(row: Record<string, unknown>): ShopOrderItem {
+  return {
+    id:           row.id as string,
+    orderId:      row.order_id as string,
+    productId:    (row.product_id as string | null) ?? null,
+    productName:  row.product_name as string,
+    productUnit:  row.product_unit as string,
+    imageUrl:     (row.image_url as string | null) ?? null,
+    quantity:     row.quantity as number,
+    unitPriceLkr: row.unit_price_lkr as number,
+    substitution: (row.substitution as ShopOrderItem["substitution"]) ?? { type: "call" },
+    isPacked:     (row.is_packed as boolean) ?? false,
+    packedAt:     (row.packed_at as string | null) ?? null,
+  };
+}
+
+
+/** Shops owned by the signed-in user, for the shop management screen. */
+/**
+ * The shops this screen can manage.
+ *
+ * Two sign-in models reach this page:
+ *   • a shop owner, via a Supabase session -- the shop is found by matching
+ *     customer_shops.profile_id to the auth user
+ *   • shop staff, via a PIN token in AsyncStorage -- there is no Supabase
+ *     session at all, so the owner lookup cannot work and staff_my_shop() is
+ *     used instead
+ *
+ * Previously this called currentUserId() unconditionally, which threw for staff
+ * and left the Shop Management screen unable to resolve a shop.
+ */
+export async function listMyShops(): Promise<Shop[]> {
+  const token = await getLocalStaffSession();
+
+  if (token) {
+    const { data, error } = await supabase.rpc("staff_my_shop", {
+      p_token: token,
+    });
+
+    if (error) throw error;
+
+    const row = (data ?? {}) as {
+      success?: boolean;
+      shop_id?: string;
+      shop_name?: string;
+      shop_address?: string;
+      shop_code?: string | null;
+    };
+
+    if (row.success && row.shop_id) {
+      return [
+        {
+          id: row.shop_id,
+          owner_id: null,
+          name: row.shop_name ?? "Your shop",
+          description: "",
+          category: "Grocery",
+          address: row.shop_address ?? "",
+          phone: null,
+          image_url: null,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+      ];
+    }
+  }
+
+  // Owner path: falls back to this when there is no staff token.
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("customer_shops")
+    .select("id, profile_id, name, address, phone, active")
+    .eq("profile_id", userId);
+
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    owner_id: row.profile_id,
+    name: row.name,
+    description: "",
+    category: "Grocery",
+    address: row.address,
+    phone: row.phone,
+    image_url: null,
+    is_active: row.active,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })) as Shop[];
+}
+
+/** All active shops, for browsing. */
+export async function listShops(): Promise<Shop[]> {
+  const { data, error } = await supabase
+    .from("customer_shops")
+    .select("id, profile_id, name, address, phone, active")
+    .eq("active", true)
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return (data ?? []).map((row: any) => ({
+    id: row.id,
+    owner_id: row.profile_id,
+    name: row.name,
+    description: "",
+    category: "Grocery",
+    address: row.address,
+    phone: row.phone,
+    image_url: null,
+    is_active: row.active,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  })) as Shop[];
+}
+
+export async function getShop(id: string): Promise<Shop> {
+  const { data, error } = await supabase
+    .from("customer_shops")
+    .select("id, profile_id, name, address, phone, active")
+    .eq("id", id)
+    .single();
+
+  if (error) throw error;
+  const row: any = data;
+  return {
+    id: row.id,
+    owner_id: row.profile_id,
+    name: row.name,
+    description: "",
+    category: "Grocery",
+    address: row.address,
+    phone: row.phone,
+    image_url: null,
+    is_active: row.active,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  } as Shop;
+}
+
+export async function createShop(input: ShopInput): Promise<Shop> {
+  const userId = await currentUserId();
+  const { data, error } = await supabase
+    .from("customer_shops")
+    .insert({
+      profile_id: userId,
+      name: input.name.trim(),
+      address: input.address?.trim() ?? "",
+      phone: input.phone?.trim() || null,
+      pickup_counter: "Main",
+      preparation_minutes: 25,
+      active: input.is_active ?? true,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return { id: data.id, owner_id: data.profile_id, name: data.name, address: data.address, is_active: data.active } as Shop;
+}
+
+export async function updateShop(
+  id: string,
+  changes: ShopUpdate,
+): Promise<Shop> {
+  const payload: any = {};
+  if (changes.name) payload.name = changes.name;
+  if (changes.address) payload.address = changes.address;
+  if (changes.phone) payload.phone = changes.phone;
+  if (changes.is_active !== undefined) payload.active = changes.is_active;
+
+  const { data, error } = await supabase
+    .from("customer_shops")
+    .update(payload)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return { id: data.id, owner_id: data.profile_id, name: data.name, address: data.address, is_active: data.active } as Shop;
+}
+
+export async function deleteShop(id: string) {
+  const { error } = await supabase.from("customer_shops").delete().eq("id", id);
+  if (error) throw error;
+}
+
+/**
+ * Permanently removes a listing from customer_products.
+ *
+ * This used to archive -- active = false -- and the button said "Delete" while
+ * leaving the row in place. It now deletes the row for real, via
+ * delete_product_permanently (migration 025).
+ *
+ * Both callers go through that one function rather than the two paths writing
+ * the delete themselves. The reason is the foreign keys: customer_cart_items and
+ * customer_products.substitute_for point at customer_products without ON DELETE
+ * CASCADE, so a delete issued from the app would be refused by Postgres with
+ * 23503, and the shop account has no grant on those tables to clean them up. The
+ * function clears both first, and refuses outright on a product that appears in
+ * any order -- order history is not the shop's to discard.
+ *
+ * To hide a product without removing it, use archiveShopProduct below instead.
+ */
+export async function deleteShopProduct(productId: string): Promise<void> {
+  const access = await productWriteAccess();
+
+  const { error } = await supabase.rpc("delete_product_permanently", {
+    p_product_id: productId,
+    // Staff hold a PIN token, not a Supabase session, so the function needs it
+    // to resolve their shop. Passing null sends the owner path, which authorises
+    // through RLS and the session instead.
+    p_token: access.kind === "staff" ? access.token : null,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Hides a listing without deleting it: active = false, available = false, and the
+ * stock row marked unavailable.
+ *
+ * This is the one to reach for when a product was sold and must keep existing for
+ * order history. Staff go through staff_archive_product rather than
+ * archive_shop_product, which does not exist in the deployed database (PostgREST
+ * answers PGRST202) and so made every Delete fail. The owner writes the columns
+ * directly, which 022 grants and scopes to their own shop.
+ */
+export async function archiveShopProduct(productId: string): Promise<void> {
+  const access = await productWriteAccess();
+
+  if (access.kind === "owner") {
+    const { error } = await supabase
+      .from("customer_products")
+      .update({ active: false, available: false })
+      .eq("id", productId);
+
+    if (error) throw error;
+
+    const { error: inventoryError } = await supabase
+      .from("shop_inventory")
+      .update({ is_available: false, updated_at: new Date().toISOString() })
+      .eq("product_id", productId);
+
+    if (inventoryError) throw inventoryError;
+    return;
+  }
+
+  const { error } = await supabase.rpc("staff_archive_product", {
+    p_token: access.token,
+    p_product_id: productId,
+  });
+
+  if (error) throw error;
+}
+
+export const STAFF_SESSION_KEY = 'staff_session_token';
+
+export async function getLocalStaffSession(): Promise<string | null> {
+  try {
+    return await AsyncStorage.getItem(STAFF_SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export async function setLocalStaffSession(token: string): Promise<void> {
+  await AsyncStorage.setItem(STAFF_SESSION_KEY, token);
+}
+
+export async function clearLocalStaffSession(): Promise<void> {
+  await AsyncStorage.removeItem(STAFF_SESSION_KEY);
+}
+
+export async function endStaffSession(token: string) {
+  const { error } = await supabase.rpc("end_staff_session", { p_token: token });
+  if (error) throw error;
+}
+
+export async function getStaffProfile(token: string) {
+  const { data, error } = await supabase.rpc("get_staff_profile", { p_token: token });
+
+  if (error || !data?.success) {
+    return null;
+  }
+
+  return {
+    staffCode: data.staff_code as string,
+    shopName: data.shop_name as string,
+  };
+}
+
+export async function staffGetOrders(token: string, status?: string): Promise<ShopOrder[]> {
+  const { data, error } = await supabase.rpc('staff_get_orders', { p_token: token, p_status: status });
+  if (error) throw error;
+  return (data || []).map((row: any) => mapOrderRow(row));
+}
+
+export async function staffGetOrderDetails(token: string, orderId: string): Promise<ShopOrder> {
+  const { data, error } = await supabase.rpc('staff_get_order_details', { p_token: token, p_order_id: orderId });
+  if (error) throw error;
+  if (!data) throw new Error("Order not found");
+  const row: any = data;
+  const rawItems = row.customer_order_items || [];
+  const items: ShopOrderItem[] = rawItems.map(mapItemRow);
+
+  console.log("[StaffOrder] raw RPC row", row);
+  console.log("[StaffOrder] customer_order_items", row.customer_order_items);
+  console.log("[StaffOrder] mapped items", items);
+
+  return mapOrderRow(row, items);
+}
+
+export async function staffAcceptOrder(token: string, orderId: string): Promise<void> {
+  const { error } = await supabase.rpc('staff_accept_order', { p_token: token, p_order_id: orderId });
+  if (error) throw error;
+}
+
+export async function staffSetOrderStatus(token: string, orderId: string, status: string): Promise<void> {
+  const { error } = await supabase.rpc('staff_set_order_status', { p_token: token, p_order_id: orderId, p_status: status });
+  if (error) throw error;
+}
+
+export async function staffSetOrderItemPacked(token: string, orderItemId: string, packed: boolean): Promise<void> {
+  const { error } = await supabase.rpc('staff_set_order_item_packed', { p_token: token, p_order_item_id: orderItemId, p_packed: packed });
+  if (error) throw error;
+}

@@ -1,10 +1,6 @@
-import { useState } from "react";
+import { useCart } from "@/hooks/useCart";
 
-export function useOrders() {
-  const [orders, setOrders] = useState<unknown[]>([]);
-
-  return {
-    orders,
-    setOrders,
-  };
+/** Order screens share the same provider state used by cart and checkout. */
+export function useOrders(): ReturnType<typeof useCart> {
+  return useCart();
 }

@@ -1,0 +1,313 @@
+import {
+    AuthFrame,
+    AuthHeader,
+    ErrorBanner,
+    Field,
+    PrimaryButton,
+} from "@/components/AuthUI";
+import { colors, accentOnDark } from "@/constants/colors";
+import {
+  listPickupHubs,
+  resendSignupConfirmation,
+  signUp,
+} from "@/services/authService";
+import { router } from "expo-router";
+import { useEffect, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
+
+type Hub = { id: string; name: string; address: string };
+
+export default function Signup() {
+  const [fullName, setFullName] = useState("");
+  const [phone, setPhone] = useState("+94 ");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [selectedHubName, setSelectedHubName] = useState("Malabe Bazaar Hub");
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [hubs, setHubs] = useState<Hub[]>([]);
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
+
+  useEffect(() => {
+    listPickupHubs()
+      .then(setHubs)
+      .catch(() => undefined);
+  }, []);
+
+  const submit = async () => {
+    setError("");
+    if (fullName.trim().length < 2) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (!/^\+94\s?7\d{8}$/.test(phone.replace(/\s/g, ""))) {
+      setError("Enter a valid Sri Lankan mobile number, for example +94771234567.");
+      return;
+    }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password)) {
+      setError("Password must be 8+ characters with uppercase, lowercase, and a number.");
+      return;
+    }
+    if (!acceptedTerms) {
+      setError(
+        "Please accept the Terms of Service and Privacy Policy to continue.",
+      );
+      return;
+    }
+    setLoading(true);
+    try {
+      const result = await signUp({
+        fullName,
+        phone,
+        email,
+        password,
+        preferredPickupHubId: displayHubs.find(
+          (hub) => hub.name === selectedHubName,
+        )?.id,
+      });
+      if (result.session) {
+        router.replace("/(customer)/home");
+      } else {
+        setConfirmationSent(true);
+      }
+    } catch (submitError) {
+      setError(
+        submitError instanceof Error
+          ? submitError.message
+          : "We could not create your account.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendConfirmation = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await resendSignupConfirmation(email);
+      setConfirmationSent(true);
+    } catch (resendError) {
+      setError(
+        resendError instanceof Error
+          ? resendError.message
+          : "We could not resend the confirmation email.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const displayHubs =
+    hubs.length > 0
+      ? hubs
+      : [
+          {
+            id: "",
+            name: "Malabe Bazaar Hub",
+            address: "Kaduwela Road (Opposite SLIIT Junction)",
+          },
+          {
+            id: "",
+            name: "Pittugala Station Hub",
+            address: "Near Chandrika Kumaratunga Mawatha",
+          },
+        ];
+
+  return (
+    <AuthFrame>
+      <AuthHeader title="Sign Up" />
+      {confirmationSent ? (
+        <View style={styles.confirmationCard}>
+          <Text style={styles.confirmationTitle}>Check your email</Text>
+          <Text style={styles.confirmationText}>
+            We sent a confirmation link to {email.trim()}. Confirm your email before signing in.
+          </Text>
+          <PrimaryButton loading={loading} onPress={resendConfirmation}>
+            Resend confirmation email
+          </PrimaryButton>
+          <Pressable onPress={() => router.replace("/(auth)/login")} style={styles.loginLink}>
+            <Text style={styles.link}>Go to Log In</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {confirmationSent ? null : (
+        <>
+      <Text style={styles.body}>
+        Save time on daily groceries with instant queue-free local pickup.
+      </Text>
+      {error ? <ErrorBanner message={error} /> : null}
+      <Field
+        label="Full Name"
+        onChangeText={setFullName}
+        placeholder="e.g. Dinithi Perera"
+        value={fullName}
+      />
+      <Field
+        autoCapitalize="none"
+        keyboardType="phone-pad"
+        label="Mobile Phone Number"
+        onChangeText={setPhone}
+        value={phone}
+      />
+      <Text style={styles.helper}>
+        ♧ Used for SMS QR Pickup Pass &amp; Verification
+      </Text>
+      <Field
+        autoCapitalize="none"
+        autoCorrect={false}
+        keyboardType="email-address"
+        label="Email Address"
+        onChangeText={setEmail}
+        placeholder="e.g. dinithi@gmail.com"
+        value={email}
+      />
+      <Text style={styles.helper}>
+        Used for monthly e-receipts and order VAT tax invoices
+      </Text>
+      <Field
+        label="Create Password"
+        onChangeText={setPassword}
+        placeholder="Min. 8 characters"
+        secureTextEntry
+        value={password}
+      />
+      <Text style={styles.sectionLabel}>Preferred Daily Pickup Hub</Text>
+      {displayHubs.map((pickupHub) => {
+        const selected = selectedHubName === pickupHub.name;
+        return (
+          <Pressable
+            key={pickupHub.name}
+            onPress={() => setSelectedHubName(pickupHub.name)}
+            style={[styles.hubRow, selected && styles.hubSelected]}
+          >
+            <View style={styles.hubIcon}>
+              <Text>⌂</Text>
+            </View>
+            <View style={styles.hubCopy}>
+              <Text style={styles.hubName}>{pickupHub.name}</Text>
+              <Text style={styles.hubAddress}>{pickupHub.address}</Text>
+            </View>
+            <Text style={[styles.check, selected && styles.checkSelected]}>
+              {selected ? "✓" : ""}
+            </Text>
+          </Pressable>
+        );
+      })}
+      <Pressable
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: acceptedTerms }}
+        onPress={() => setAcceptedTerms((checked) => !checked)}
+        style={styles.termsRow}
+      >
+        <View
+          style={[styles.checkbox, acceptedTerms && styles.checkboxChecked]}
+        >
+          {acceptedTerms ? <Text style={styles.checkboxMark}>✓</Text> : null}
+        </View>
+        <Text style={styles.terms}>
+          I agree to the <Text style={styles.link}>Terms of Service</Text> &amp;{" "}
+          <Text style={styles.link}>Privacy Policy</Text>.
+        </Text>
+      </Pressable>
+      <PrimaryButton loading={loading} onPress={submit}>
+        Create Account →
+      </PrimaryButton>
+      <View style={styles.footer}>
+        <Text style={styles.footerText}>Already a member? </Text>
+        <Pressable onPress={() => router.replace("/(auth)/login")}>
+          <Text style={styles.link}>Log In</Text>
+        </Pressable>
+      </View>
+        </>
+      )}
+    </AuthFrame>
+  );
+}
+
+const styles = StyleSheet.create({
+  body: {fontWeight: "400", color: colors.muted, fontSize: 15, lineHeight: 18, marginBottom: 16 },
+  helper: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
+    marginBottom: 12,
+    marginTop: -7,
+  },
+  sectionLabel: {
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "700",
+    marginBottom: 8,
+    marginTop: 2,
+  },
+  hubRow: {
+    alignItems: "center",
+    backgroundColor: "#F3F4F6",
+    borderColor: "transparent",
+    borderRadius: 11,
+    borderWidth: 1,
+    flexDirection: "row",
+    marginBottom: 8,
+    padding: 10,
+  },
+  hubSelected: { backgroundColor: "#D1D5DB", borderColor: "#F3F4F6" },
+  hubIcon: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: 8,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
+  },
+  hubCopy: { flex: 1, marginLeft: 10 },
+  hubName: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  hubAddress: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
+  check: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderRadius: 10,
+    color: colors.white,
+    height: 20,
+    textAlign: "center",
+    width: 20,
+  },
+  checkSelected: { backgroundColor: colors.ink, lineHeight: 20 },
+  termsRow: { alignItems: "center", flexDirection: "row", marginVertical: 14 },
+  checkbox: {
+    backgroundColor: "#F3F4F6",
+    borderRadius: 4,
+    height: 17,
+    marginRight: 8,
+    width: 17,
+  },
+  checkboxChecked: { backgroundColor: colors.ink },
+  checkboxMark: {
+    color: accentOnDark,
+    fontSize: 12,
+    fontWeight: "900",
+    lineHeight: 17,
+    textAlign: "center",
+  },
+  terms: {fontWeight: "400", color: colors.muted, flex: 1, fontSize: 12, lineHeight: 15 },
+  link: { color: "#15803D", fontWeight: "800" },
+  footer: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+    marginTop: 18,
+  },
+  footerText: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+  confirmationCard: {
+    backgroundColor: colors.mintSoft,
+    borderRadius: 14,
+    marginBottom: 18,
+    padding: 16,
+  },
+  confirmationTitle: { color: colors.ink, fontSize: 17, fontWeight: "600" },
+  confirmationText: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 17, marginVertical: 8 },
+  loginLink: { alignItems: "center", marginTop: 12 },
+});
