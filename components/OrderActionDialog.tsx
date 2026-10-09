@@ -42,7 +42,7 @@ export function OrderActionDialog({ dialog, onClose, primaryLabel = "Got it", on
       {dialog ? <View accessibilityViewIsModal style={[styles.card, { maxHeight: height - topPadding - bottomPadding }]}>
         <ScrollView style={styles.scroller} bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
           <View style={[styles.iconWrap, dialog.tone === "confirm" || dialog.tone === "error" ? styles.coralIcon : dialog.tone === "success" ? styles.mintIcon : styles.lilacIcon]}>
-            <FontAwesome name={icons[dialog.tone]} size={23} color={dialog.tone === "confirm" || dialog.tone === "error" ? "#B2433A" : colors.ink} />
+            <FontAwesome name={icons[dialog.tone]} size={23} color={dialog.tone === "confirm" || dialog.tone === "error" ? "#DC2626" : colors.ink} />
           </View>
           <Text accessibilityRole="header" style={styles.title}>{dialog.title}</Text>
           <Text style={styles.message}>{dialog.message}</Text>
@@ -59,24 +59,24 @@ export function OrderActionDialog({ dialog, onClose, primaryLabel = "Got it", on
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "rgba(14, 13, 39, 0.52)" },
+  overlay: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "rgba(17,24,39, 0.52)" },
   card: { width: "100%", maxWidth: 400, backgroundColor: colors.white, borderRadius: 22, padding: 20, borderColor: colors.line, borderWidth: 1 },
   scroller: { flexShrink: 1 },
   content: { alignItems: "center", paddingTop: 4, paddingBottom: 20 },
   iconWrap: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 15 },
-  coralIcon: { backgroundColor: "#FFF0ED" },
+  coralIcon: { backgroundColor: "#FEE2E2" },
   mintIcon: { backgroundColor: colors.mintSoft },
   lilacIcon: { backgroundColor: colors.lilac },
-  title: { color: colors.ink, fontSize: 19, fontWeight: "800", textAlign: "center" },
-  message: { color: colors.muted, fontSize: 14, lineHeight: 21, textAlign: "center", marginTop: 9 },
+  title: { color: colors.ink, fontSize: 24, fontWeight: "700", textAlign: "center" },
+  message: {fontWeight: "400", color: colors.muted, fontSize: 14, lineHeight: 21, textAlign: "center", marginTop: 9 },
   actions: { flexDirection: "row", gap: 10 },
   button: { flex: 1, minHeight: 52, borderRadius: 14, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
   secondary: { backgroundColor: colors.white, borderColor: colors.line, borderWidth: 1 },
-  secondaryText: { color: colors.ink, fontSize: 14, fontWeight: "800", textAlign: "center" },
+  secondaryText: { color: colors.ink, fontSize: 14, fontWeight: "600", textAlign: "center" },
   primary: { backgroundColor: colors.ink },
-  primaryText: { color: colors.white, fontSize: 14, fontWeight: "800", textAlign: "center" },
+  primaryText: { color: colors.white, fontSize: 14, fontWeight: "600", textAlign: "center" },
   busyContent: { flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 7 },
-  destructive: { backgroundColor: "#B2433A" },
+  destructive: { backgroundColor: "#DC2626" },
   pressed: { opacity: 0.76 },
   disabled: { opacity: 0.6 },
 });

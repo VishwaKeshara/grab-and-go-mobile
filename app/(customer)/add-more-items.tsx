@@ -162,7 +162,7 @@ export default function AddMoreItems() {
     {outcomeUnknown ? <Card><Text style={styles.help}>Keep this selection while we confirm the last request. You can retry safely with the same request.</Text></Card> : null}
     {pickupPassed ? <View accessibilityRole="alert" style={styles.pickupWarning}>
       <View style={styles.pickupWarningIcon}>
-        <FontAwesome name="clock-o" size={20} color="#B2433A" />
+        <FontAwesome name="clock-o" size={20} color={colors.error} />
       </View>
       <Text style={styles.pickupWarningText}>{PICKUP_PASSED_MESSAGE}</Text>
     </View> : <ErrorText message={error} />}
@@ -197,21 +197,21 @@ export default function AddMoreItems() {
 
 const styles = StyleSheet.create({
   footer: { gap: 10 }, footerTotals: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
-  footerLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" }, footerValue: { color: colors.ink, fontSize: 16, fontWeight: "900" },
-  shop: { color: colors.white, fontSize: 16, fontWeight: "800" }, shopMeta: { color: "#D8D6E8", fontSize: 11, marginTop: 6 },
-  help: { color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
-  pickupWarning: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FFF0ED", borderRadius: 16, borderColor: "#F5D2CB", borderWidth: 1, paddingHorizontal: 15, paddingVertical: 14 },
-  pickupWarningIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#FFE1DB" },
-  pickupWarningText: { flex: 1, color: "#9D3C34", fontSize: 13, lineHeight: 19, fontWeight: "800" },
+  footerLabel: { color: colors.muted, fontSize: 12, fontWeight: "700" }, footerValue: { color: colors.ink, fontSize: 16, fontWeight: "700" },
+  shop: { color: colors.white, fontSize: 16, fontWeight: "600" }, shopMeta: {fontWeight: "400", color: "#D1D5DB", fontSize: 12, marginTop: 6 },
+  help: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 18, marginTop: 5 },
+  pickupWarning: { flexDirection: "row", alignItems: "center", gap: 12, backgroundColor: "#FEE2E2", borderRadius: 16, borderColor: "#FEE2E2", borderWidth: 1, paddingHorizontal: 15, paddingVertical: 14 },
+  pickupWarningIcon: { width: 40, height: 40, borderRadius: 12, alignItems: "center", justifyContent: "center", backgroundColor: "#FEE2E2" },
+  pickupWarningText: { flex: 1, color: "#DC2626", fontSize: 13, lineHeight: 19, fontWeight: "600" },
   productRow: { flexDirection: "row", alignItems: "center", gap: 10, minHeight: 70 },
   quantityRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", marginTop: 8 },
-  quantityLabel: { color: colors.muted, fontSize: 11 },
+  quantityLabel: {fontWeight: "400", color: colors.muted, fontSize: 12 },
   image: { width: 58, height: 58, borderRadius: 12, backgroundColor: colors.lilac },
-  productCopy: { flex: 1, minWidth: 0 }, name: { color: colors.ink, fontSize: 13, fontWeight: "800" },
-  meta: { color: colors.muted, fontSize: 11, marginTop: 4 }, stock: { color: "#07856A", fontSize: 10, marginTop: 3 },
+  productCopy: { flex: 1, minWidth: 0 }, name: { color: colors.ink, fontSize: 13, fontWeight: "600" },
+  meta: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 4 }, stock: {fontWeight: "400", color: "#15803D", fontSize: 12, marginTop: 3 },
   stepper: { flexDirection: "row", alignItems: "center" }, step: { width: 40, height: 44, alignItems: "center", justifyContent: "center", borderColor: colors.line, borderWidth: 1, borderRadius: 10 },
-  quantity: { minWidth: 26, textAlign: "center", color: colors.ink, fontSize: 13, fontWeight: "800" },
-  summaryRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5 }, summaryLabel: { color: colors.muted, fontSize: 12 },
-  summaryValue: { color: colors.ink, fontSize: 12, fontWeight: "700" }, totalLabel: { color: colors.ink, fontSize: 14, fontWeight: "900" },
-  rule: { height: 1, backgroundColor: colors.line, marginVertical: 8 }, note: { color: colors.muted, fontSize: 11, lineHeight: 17, marginTop: 9 },
+  quantity: { minWidth: 26, textAlign: "center", color: colors.ink, fontSize: 13, fontWeight: "600" },
+  summaryRow: { flexDirection: "row", justifyContent: "space-between", paddingVertical: 5 }, summaryLabel: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+  summaryValue: { color: colors.ink, fontSize: 12, fontWeight: "700" }, totalLabel: { color: colors.ink, fontSize: 14, fontWeight: "700" },
+  rule: { height: 1, backgroundColor: colors.line, marginVertical: 8 }, note: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 17, marginTop: 9 },
 });

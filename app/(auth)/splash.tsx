@@ -1,4 +1,4 @@
-import { colors } from "@/constants/colors";
+import { colors, accentText } from "@/constants/colors";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     padding: 26,
   },
   orb: {
-    borderColor: "rgba(151, 137, 255, 0.2)",
+    borderColor: "rgba(22, 163, 74, 0.2)",
     borderRadius: 999,
     borderWidth: 1,
     position: "absolute",
@@ -103,7 +103,7 @@ const styles = StyleSheet.create({
   orbTop: { height: 112, right: -6, top: 218, width: 112 },
   orbBottom: { bottom: -116, height: 300, left: 80, width: 300 },
   dashedPath: {
-    borderColor: "rgba(95, 226, 185, 0.17)",
+    borderColor: "rgba(74, 222, 128, 0.17)",
     borderRadius: 120,
     borderStyle: "dashed",
     borderWidth: 1,
@@ -139,8 +139,8 @@ const styles = StyleSheet.create({
   },
   pillText: {
     color: colors.ink,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 0.7,
   },
   brand: {
@@ -151,11 +151,11 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   location: {
-    backgroundColor: "#745B55",
+    backgroundColor: "#4B5563",
     borderRadius: 8,
-    color: "#FFE0B7",
-    fontSize: 10,
-    fontWeight: "800",
+    color: "#FEF3C2",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 1,
     marginTop: 2,
     overflow: "hidden",
@@ -163,7 +163,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   tagline: {
-    color: "#E8E6F6",
+    color: "#F3F4F6",
     fontSize: 17,
     lineHeight: 24,
     marginTop: 20,
@@ -180,8 +180,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  serviceIcon: { color: colors.mint, fontSize: 12, marginRight: 5 },
-  serviceText: { color: "#E8E6F6", fontSize: 11, fontWeight: "600" },
+  serviceIcon: {fontWeight: "400", color: accentText, fontSize: 12, marginRight: 5 },
+  serviceText: { color: "#F3F4F6", fontSize: 12, fontWeight: "600" },
   statusCard: {
     alignItems: "center",
     alignSelf: "center",
@@ -206,11 +206,11 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     width: 14,
   },
-  statusText: { color: colors.white, flexShrink: 1, fontSize: 12 },
+  statusText: {fontWeight: "400", color: colors.white, flexShrink: 1, fontSize: 12 },
   serving: {
     bottom: 55,
-    color: "#D8D4F4",
-    fontSize: 9,
+    color: "#F3F4F6",
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.8,
     position: "absolute",

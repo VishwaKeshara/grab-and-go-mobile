@@ -13,6 +13,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
  * The list reached from the home screen's "Nearby shops" action.
@@ -22,6 +23,7 @@ import {
  * is the same screen and the same add-to-cart path as search results.
  */
 export default function NearbyShops() {
+  const insets = useSafeAreaInsets();
   // Only used to highlight the shop the cart currently belongs to, so a shopper
   // can see which shop switching will cost them a cleared cart.
   const { shopId: cartShopId } = useLocalSearchParams<{ shopId?: string }>();
@@ -148,7 +150,7 @@ export default function NearbyShops() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 18 }]}>
         <Pressable
           accessibilityLabel="Go back"
           accessibilityRole="button"
@@ -167,7 +169,7 @@ export default function NearbyShops() {
         <TextInput
           onChangeText={setQuery}
           placeholder="Search shops by name or area"
-          placeholderTextColor="#9693A6"
+          placeholderTextColor={colors.muted}
           style={styles.search}
           value={query}
         />
@@ -215,10 +217,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 18,
   },
   back: { height: 30, justifyContent: "center", width: 30 },
-  heading: { color: colors.ink, fontSize: 17, fontWeight: "900" },
+  heading: { color: colors.ink, fontSize: 20, fontWeight: "600" },
   searchWrap: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -231,12 +232,12 @@ const styles = StyleSheet.create({
     marginTop: 14,
     paddingHorizontal: 14,
   },
-  search: { color: colors.ink, flex: 1, fontSize: 12, paddingHorizontal: 9 },
+  search: { fontWeight: "400", color: colors.ink, flex: 1, fontSize: 16, paddingHorizontal: 9 },
   error: {
-    backgroundColor: "#FFE6E0",
+    backgroundColor: "#FEE2E2",
     borderRadius: 10,
-    color: "#A43A32",
-    fontSize: 11,
+    color: "#DC2626",
+    fontSize: 12,
     fontWeight: "700",
     marginHorizontal: 20,
     marginTop: 10,
@@ -264,19 +265,19 @@ const styles = StyleSheet.create({
   },
   copy: { flex: 1, marginLeft: 11, minWidth: 0 },
   titleRow: { alignItems: "center", flexDirection: "row", gap: 7 },
-  name: { color: colors.ink, flexShrink: 1, fontSize: 13, fontWeight: "900" },
+  name: { color: colors.ink, flexShrink: 1, fontSize: 13, fontWeight: "700" },
   pill: { borderRadius: 5, paddingHorizontal: 6, paddingVertical: 3 },
   pillOpen: { backgroundColor: colors.mintSoft },
   pillShut: { backgroundColor: colors.lilac },
-  pillText: { color: "#07856A", fontSize: 8, fontWeight: "900" },
+  pillText: { color: "#15803D", fontSize: 12, fontWeight: "700" },
   pillTextShut: { color: colors.muted },
-  cartShop: { color: colors.ink, fontSize: 9, fontWeight: "800", marginTop: 4 },
-  meta: { color: colors.muted, fontSize: 9, marginTop: 4 },
-  address: { color: colors.muted, fontSize: 9, marginTop: 3 },
+  cartShop: { color: colors.ink, fontSize: 12, fontWeight: "600", marginTop: 4 },
+  meta: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 4 },
+  address: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
   offers: {
     alignItems: "center",
     alignSelf: "flex-start",
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#FEE2E2",
     borderRadius: 6,
     flexDirection: "row",
     gap: 4,
@@ -284,12 +285,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 5,
   },
-  offersText: { color: colors.coral, fontSize: 9, fontWeight: "900" },
+  offersText: { color: colors.coral, fontSize: 12, fontWeight: "700" },
   empty: { alignItems: "center", paddingTop: 56 },
-  emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "900", marginTop: 12 },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 12,
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600", marginTop: 12 },
+  emptyText: {fontWeight: "400", color: colors.muted,
+    fontSize: 13,
     lineHeight: 18,
     marginTop: 7,
     maxWidth: 260,

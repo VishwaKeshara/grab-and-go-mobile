@@ -1,7 +1,7 @@
 import { BrowseProductCard, toCartProduct } from "@/components/BrowseProductCard";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
-import { fetchDiscoveryProducts } from "@/services/discoveryService";
+import { fetchDiscoveryProducts, listBrowseCategories } from "@/services/discoveryService";
 import type { DiscoveredProduct } from "@/types/discovery";
 import { FontAwesome } from "@expo/vector-icons";
 import { router, useLocalSearchParams } from "expo-router";
@@ -10,35 +10,46 @@ import {
   ActivityIndicator,
   FlatList,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
   useWindowDimensions,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
- * Products in one category, reached from the home "Browse categories" rail.
+ * The product list behind the home "Browse categories" rail.
  *
- * The categories themselves come from the distinct customer_products.category
- * values (see discoveryService.listBrowseCategories), so a category a shop has
- * since filled with products appears on the rail with a real count behind it,
- * and one with nothing in it never appears at all.
+ * One screen for the whole rail rather than a screen per tile: every category tap
+ * lands here, and the tapped category arrives as a param that pre-selects its
+ * chip. Switching category is then a chip tap on this screen, instead of going
+ * back to home and starting again -- which is the obvious thing to do once you
+ * can see there is more than one category.
+ *
+ * The chips come from the distinct customer_products.category values
+ * (discoveryService.listBrowseCategories) rather than from what was passed in, so
+ * the row offers every category that has products, including ones the shopper
+ * did not tap through to.
  */
 export default function CategoryProducts() {
+    const insets = useSafeAreaInsets();
   // The label is the id: migration 024 dropped product_categories, so there is no
-  // separate key to route with. categoryName is only the heading, and falls back
-  // to this when a link omits it.
-  const { category, categoryName } = useLocalSearchParams<{
+  // separate key to route with. Both params carry the same text; category is the
+  // one that matters, and the heading is derived from the selected chip so it
+  // stays correct when the shopper switches category.
+  const { category } = useLocalSearchParams<{
     category?: string;
-    categoryName?: string;
   }>();
 
   const { addItem, adding, error: cartError } = useCart();
 
-  // A link with no category is the only way to land here without one, and it is
-  // handled as a render branch rather than as thrown state.
-  const missingCategory = !category;
+  // null means "no category selected", which is the All chip. Read once on mount
+  // so a later param change cannot silently re-scope a list the shopper is
+  // already reading; changing category is what the chips are for.
+  const [selected, setSelected] = useState<string | null>(category ?? null);
 
+  const [chips, setChips] = useState<string[]>([]);
   const [products, setProducts] = useState<DiscoveredProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [offersOnly, setOffersOnly] = useState(false);
@@ -52,17 +63,17 @@ export default function CategoryProducts() {
   const horizontalPadding = 40;
   const itemWidth = (width - horizontalPadding - gap * (numColumns - 1)) / numColumns;
 
-  // `loading` starts true and is only ever cleared here. The Offers toggle sets it
-  // back to true before changing the filter, so this effect never needs a
-  // synchronous setState -- one in an effect body cascades a render before the
-  // request is even sent.
+  // `loading` starts true and is only ever cleared here. Every control that changes
+  // the query sets it back to true first, so this effect never needs a synchronous
+  // setState -- one in an effect body cascades a render before the request is even
+  // sent.
   const load = useCallback(() => {
-    // With no category there is nothing to ask for. `missingCategory` is rendered
-    // instead, so there is no state to set here -- a synchronous setState in an
-    // effect body cascades a render before a request is even sent.
-    if (!category) return;
-
-    fetchDiscoveryProducts({ category, offersOnly })
+    // `category: null` is the All chip, which is a real query with no category
+    // filter rather than no query at all.
+    fetchDiscoveryProducts({
+      category: selected ?? undefined,
+      offersOnly,
+    })
       .then((found) => {
         setProducts(found);
         // Cleared here rather than before the request, so a successful load always
@@ -79,11 +90,28 @@ export default function CategoryProducts() {
       .finally(() => {
         setLoading(false);
       });
-  }, [category, offersOnly]);
+  }, [selected, offersOnly]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The chip row. Fetched separately from the products because it changes far less
+  // often, and a failure here only costs the row -- the list below still works,
+  // and the shopper can still search.
+  useEffect(() => {
+    let active = true;
+
+    listBrowseCategories()
+      .then((found) => {
+        if (active) setChips(found.map((entry) => entry.name));
+      })
+      .catch(() => undefined);
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const handleAdd = async (product: DiscoveredProduct) => {
     setAddingId(product.id);
@@ -98,7 +126,10 @@ export default function CategoryProducts() {
     setAddingId(null);
   };
 
-  const title = categoryName || category || "Category";
+  // Follows the selected chip, not the URL param, so the heading updates with the
+  // list instead of claiming to show a category the shopper just switched away
+  // from. With no chip selected the heading is the whole catalogue.
+  const title = selected ?? "All products";
 
   const header = (
     <View>
@@ -108,6 +139,62 @@ export default function CategoryProducts() {
           {products.length} product{products.length === 1 ? "" : "s"}
         </Text>
       </View>
+
+      {/* Every category that has products, plus All first. Rendered whenever the
+          chips resolved to anything -- including with nothing selected, because
+          All is the way to get back to the full list after picking a category. */}
+      {chips.length ? (
+        <ScrollView
+          contentContainerStyle={styles.chipRow}
+          horizontal
+          showsHorizontalScrollIndicator={false}
+        >
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ selected: selected === null }}
+            onPress={() => {
+              setLoading(true);
+              setSelected(null);
+            }}
+            style={[styles.categoryChip, selected === null && styles.categoryChipActive]}
+          >
+            <Text
+              style={[
+                styles.categoryChipText,
+                selected === null && styles.categoryChipTextActive,
+              ]}
+            >
+              All
+            </Text>
+          </Pressable>
+
+          {chips.map((chip) => {
+            const active = selected === chip;
+
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ selected: active }}
+                key={chip}
+                onPress={() => {
+                  setLoading(true);
+                  setSelected(chip);
+                }}
+                style={[styles.categoryChip, active && styles.categoryChipActive]}
+              >
+                <Text
+                  style={[
+                    styles.categoryChipText,
+                    active && styles.categoryChipTextActive,
+                  ]}
+                >
+                  {chip}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
 
       <Pressable
         onPress={() => {
@@ -132,15 +219,7 @@ export default function CategoryProducts() {
     </View>
   );
 
-  const empty = missingCategory ? (
-    <View style={styles.empty}>
-      <FontAwesome color={colors.muted} name="tags" size={28} />
-      <Text style={styles.emptyTitle}>No category selected</Text>
-      <Text style={styles.emptyText}>
-        Pick a category from Browse categories on the home screen.
-      </Text>
-    </View>
-  ) : loading ? (
+  const empty = loading ? (
     <View style={styles.empty}>
       <ActivityIndicator color={colors.ink} size="large" />
       <Text style={styles.emptyText}>Loading products…</Text>
@@ -152,14 +231,16 @@ export default function CategoryProducts() {
       <Text style={styles.emptyText}>
         {offersOnly
           ? `No offers running in ${title} right now.`
-          : `No shops have stocked ${title} yet.`}
+          : selected
+            ? `No shops have stocked ${selected} yet.`
+            : "No shops have listed any products yet."}
       </Text>
     </View>
   );
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 18 }]}>
         <Pressable
           accessibilityLabel="Go back"
           accessibilityRole="button"
@@ -176,7 +257,9 @@ export default function CategoryProducts() {
           onPress={() =>
             router.push({
               pathname: "/(customer)/search",
-              params: { category, categoryName: title },
+              // The currently selected chip, not the original param: searching from the
+              // header should search what the shopper is looking at now.
+              params: { category: selected ?? undefined },
             })
           }
           style={styles.back}
@@ -215,13 +298,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 18,
   },
   back: { alignItems: "center", height: 30, justifyContent: "center", width: 30 },
-  heading: { color: colors.ink, flex: 1, fontSize: 17, fontWeight: "900", textAlign: "center" },
+  heading: { color: colors.ink, flex: 1, fontSize: 20, fontWeight: "600", textAlign: "center" },
   headBlock: { marginTop: 16 },
-  title: { color: colors.ink, fontSize: 19, fontWeight: "900" },
-  count: { color: colors.muted, fontSize: 11, marginTop: 4 },
+  title: { color: colors.ink, fontSize: 24, fontWeight: "700" },
+  count: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 4 },
   chip: {
     alignItems: "center",
     alignSelf: "flex-start",
@@ -234,13 +316,24 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   chipActive: { backgroundColor: colors.ink },
-  chipText: { color: colors.ink, fontSize: 11, fontWeight: "800" },
+  chipText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   chipTextActive: { color: colors.white },
+  chipRow: { gap: 8, paddingVertical: 13 },
+  categoryChip: {
+    backgroundColor: colors.lilac,
+    borderRadius: 15,
+    justifyContent: "center",
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  categoryChipActive: { backgroundColor: colors.ink },
+  categoryChipText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  categoryChipTextActive: { color: colors.white },
   error: {
-    backgroundColor: "#FFE6E0",
+    backgroundColor: "#FEE2E2",
     borderRadius: 10,
-    color: "#A43A32",
-    fontSize: 11,
+    color: "#DC2626",
+    fontSize: 12,
     fontWeight: "700",
     marginTop: 11,
     padding: 10,
@@ -248,10 +341,9 @@ const styles = StyleSheet.create({
   list: { paddingBottom: 110, paddingHorizontal: 20, paddingTop: 4 },
   columnWrapper: { gap: 12, marginBottom: 12 },
   empty: { alignItems: "center", paddingTop: 48 },
-  emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "900", marginTop: 12 },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 12,
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600", marginTop: 12 },
+  emptyText: {fontWeight: "400", color: colors.muted,
+    fontSize: 13,
     lineHeight: 18,
     marginTop: 7,
     maxWidth: 260,

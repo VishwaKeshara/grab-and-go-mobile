@@ -122,10 +122,10 @@ export default function StaffManagementScreen() {
                 <Text>Status: {isActive ? "Active" : "Inactive"}</Text>
               </View>
               <View style={styles.actions}>
-                <Pressable onPress={() => { setResetStaffId(item.id); setResetModalVisible(true); }} style={[styles.actionBtn, {backgroundColor: '#f39c12'}]}>
+                <Pressable onPress={() => { setResetStaffId(item.id); setResetModalVisible(true); }} style={[styles.actionBtn, {backgroundColor: '#F59E0B'}]}>
                   <Text style={styles.btnText}>Reset PIN</Text>
                 </Pressable>
-                <Pressable onPress={() => handleToggle(item.id, isActive)} style={[styles.actionBtn, {backgroundColor: isActive ? '#e74c3c' : '#2ecc71'}]}>
+                <Pressable onPress={() => handleToggle(item.id, isActive)} style={[styles.actionBtn, {backgroundColor: isActive ? '#DC2626' : '#16A34A'}]}>
                   <Text style={styles.btnText}>{isActive ? "Disable" : "Enable"}</Text>
                 </Pressable>
               </View>
@@ -143,7 +143,7 @@ export default function StaffManagementScreen() {
             <Text style={styles.cardTitle}>Reset PIN</Text>
             <TextInput style={styles.input} placeholder="New 4-digit PIN" keyboardType="numeric" value={resetPin} onChangeText={setResetPin} maxLength={4} />
             <View style={{flexDirection: 'row', justifyContent: 'space-around'}}>
-               <Pressable onPress={() => setResetModalVisible(false)} style={[styles.btn, {backgroundColor: '#7f8c8d', marginRight: 8, flex: 1}]}><Text style={styles.btnText}>Cancel</Text></Pressable>
+               <Pressable onPress={() => setResetModalVisible(false)} style={[styles.btn, {backgroundColor: '#4B5563', marginRight: 8, flex: 1}]}><Text style={styles.btnText}>Cancel</Text></Pressable>
                <Pressable onPress={handleResetPinSubmit} style={[styles.btn, {marginLeft: 8, flex: 1}]}><Text style={styles.btnText}>Submit</Text></Pressable>
             </View>
           </View>
@@ -154,18 +154,18 @@ export default function StaffManagementScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: '#f9f9f9' },
-  title: { fontSize: 24, fontWeight: 'bold', marginBottom: 16 },
-  addCard: { backgroundColor: '#fff', padding: 16, borderRadius: 8, marginBottom: 16, elevation: 2 },
-  cardTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 12 },
-  input: { borderWidth: 1, borderColor: '#ccc', padding: 10, borderRadius: 8, marginBottom: 12 },
-  btn: { backgroundColor: '#3498db', padding: 12, borderRadius: 8, alignItems: 'center' },
-  btnText: { color: '#fff', fontWeight: 'bold' },
-  staffRow: { backgroundColor: '#fff', padding: 16, borderRadius: 8, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
-  staffCode: { fontSize: 16, fontWeight: 'bold' },
+  container: { flex: 1, padding: 16, backgroundColor: '#F3F4F6' },
+  title: { fontSize: 24, fontWeight: '700', marginBottom: 16 },
+  addCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 8, marginBottom: 16, elevation: 2 },
+  cardTitle: { fontSize: 16, fontWeight: '600', marginBottom: 12 },
+  input: { borderWidth: 1, borderColor: '#D1D5DB', padding: 10, borderRadius: 8, marginBottom: 12, color: '#111827', fontSize: 16 },
+  btn: { backgroundColor: '#15803D', padding: 12, borderRadius: 8, alignItems: 'center' },
+  btnText: { color: '#FFFFFF', fontWeight: '600' },
+  staffRow: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 8, marginBottom: 8, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', elevation: 1 },
+  staffCode: { fontSize: 16, fontWeight: '500' },
   actions: { gap: 8 },
   actionBtn: { padding: 8, borderRadius: 4, alignItems: 'center' },
-  backBtn: { backgroundColor: '#7f8c8d', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 16 },
+  backBtn: { backgroundColor: '#4B5563', padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 16 },
   modalBg: { flex: 1, justifyContent: 'center', backgroundColor: 'rgba(0,0,0,0.5)', padding: 16 },
-  modalContent: { backgroundColor: '#fff', padding: 20, borderRadius: 8 }
+  modalContent: { backgroundColor: '#FFFFFF', padding: 20, borderRadius: 8 }
 });

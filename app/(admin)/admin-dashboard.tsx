@@ -2,7 +2,7 @@ import React from "react";
 import { Alert, Image, View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from "react-native";
 import { FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
-import { colors } from "@/constants/colors";
+import { colors, accentOnDark, accentText } from "@/constants/colors";
 import { signOut } from "@/services/authService";
 
 // --- Mock Data ---
@@ -276,15 +276,15 @@ const styles = StyleSheet.create({
     paddingRight: 132,
   },
   brandText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     color: colors.white,
     letterSpacing: 1,
   },
   brandCaption: {
-    color: colors.mint,
-    fontSize: 7,
-    fontWeight: "800",
+    color: accentOnDark,
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 0.7,
     marginTop: 2,
   },
@@ -293,28 +293,27 @@ const styles = StyleSheet.create({
   title: {
     color: colors.white,
     fontSize: 24,
-    fontWeight: "800",
+    fontWeight: "700",
     letterSpacing: -0.6,
     marginBottom: 5,
   },
-  headerSubtitle: {
-    color: "#C8C6DF",
-    fontSize: 11,
+  headerSubtitle: {fontWeight: "400", color: "#D1D5DB",
+    fontSize: 12,
     marginBottom: 12,
   },
   adminBadge: {
     alignSelf: "flex-start",
-    backgroundColor: "rgba(85,229,186,0.16)",
-    borderColor: "rgba(85,229,186,0.3)",
+    backgroundColor: "rgba(22, 163, 74, 0.16)",
+    borderColor: "rgba(22, 163, 74, 0.3)",
     borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
   },
   adminBadgeText: {
-    color: colors.mint,
-    fontSize: 10,
-    fontWeight: "700",
+    color: accentText,
+    fontSize: 12,
+    fontWeight: "600",
     textTransform: "uppercase",
   },
   headerIcons: {
@@ -343,13 +342,13 @@ const styles = StyleSheet.create({
   },
   adminAvatarText: {
     color: colors.ink,
-    fontSize: 10,
-    fontWeight: "900",
+    fontSize: 12,
+    fontWeight: "700",
   },
   logoutButton: {
     alignItems: "center",
-    backgroundColor: "rgba(239,126,105,0.12)",
-    borderColor: "rgba(239,126,105,0.25)",
+    backgroundColor: "rgba(220,38,38,0.12)",
+    borderColor: "rgba(220,38,38,0.25)",
     borderWidth: 1,
     borderRadius: 9,
     flexDirection: "row",
@@ -359,8 +358,8 @@ const styles = StyleSheet.create({
   },
   logoutText: {
     color: colors.coral,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
   },
   scrollContent: {
     padding: 18,
@@ -400,8 +399,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: colors.night,
   },
-  systemContext: {
-    fontSize: 10,
+  systemContext: {fontWeight: "400", fontSize: 12,
     color: colors.muted,
     marginTop: 4,
   },
@@ -414,8 +412,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   liveBadgeText: {
-    color: "#00A859", // custom dark green over mintSoft
-    fontWeight: "800",
+    color: "#16A34A", // custom dark green over mintSoft
+    fontWeight: "600",
     fontSize: 12,
   },
   kpiGrid: {
@@ -428,7 +426,7 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: "45%",
     backgroundColor: colors.white,
-    borderColor: "#ECEBF4",
+    borderColor: "#F3F4F6",
     borderWidth: 1,
     padding: 14,
     borderRadius: 16,
@@ -439,34 +437,33 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   kpiCardWarning: {
-    backgroundColor: "#FFF5F3", // light coral hint
+    backgroundColor: "#FEE2E2", // light coral hint
     borderColor: colors.coral,
     borderWidth: 1,
   },
   kpiLabel: {
-    fontSize: 11,
+    fontSize: 12,
     color: colors.muted,
     fontWeight: "600",
     marginBottom: 8,
   },
   kpiValue: {
     fontSize: 26,
-    fontWeight: "800",
+    fontWeight: "600",
     color: colors.night,
     marginBottom: 4,
   },
-  kpiSub: {
-    fontSize: 12,
+  kpiSub: {fontWeight: "400", fontSize: 12,
     color: colors.muted,
   },
   kpiSubMint: {
     fontSize: 12,
-    color: "#00A859",
+    color: "#16A34A",
     fontWeight: "600",
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "600",
     color: colors.night,
     marginBottom: 12,
   },
@@ -500,7 +497,7 @@ const styles = StyleSheet.create({
   opValueMint: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#00A859",
+    color: "#16A34A",
     marginLeft: 16,
     textAlign: "right",
   },
@@ -531,7 +528,7 @@ const styles = StyleSheet.create({
   actionBtnText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     textAlign: "center",
   },
   listCard: {
@@ -549,13 +546,12 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   shopName: {
-    fontSize: 15,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     color: colors.night,
     marginBottom: 4,
   },
-  shopMetrics: {
-    fontSize: 13,
+  shopMetrics: {fontWeight: "400", fontSize: 13,
     color: colors.muted,
     lineHeight: 18,
   },
@@ -566,13 +562,12 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 6,
   },
-  statusPillText: {
-    fontSize: 12,
+  statusPillText: {fontWeight: "400", fontSize: 12,
   },
   bgMintSoft: { backgroundColor: colors.mintSoft },
-  bgAmberSoft: { backgroundColor: "#FFF4E5" },
-  textMint: { color: "#00A859", fontWeight: "700", fontSize: 12 },
-  textAmber: { color: "#E09000", fontWeight: "700", fontSize: 12 },
+  bgAmberSoft: { backgroundColor: "#FEF3C2" },
+  textMint: { color: "#16A34A", fontWeight: "700", fontSize: 12 },
+  textAmber: { color: "#92400E", fontWeight: "700", fontSize: 12 },
   securityCard: {
     backgroundColor: colors.night,
     borderRadius: 16,
@@ -595,7 +590,7 @@ const styles = StyleSheet.create({
   btnPrimaryText: {
     color: colors.night,
     fontSize: 15,
-    fontWeight: "700",
+    fontWeight: "600",
   },
   eventsCard: {
     backgroundColor: colors.white,
@@ -623,8 +618,7 @@ const styles = StyleSheet.create({
     color: colors.night,
     marginBottom: 2,
   },
-  eventTime: {
-    fontSize: 12,
+  eventTime: {fontWeight: "400", fontSize: 12,
     color: colors.muted,
   },
   pressedState: {

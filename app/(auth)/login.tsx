@@ -384,9 +384,9 @@ function SocialButton({
 
 const styles = StyleSheet.create({
   resendLink: {
-    color: "#07856A",
-    fontSize: 11,
-    fontWeight: "800",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "600",
     marginBottom: 10,
     marginTop: 8,
     textAlign: "center",
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   submitBtnDisabled: {
-    backgroundColor: "#E0E0EB",
+    backgroundColor: "#D1D5DB",
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -418,16 +418,16 @@ const styles = StyleSheet.create({
   submitBtnText: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   submitBtnTextDisabled: {
-    color: "#9A98AA",
+    color: "#4B5563",
   },
   forgotLink: {
     alignSelf: "flex-end",
-    color: "#07856A",
+    color: "#15803D",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     marginBottom: 4,
     marginTop: -4,
   },
@@ -437,8 +437,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 16,
   },
-  footerText: { color: colors.muted, fontSize: 12 },
-  link: { color: "#07856A", fontSize: 12, fontWeight: "800" },
+  footerText: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+  link: { color: "#15803D", fontSize: 12, fontWeight: "600" },
   divider: {
     alignItems: "center",
     flexDirection: "row",
@@ -447,7 +447,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   dividerLine: { backgroundColor: colors.line, flex: 1, height: 1 },
-  dividerText: { color: colors.muted, fontSize: 10, fontWeight: "700" },
+  dividerText: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   socialRow: { gap: 10 },
   socialButton: {
     alignItems: "center",
@@ -460,7 +460,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
   },
   socialButtonPressed: {
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     transform: [{ scale: 0.99 }],
   },
   socialButtonDisabled: { opacity: 0.6 },
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
     flex: 1,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     marginLeft: 5,
   },
 });

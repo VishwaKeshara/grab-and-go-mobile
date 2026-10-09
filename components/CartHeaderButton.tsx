@@ -47,6 +47,6 @@ const styles = StyleSheet.create({
     right: -3,
     top: -5,
   },
-  badgeText: { color: colors.ink, fontSize: 9, fontWeight: "900" },
+  badgeText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   pressed: { opacity: 0.68 },
 });

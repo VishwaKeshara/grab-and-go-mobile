@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { ShopOrder, ShopOrderItem } from "@/types/shopOrder";
 import { getShopOrderById, updateOrderStatus, staffGetOrderDetails, staffAcceptOrder, staffSetOrderStatus, getLocalStaffSession } from "@/services/shopService";
+import { colors } from "@/constants/colors";
 
 
 export default function ShopOrderDetails() {
@@ -84,7 +85,7 @@ export default function ShopOrderDetails() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#00A859" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading order details...</Text>
         </View>
       </SafeAreaView>
@@ -107,13 +108,13 @@ export default function ShopOrderDetails() {
 
   const getStatusBadge = () => {
     switch (order.status) {
-      case "placed": return { text: "NEW", color: "#0052CC", bg: "#DEEBFF" };
-      case "accepted": return { text: "ACCEPTED", color: "#00A859", bg: "#E6F7ED" };
-      case "packing": return { text: "PACKING", color: "#F5A623", bg: "#FFF5E6" };
-      case "ready": return { text: "READY", color: "#00A859", bg: "#E6F7ED" };
-      case "collected": return { text: "COMPLETED", color: "#1E2030", bg: "#E0E0EB" };
-      case "cancelled": return { text: "CANCELLED", color: "#D0021B", bg: "#FFEBEB" };
-      default: return { text: String(order.status).toUpperCase(), color: "#4A4A68", bg: "#F0F0F5" };
+      case "placed": return { text: "NEW", color: "#15803D", bg: "#F3F4F6" };
+      case "accepted": return { text: "ACCEPTED", color: "#16A34A", bg: "#DCFCE7" };
+      case "packing": return { text: "PACKING", color: "#F59E0B", bg: "#FEF3C2" };
+      case "ready": return { text: "READY", color: "#16A34A", bg: "#DCFCE7" };
+      case "collected": return { text: "COMPLETED", color: "#111827", bg: "#D1D5DB" };
+      case "cancelled": return { text: "CANCELLED", color: "#DC2626", bg: "#FEE2E2" };
+      default: return { text: String(order.status).toUpperCase(), color: "#4B5563", bg: "#F3F4F6" };
     }
   };
   const badge = getStatusBadge();
@@ -284,7 +285,7 @@ export default function ShopOrderDetails() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F8FC",
+    backgroundColor: "#F3F4F6",
   },
   center: {
     flex: 1,
@@ -293,7 +294,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: "#8A8A9E",
+    color: "#4B5563",
   },
   header: {
     flexDirection: "row",
@@ -303,12 +304,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#E0E0EB",
+    borderBottomColor: "#D1D5DB",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#111827",
   },
   scrollContent: {
     padding: 16,
@@ -325,7 +326,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#F0F0F5",
+    borderColor: "#F3F4F6",
   },
   cardHeaderRow: {
     flexDirection: "row",
@@ -334,8 +335,8 @@ const styles = StyleSheet.create({
   },
   orderRef: {
     fontSize: 20,
-    fontWeight: "800",
-    color: "#1E2030",
+    fontWeight: "600",
+    color: "#111827",
   },
   statusBadge: {
     paddingHorizontal: 8,
@@ -347,9 +348,9 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   sectionTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 12,
   },
   detailRow: {
@@ -360,30 +361,28 @@ const styles = StyleSheet.create({
   detailRowVertical: {
     marginTop: 8,
   },
-  detailLabel: {
-    fontSize: 14,
-    color: "#8A8A9E",
+  detailLabel: {fontWeight: "400", fontSize: 14,
+    color: "#4B5563",
   },
   detailLabelStrong: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#1E2030",
+    color: "#111827",
   },
   detailValue: {
     fontSize: 14,
     fontWeight: "500",
-    color: "#1E2030",
+    color: "#111827",
     maxWidth: '65%',
     textAlign: 'right',
   },
   detailValueStrong: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "700",
-    color: "#1E2030",
+    color: "#111827",
   },
-  detailValueNote: {
-    fontSize: 14,
-    color: "#1E2030",
+  detailValueNote: {fontWeight: "400", fontSize: 14,
+    color: "#111827",
     marginTop: 4,
   },
   basketHeader: {
@@ -392,7 +391,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   itemCountBadge: {
-    backgroundColor: "#F0F0F5",
+    backgroundColor: "#F3F4F6",
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -401,7 +400,7 @@ const styles = StyleSheet.create({
   itemCountText: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#4A4A68",
+    color: "#4B5563",
   },
   itemRow: {
     flexDirection: "row",
@@ -411,7 +410,7 @@ const styles = StyleSheet.create({
   itemImagePlaceholder: {
     width: 48,
     height: 48,
-    backgroundColor: "#F1F1F7",
+    backgroundColor: "#F3F4F6",
     borderRadius: 10,
     marginRight: 12,
     justifyContent: "center",
@@ -421,13 +420,13 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 10,
-    backgroundColor: "#F1F1F7",
+    backgroundColor: "#F3F4F6",
     marginRight: 12,
   },
   itemImageFallbackText: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#A0A0B8",
+    color: "#4B5563",
   },
   itemDetails: {
     flex: 1,
@@ -436,35 +435,33 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#1E2030",
+    color: "#111827",
     marginBottom: 4,
   },
-  itemSubText: {
-    fontSize: 13,
-    color: "#4A4A68",
+  itemSubText: {fontWeight: "400", fontSize: 13,
+    color: "#4B5563",
     marginBottom: 2,
   },
-  substitutionText: {
-    fontSize: 12,
-    color: "#F5A623",
+  substitutionText: {fontWeight: "400", fontSize: 12,
+    color: "#F59E0B",
     marginTop: 4,
     fontStyle: "italic",
   },
   itemPrice: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#1E2030",
+    color: "#111827",
   },
   divider: {
     height: 1,
-    backgroundColor: "#F0F0F5",
+    backgroundColor: "#F3F4F6",
     marginVertical: 12,
   },
   actionsContainer: {
     marginTop: 8,
   },
   btnPrimary: {
-    backgroundColor: "#00A859",
+    backgroundColor: "#16A34A",
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: "center",
@@ -474,29 +471,28 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 8,
     textAlign: "center",
   },
-  emptyText: {
-    fontSize: 14,
-    color: "#8A8A9E",
+  emptyText: {fontWeight: "400", fontSize: 13,
+    color: "#4B5563",
     textAlign: "center",
   },
   readyContainer: {
     paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: "#E6F7ED",
+    backgroundColor: "#DCFCE7",
     borderRadius: 12,
   },
   readyText: {
-    color: "#00A859",
+    color: "#16A34A",
     fontSize: 16,
     fontWeight: "700",
   }

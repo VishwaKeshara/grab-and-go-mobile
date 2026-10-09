@@ -1,6 +1,6 @@
 import { AuthFrame, ErrorBanner } from "@/components/AuthUI";
 import { BrowseProductCard, toCartProduct } from "@/components/BrowseProductCard";
-import { colors } from "@/constants/colors";
+import { colors, accentText } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
 import { fetchDiscoveryProducts } from "@/services/discoveryService";
 import {
@@ -340,7 +340,7 @@ export default function Search() {
           onChangeText={setQuery}
           onSubmitEditing={() => submitAndRemember(query)}
           placeholder="Search products and shops"
-          placeholderTextColor="#9A98AA"
+          placeholderTextColor={colors.muted}
           ref={inputRef}
           returnKeyType="search"
           style={styles.search}
@@ -365,7 +365,7 @@ export default function Search() {
 
       {scopeLabel ? (
         <View style={styles.scope}>
-          <FontAwesome color="#07856A" name="filter" size={11} />
+          <FontAwesome color={colors.primaryDark} name="filter" size={11} />
           <Text numberOfLines={1} style={styles.scopeText}>
             Showing {scopeLabel}
           </Text>
@@ -526,15 +526,15 @@ const styles = StyleSheet.create({
   headerContainer: { paddingBottom: 10 },
   searchWrap: {
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 24,
     flexDirection: "row",
     marginBottom: 14,
     minHeight: 46,
     paddingHorizontal: 16,
   },
-  searchIcon: { color: colors.muted, fontSize: 18, marginRight: 8 },
-  search: { color: colors.ink, flex: 1, fontSize: 14, paddingVertical: 12 },
+  searchIcon: {fontWeight: "400", color: colors.muted, fontSize: 18, marginRight: 8 },
+  search: {fontWeight: "400", color: colors.ink, flex: 1, fontSize: 14, paddingVertical: 12 },
   clear: {
     alignItems: "center",
     backgroundColor: colors.line,
@@ -544,7 +544,7 @@ const styles = StyleSheet.create({
     marginLeft: 8,
     width: 24,
   },
-  clearText: { color: colors.muted, fontSize: 14, fontWeight: "bold" },
+  clearText: { color: colors.muted, fontSize: 14, fontWeight: "600" },
   scope: {
     alignItems: "center",
     backgroundColor: colors.mintSoft,
@@ -554,16 +554,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 7,
   },
-  scopeText: { color: colors.ink, flex: 1, fontSize: 11, fontWeight: "800" },
+  scopeText: { color: colors.ink, flex: 1, fontSize: 12, fontWeight: "600" },
   chipRow: { gap: 8, paddingBottom: 12, paddingRight: 22 },
   chip: {
-    backgroundColor: "#E9EAF9",
+    backgroundColor: "#F3F4F6",
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   chipActive: { backgroundColor: colors.ink },
-  chipText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  chipText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   chipTextActive: { color: colors.white },
   toggleRow: { flexDirection: "row", gap: 18, marginBottom: 14 },
   stockToggle: { alignItems: "center", flexDirection: "row" },
@@ -590,8 +590,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  recentTitle: { color: colors.ink, fontSize: 12, fontWeight: "800" },
-  recentClear: { color: colors.coral, fontSize: 11, fontWeight: "800" },
+  recentTitle: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  recentClear: { color: colors.coral, fontSize: 12, fontWeight: "600" },
   recentRow: { gap: 7, paddingRight: 22 },
   recentChip: {
     alignItems: "center",
@@ -606,7 +606,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   recentChipPressed: { opacity: 0.7 },
-  recentChipText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  recentChipText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
 
   // Floats above the tab bar: bottom 90 clears the bar plus its own padding, and
   // the horizontal inset keeps it off the screen edge on wide layouts.
@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 20,
   },
-  toastText: { color: colors.ink, flex: 1, fontSize: 13, fontWeight: "800" },
+  toastText: { color: colors.ink, flex: 1, fontSize: 13, fontWeight: "600" },
   toastCount: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -646,7 +646,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 9,
     paddingVertical: 4,
   },
-  toastCountText: { color: colors.ink, fontSize: 11, fontWeight: "900" },
+  toastCountText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
 
   resultHeader: {
     alignItems: "center",
@@ -654,23 +654,22 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  sectionTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
-  resultCount: { color: colors.muted, fontSize: 12 },
+  sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: "600" },
+  resultCount: {fontWeight: "400", color: colors.muted, fontSize: 12 },
   listContent: { paddingBottom: 100 },
   columnWrapper: { gap: 12, marginBottom: 16 },
   emptyContainer: { alignItems: "center", paddingTop: 40 },
-  loadingText: { color: colors.muted, fontSize: 14, marginTop: 12 },
+  loadingText: {fontWeight: "400", color: colors.muted, fontSize: 14, marginTop: 12 },
   empty: {
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 16,
     marginTop: 20,
     padding: 32,
   },
-  emptyIcon: { color: colors.mint, fontSize: 36, marginBottom: 12 },
-  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "800" },
-  emptyText: {
-    color: colors.muted,
+  emptyIcon: {fontWeight: "400", color: accentText, fontSize: 36, marginBottom: 12 },
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  emptyText: {fontWeight: "400", color: colors.muted,
     fontSize: 13,
     lineHeight: 19,
     marginTop: 8,

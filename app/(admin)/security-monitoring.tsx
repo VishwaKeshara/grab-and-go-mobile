@@ -154,7 +154,7 @@ export default function SecurityMonitoring() {
               <Text style={styles.kpiIcon}>⚠️</Text>
             </View>
             <Text style={styles.kpiLabel}>Failed Logins</Text>
-            <Text style={[styles.kpiValue, { color: colors.amber }]}>{KPIS.failedLogins}</Text>
+            <Text style={[styles.kpiValue, { color: colors.warning }]}>{KPIS.failedLogins}</Text>
             <Text style={styles.kpiSub}>Low Risk</Text>
           </View>
 
@@ -257,7 +257,7 @@ const styles = StyleSheet.create({
   backButtonText: {
     color: colors.muted,
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: 15,
   },
   headerCenter: {
     flex: 1,
@@ -265,8 +265,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
   },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "600",
     color: colors.night,
     marginBottom: 6,
   },
@@ -282,8 +282,8 @@ const styles = StyleSheet.create({
   },
   badgeLevelText: {
     color: colors.white,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
   },
   badgeRole: {
     backgroundColor: colors.nightSoft,
@@ -293,7 +293,7 @@ const styles = StyleSheet.create({
   },
   badgeRoleText: {
     color: colors.white,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
   },
   headerRight: {
@@ -303,8 +303,7 @@ const styles = StyleSheet.create({
   iconBox: {
     position: "relative",
   },
-  iconText: {
-    fontSize: 20,
+  iconText: {fontWeight: "400", fontSize: 20,
   },
   alertDot: {
     position: "absolute",
@@ -333,7 +332,7 @@ const styles = StyleSheet.create({
   systemCardLeft: {},
   systemTitle: {
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "600",
     color: colors.white,
     marginBottom: 4,
   },
@@ -350,7 +349,7 @@ const styles = StyleSheet.create({
   },
   liveBadgeText: {
     color: colors.night,
-    fontWeight: "800",
+    fontWeight: "600",
     fontSize: 12,
   },
   kpiGrid: {
@@ -375,7 +374,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "#FFF5E5",
+    backgroundColor: "#FEF3C2",
     alignItems: "center",
     justifyContent: "center",
     marginBottom: 8,
@@ -389,11 +388,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 8,
   },
-  kpiIcon: {
-    fontSize: 14,
+  kpiIcon: {fontWeight: "400", fontSize: 14,
   },
   kpiLabel: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     color: colors.muted,
     marginBottom: 4,
@@ -401,11 +399,11 @@ const styles = StyleSheet.create({
   },
   kpiValue: {
     fontSize: 20,
-    fontWeight: "800",
+    fontWeight: "600",
     marginBottom: 2,
   },
   kpiSub: {
-    fontSize: 10,
+    fontSize: 12,
     color: colors.muted,
     fontWeight: "600",
   },
@@ -417,7 +415,7 @@ const styles = StyleSheet.create({
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "800",
+    fontWeight: "600",
     color: colors.night,
   },
   liveAuditBadge: {
@@ -428,7 +426,7 @@ const styles = StyleSheet.create({
   },
   liveAuditText: {
     color: colors.lilac,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     textTransform: "uppercase",
   },
@@ -478,7 +476,7 @@ const styles = StyleSheet.create({
   },
   logTitle: {
     fontSize: 15,
-    fontWeight: "800",
+    fontWeight: "600",
     color: colors.night,
     marginBottom: 4,
   },
@@ -493,18 +491,17 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   badgeMint: { backgroundColor: colors.mintSoft },
-  badgeAmber: { backgroundColor: "#FFF5E5" },
+  badgeAmber: { backgroundColor: "#FEF3C2" },
   badgeLilac: { backgroundColor: colors.lilac },
   statusBadgeText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     textTransform: "uppercase",
   },
-  textMint: { color: "#00A859" },
-  textAmber: { color: colors.amber },
+  textMint: { color: "#16A34A" },
+  textAmber: { color: colors.warning },
   textNight: { color: colors.night },
-  logDescription: {
-    fontSize: 14,
+  logDescription: {fontWeight: "400", fontSize: 14,
     color: colors.night,
     lineHeight: 20,
     marginBottom: 16,

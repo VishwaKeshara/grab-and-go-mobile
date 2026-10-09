@@ -14,7 +14,7 @@ import {
   OrderActionDialog,
   type OrderDialogContent,
 } from "@/components/OrderActionDialog";
-import { colors } from "@/constants/colors";
+import { colors, accentOnDark } from "@/constants/colors";
 import { useOrders } from "@/hooks/useOrders";
 import { callShop } from "@/services/shopContactService";
 import { shopTelUrl } from "@/utils/shopPhone";
@@ -273,20 +273,19 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
   },
   passLabel: {
-    color: colors.mint,
-    fontSize: 10,
-    fontWeight: "900",
+    color: accentOnDark,
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 1,
   },
   reference: {
     color: colors.white,
     fontSize: 25,
-    fontWeight: "900",
+    fontWeight: "700",
     marginTop: 10,
   },
-  passMeta: {
-    color: "#DDDCEC",
-    fontSize: 11,
+  passMeta: {fontWeight: "400", color: "#D1D5DB",
+    fontSize: 12,
     marginTop: 6,
   },
   qrWrap: {
@@ -304,15 +303,14 @@ const styles = StyleSheet.create({
     width: 164,
     height: 164,
   },
-  qrFallback: {
-    color: colors.muted,
+  qrFallback: {fontWeight: "400", color: colors.muted,
     textAlign: "center",
     fontSize: 12,
   },
   pinLabel: {
-    color: colors.mint,
-    fontSize: 10,
-    fontWeight: "800",
+    color: accentOnDark,
+    fontSize: 12,
+    fontWeight: "600",
     textAlign: "center",
     marginTop: 16,
     letterSpacing: 1,
@@ -330,26 +328,23 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
   },
-  instructions: {
-    color: colors.muted,
-    fontSize: 11,
+  instructions: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     lineHeight: 18,
     marginTop: 8,
   },
   demoTitle: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
   },
-  demoCopy: {
-    color: colors.muted,
-    fontSize: 11,
+  demoCopy: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     lineHeight: 17,
     marginTop: 5,
     marginBottom: 12,
   },
-  missing: {
-    color: colors.muted,
+  missing: {fontWeight: "400", color: colors.muted,
     fontSize: 13,
     marginBottom: 13,
   },

@@ -10,6 +10,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import {
   addFavourite,
   getProduct,
@@ -63,6 +64,7 @@ function unitPriceOf(priceLkr: number, unit: string): UnitPrice | null {
 }
 
 export default function ProductDetails() {
+    const insets = useSafeAreaInsets();
     const { id } = useLocalSearchParams<{ id: string }>();
 
     const [product, setProduct] = useState<ProductWithShop | null>(null);
@@ -231,7 +233,7 @@ export default function ProductDetails() {
 
     return (
         <View style={styles.screen}>
-            <View style={styles.header}>
+            <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
                 <Pressable
                     accessibilityLabel="Go back"
                     onPress={() => router.back()}
@@ -509,8 +511,8 @@ function OfferCard({
                         color: isSame
                             ? colors.muted
                             : isCheaper
-                              ? "#0A7D5F"
-                              : "#A33D2F",
+                              ? "#15803D"
+                              : "#DC2626",
                     },
                 ]}
             >
@@ -522,7 +524,7 @@ function OfferCard({
             <Text
                 style={[
                     styles.offerStock,
-                    { color: offer.stockQuantity > 0 ? "#0A7D5F" : "#A33D2F" },
+                    { color: offer.stockQuantity > 0 ? "#15803D" : "#DC2626" },
                 ]}
             >
                 {offer.stockQuantity > 0
@@ -547,11 +549,11 @@ const styles = StyleSheet.create({
         alignItems: "center",
         flexDirection: "row",
         paddingHorizontal: 16,
-        paddingVertical: 12,
+        paddingBottom: 12,
     },
     iconButton: { padding: 6 },
-    headerIcon: { color: colors.ink, fontSize: 20 },
-    headerTitle: { color: colors.ink, flex: 1, fontSize: 16, fontWeight: "800" },
+    headerIcon: {fontWeight: "400", color: colors.ink, fontSize: 20 },
+    headerTitle: { color: colors.ink, flex: 1, fontSize: 20, fontWeight: "600" },
     body: {
         gap: 14,
         paddingBottom: 30,
@@ -573,7 +575,7 @@ const styles = StyleSheet.create({
         borderColor: colors.line,
         borderRadius: 14,
         borderWidth: 1,
-        height: 180,
+        height: 230,
         justifyContent: "center",
         overflow: "hidden",
     },
@@ -585,10 +587,10 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         width: "100%",
     },
-    heroPlaceholderText: { color: colors.ink, fontSize: 52, fontWeight: "900" },
+    heroPlaceholderText: { color: colors.ink, fontSize: 52, fontWeight: "700" },
     titleBlock: { gap: 3 },
-    name: { color: colors.ink, fontSize: 18, fontWeight: "900" },
-    subtitle: { color: colors.muted, fontSize: 11 },
+    name: { color: colors.ink, fontSize: 18, fontWeight: "700" },
+    subtitle: {fontWeight: "400", color: colors.muted, fontSize: 14 },
     priceCard: {
         backgroundColor: colors.white,
         borderColor: colors.line,
@@ -597,22 +599,21 @@ const styles = StyleSheet.create({
         padding: 13,
     },
     priceRow: { alignItems: "center", flexDirection: "row", gap: 10 },
-    priceMain: { color: colors.ink, fontSize: 24, fontWeight: "900" },
+    priceMain: { color: colors.ink, fontSize: 24, fontWeight: "700" },
     saveBadge: {
-        backgroundColor: "#BFF5DA",
+        backgroundColor: "#DCFCE7",
         borderRadius: 7,
         paddingHorizontal: 9,
         paddingVertical: 4,
     },
-    saveBadgeText: { color: "#0A5C42", fontSize: 10, fontWeight: "800" },
-    wasPrice: {
-        color: colors.muted,
+    saveBadgeText: { color: "#15803D", fontSize: 12, fontWeight: "600" },
+    wasPrice: {fontWeight: "400", color: colors.muted,
         fontSize: 12,
         marginTop: 2,
         textDecorationLine: "line-through",
     },
-    unitPrice: { color: colors.muted, fontSize: 11, marginTop: 6 },
-    notice: { color: "#9A6412", fontSize: 11, marginTop: 8 },
+    unitPrice: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 6 },
+    notice: {fontWeight: "400", color: "#92400E", fontSize: 12, marginTop: 8 },
     noticeRow: {
         alignItems: "center",
         flexDirection: "row",
@@ -625,7 +626,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 11,
         paddingVertical: 5,
     },
-    signInText: { color: colors.white, fontSize: 10, fontWeight: "800" },
+    signInText: { color: colors.white, fontSize: 12, fontWeight: "600" },
     stockCard: {
         backgroundColor: colors.night,
         borderRadius: 14,
@@ -636,21 +637,21 @@ const styles = StyleSheet.create({
         backgroundColor: colors.mint,
         borderRadius: 6,
         color: colors.night,
-        fontSize: 10,
-        fontWeight: "900",
+        fontSize: 12,
+        fontWeight: "700",
         overflow: "hidden",
         paddingHorizontal: 8,
         paddingVertical: 3,
     },
-    stockCount: { color: colors.white, fontSize: 12, fontWeight: "800" },
-    stockLine: { color: "#C9C7E8", fontSize: 11, marginTop: 8 },
-    stockFoot: { color: colors.mint, fontSize: 10, marginTop: 6 },
+    stockCount: { color: colors.white, fontSize: 12, fontWeight: "600" },
+    stockLine: {fontWeight: "400", color: "#D1D5DB", fontSize: 12, marginTop: 8 },
+    stockFoot: {fontWeight: "400", color: colors.mint, fontSize: 12, marginTop: 6 },
     errorBanner: {
-        backgroundColor: "#FFF0ED",
+        backgroundColor: "#FEE2E2",
         borderRadius: 10,
         padding: 11,
     },
-    errorText: { color: "#A33D2F", fontSize: 11, lineHeight: 16 },
+    errorText: {fontWeight: "400", color: "#DC2626", fontSize: 13, lineHeight: 16 },
     comparison: {
         backgroundColor: colors.white,
         borderColor: colors.line,
@@ -663,15 +664,15 @@ const styles = StyleSheet.create({
         flexDirection: "row",
         justifyContent: "space-between",
     },
-    comparisonTitle: { color: colors.ink, fontSize: 14, fontWeight: "900" },
-    comparisonSpread: { color: "#0A7D5F", fontSize: 10, fontWeight: "800" },
+    comparisonTitle: { color: colors.ink, fontSize: 14, fontWeight: "700" },
+    comparisonSpread: { color: "#15803D", fontSize: 12, fontWeight: "600" },
     comparisonEmpty: { marginTop: 10 },
-    comparisonEmptyText: { color: colors.muted, fontSize: 11, lineHeight: 17 },
+    comparisonEmptyText: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 17 },
     offerGrid: { gap: 9, marginTop: 12 },
     tierLabel: {
         color: colors.muted,
-        fontSize: 9,
-        fontWeight: "800",
+        fontSize: 12,
+        fontWeight: "600",
         letterSpacing: 0.4,
         marginTop: 4,
         textTransform: "uppercase",
@@ -683,28 +684,27 @@ const styles = StyleSheet.create({
         borderWidth: 1,
         padding: 11,
     },
-    offerShop: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+    offerShop: { color: colors.ink, fontSize: 12, fontWeight: "600" },
     offerHead: {
         alignItems: "center",
         flexDirection: "row",
         justifyContent: "space-between",
     },
-    offerChevron: { color: colors.muted, fontSize: 16, fontWeight: "800" },
-    offerProduct: { color: colors.ink, fontSize: 11, marginTop: 3 },
-    offerMeta: { color: colors.muted, fontSize: 9, marginTop: 2 },
-    offerPrice: { color: colors.ink, fontSize: 16, fontWeight: "900", marginTop: 6 },
-    offerUnit: { color: colors.muted, fontSize: 9 },
-    offerDelta: { fontSize: 10, fontWeight: "800", marginTop: 5 },
-    offerStock: { fontSize: 10, fontWeight: "800", marginTop: 5 },
+    offerChevron: { color: colors.muted, fontSize: 16, fontWeight: "600" },
+    offerProduct: {fontWeight: "400", color: colors.ink, fontSize: 12, marginTop: 3 },
+    offerMeta: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 2 },
+    offerPrice: { color: colors.ink, fontSize: 16, fontWeight: "700", marginTop: 6 },
+    offerUnit: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+    offerDelta: { fontSize: 12, fontWeight: "600", marginTop: 5 },
+    offerStock: { fontSize: 12, fontWeight: "600", marginTop: 5 },
     guarantee: {
         backgroundColor: colors.mintSoft,
         borderRadius: 12,
         padding: 13,
     },
-    guaranteeTitle: { color: "#0A5C42", fontSize: 12, fontWeight: "800" },
-    guaranteeBody: {
-        color: "#0A5C42",
-        fontSize: 11,
+    guaranteeTitle: { color: "#15803D", fontSize: 12, fontWeight: "600" },
+    guaranteeBody: {fontWeight: "400", color: "#15803D",
+        fontSize: 12,
         lineHeight: 16,
         marginTop: 4,
     },
@@ -731,11 +731,11 @@ const styles = StyleSheet.create({
         justifyContent: "center",
         width: 34,
     },
-    stepText: { color: colors.ink, fontSize: 17, fontWeight: "800" },
+    stepText: { color: colors.ink, fontSize: 17, fontWeight: "600" },
     stepValue: {
         color: colors.ink,
         fontSize: 13,
-        fontWeight: "800",
+        fontWeight: "600",
         minWidth: 24,
         textAlign: "center",
     },
@@ -749,8 +749,8 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
         paddingVertical: 11,
     },
-    preOrderText: { color: colors.white, fontSize: 13, fontWeight: "800" },
-    preOrderPrice: { color: colors.mint, fontSize: 14, fontWeight: "900" },
+    preOrderText: { color: colors.white, fontSize: 13, fontWeight: "600" },
+    preOrderPrice: { color: colors.mint, fontSize: 14, fontWeight: "700" },
     preOrderDisabled: { opacity: 0.6 },
     backAction: {
         backgroundColor: colors.ink,
@@ -759,7 +759,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 16,
         paddingVertical: 9,
     },
-    backActionText: { color: colors.white, fontSize: 12, fontWeight: "800" },
-    emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "800" },
-    muted: { color: colors.muted, fontSize: 12, textAlign: "center" },
+    backActionText: { color: colors.white, fontSize: 12, fontWeight: "600" },
+    emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+    muted: {fontWeight: "400", color: colors.muted, fontSize: 12, textAlign: "center" },
 });

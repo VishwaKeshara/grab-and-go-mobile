@@ -85,7 +85,7 @@ export default function AdminLogin() {
             <TextInput
               style={styles.input}
               placeholder="Enter your email or ID"
-              placeholderTextColor="#A0A0B8"
+              placeholderTextColor={colors.muted}
               value={identifier}
               onChangeText={setIdentifier}
               autoCapitalize="none"
@@ -100,7 +100,7 @@ export default function AdminLogin() {
               <TextInput
                 style={styles.passwordInput}
                 placeholder="Enter your password"
-                placeholderTextColor="#A0A0B8"
+                placeholderTextColor={colors.muted}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
@@ -133,7 +133,7 @@ export default function AdminLogin() {
             onPress={handleLogin}
           >
             {loading ? (
-              <ActivityIndicator color="#FFFFFF" />
+              <ActivityIndicator color={colors.white} />
             ) : (
               <Text style={styles.btnPrimaryText}>Sign In as Administrator</Text>
             )}
@@ -159,7 +159,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   backgroundOrb: {
-    backgroundColor: "#EAF8F3",
+    backgroundColor: "#DCFCE7",
     borderRadius: 160,
     height: 260,
     position: "absolute",
@@ -180,7 +180,7 @@ const styles = StyleSheet.create({
   brandLogoFrame: {
     alignItems: "center",
     backgroundColor: colors.white,
-    borderColor: "#DDEBE5",
+    borderColor: "#DCFCE7",
     borderRadius: 14,
     borderWidth: 1,
     elevation: 2,
@@ -200,27 +200,27 @@ const styles = StyleSheet.create({
   },
   brandCaption: {
     color: colors.muted,
-    fontSize: 8,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 0.7,
     marginTop: 3,
   },
   brandLogo: { height: 48, width: 48 },
   portalTitle: {
     fontSize: 28,
-    fontWeight: "800",
-    color: "#1E2030", // dark navy/purple
+    fontWeight: "600",
+    color: "#111827", // dark navy/purple
     marginBottom: 12,
   },
   statusBadge: {
-    backgroundColor: "#E6F7ED",
+    backgroundColor: "#DCFCE7",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
     alignSelf: "flex-start",
   },
   statusBadgeText: {
-    color: "#00A859",
+    color: "#16A34A",
     fontWeight: "700",
     fontSize: 12,
     textTransform: "uppercase",
@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
   },
   card: {
     backgroundColor: "#FFFFFF",
-    borderColor: "#ECEBF4",
+    borderColor: "#F3F4F6",
     borderRadius: 20,
     borderWidth: 1,
     padding: 22,
@@ -242,29 +242,28 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   cardTitle: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 8,
   },
-  cardSubtitle: {
-    fontSize: 14,
-    color: "#8A8A9E",
+  cardSubtitle: {fontWeight: "400", fontSize: 14,
+    color: "#4B5563",
     marginBottom: 24,
     lineHeight: 20,
   },
   errorBox: {
-    backgroundColor: "#FFEBEB",
+    backgroundColor: "#FEE2E2",
     padding: 12,
     borderRadius: 8,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#FFD6D6",
+    borderColor: "#FEE2E2",
   },
   errorText: {
-    color: "#D0021B",
-    fontSize: 14,
-    fontWeight: "500",
+    color: "#DC2626",
+    fontSize: 13,
+    fontWeight: "400",
   },
   inputGroup: {
     marginBottom: 20,
@@ -272,33 +271,31 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#1E2030",
+    color: "#111827",
     marginBottom: 8,
   },
-  input: {
-    backgroundColor: "#F8F8FC",
+  input: {fontWeight: "400", backgroundColor: "#F3F4F6",
     borderWidth: 1,
-    borderColor: "#E0E0EB",
+    borderColor: "#D1D5DB",
     borderRadius: 10,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#1E2030",
+    color: "#111827",
   },
   passwordContainer: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F8F8FC",
+    backgroundColor: "#F3F4F6",
     borderWidth: 1,
-    borderColor: "#E0E0EB",
+    borderColor: "#D1D5DB",
     borderRadius: 10,
   },
-  passwordInput: {
-    flex: 1,
+  passwordInput: {fontWeight: "400", flex: 1,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: "#1E2030",
+    color: "#111827",
   },
   eyeBtn: {
     paddingHorizontal: 16,
@@ -307,7 +304,7 @@ const styles = StyleSheet.create({
   eyeBtnText: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#4A4A68",
+    color: "#4B5563",
   },
   securityInfo: {
     marginVertical: 16,
@@ -315,11 +312,11 @@ const styles = StyleSheet.create({
   },
   securityText: {
     fontSize: 13,
-    color: "#00A859",
+    color: "#16A34A",
     fontWeight: "600",
   },
   btnPrimary: {
-    backgroundColor: "#1E2030",
+    backgroundColor: "#111827",
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
@@ -328,15 +325,15 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
   },
   btnSecondary: {
     paddingVertical: 12,
     alignItems: "center",
   },
   btnSecondaryText: {
-    color: "#4A4A68",
+    color: "#4B5563",
     fontSize: 15,
     fontWeight: "600",
   },
@@ -344,6 +341,6 @@ const styles = StyleSheet.create({
     opacity: 0.8,
   },
   btnDisabled: {
-    backgroundColor: "#A0A0B8",
+    backgroundColor: "#4B5563",
   },
 });

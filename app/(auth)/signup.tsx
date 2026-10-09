@@ -5,7 +5,7 @@ import {
     Field,
     PrimaryButton,
 } from "@/components/AuthUI";
-import { colors } from "@/constants/colors";
+import { colors, accentOnDark } from "@/constants/colors";
 import {
   listPickupHubs,
   resendSignupConfirmation,
@@ -231,23 +231,22 @@ export default function Signup() {
 }
 
 const styles = StyleSheet.create({
-  body: { color: colors.muted, fontSize: 12, lineHeight: 18, marginBottom: 16 },
-  helper: {
-    color: colors.muted,
-    fontSize: 10,
+  body: {fontWeight: "400", color: colors.muted, fontSize: 15, lineHeight: 18, marginBottom: 16 },
+  helper: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     marginBottom: 12,
     marginTop: -7,
   },
   sectionLabel: {
     color: colors.ink,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     marginBottom: 8,
     marginTop: 2,
   },
   hubRow: {
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderColor: "transparent",
     borderRadius: 11,
     borderWidth: 1,
@@ -255,7 +254,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
     padding: 10,
   },
-  hubSelected: { backgroundColor: "#DDE3FF", borderColor: "#B6B9F1" },
+  hubSelected: { backgroundColor: "#D1D5DB", borderColor: "#F3F4F6" },
   hubIcon: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -265,8 +264,8 @@ const styles = StyleSheet.create({
     width: 34,
   },
   hubCopy: { flex: 1, marginLeft: 10 },
-  hubName: { color: colors.ink, fontSize: 11, fontWeight: "800" },
-  hubAddress: { color: colors.muted, fontSize: 9, marginTop: 3 },
+  hubName: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  hubAddress: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
   check: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -279,7 +278,7 @@ const styles = StyleSheet.create({
   checkSelected: { backgroundColor: colors.ink, lineHeight: 20 },
   termsRow: { alignItems: "center", flexDirection: "row", marginVertical: 14 },
   checkbox: {
-    backgroundColor: "#DCE2FF",
+    backgroundColor: "#F3F4F6",
     borderRadius: 4,
     height: 17,
     marginRight: 8,
@@ -287,28 +286,28 @@ const styles = StyleSheet.create({
   },
   checkboxChecked: { backgroundColor: colors.ink },
   checkboxMark: {
-    color: colors.mint,
+    color: accentOnDark,
     fontSize: 12,
     fontWeight: "900",
     lineHeight: 17,
     textAlign: "center",
   },
-  terms: { color: colors.muted, flex: 1, fontSize: 10, lineHeight: 15 },
-  link: { color: "#07856A", fontWeight: "800" },
+  terms: {fontWeight: "400", color: colors.muted, flex: 1, fontSize: 12, lineHeight: 15 },
+  link: { color: "#15803D", fontWeight: "800" },
   footer: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
     marginTop: 18,
   },
-  footerText: { color: colors.muted, fontSize: 11 },
+  footerText: {fontWeight: "400", color: colors.muted, fontSize: 12 },
   confirmationCard: {
     backgroundColor: colors.mintSoft,
     borderRadius: 14,
     marginBottom: 18,
     padding: 16,
   },
-  confirmationTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
-  confirmationText: { color: colors.muted, fontSize: 11, lineHeight: 17, marginVertical: 8 },
+  confirmationTitle: { color: colors.ink, fontSize: 17, fontWeight: "600" },
+  confirmationText: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 17, marginVertical: 8 },
   loginLink: { alignItems: "center", marginTop: 12 },
 });

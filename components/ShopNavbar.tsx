@@ -5,7 +5,7 @@
  * Tabs: Dashboard · Orders · Stock · Scan
  */
 
-import { colors } from "@/constants/colors";
+import { colors, accentOnDark } from "@/constants/colors";
 import { FontAwesome } from "@expo/vector-icons";
 import { router, usePathname } from "expo-router";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -147,6 +147,6 @@ const styles = StyleSheet.create({
   pressed: { opacity: 0.6 },
   iconWrap: { alignItems: "center", borderRadius: 12, height: 30, justifyContent: "center", width: 44 },
   activeIconWrap: { backgroundColor: colors.nightSoft },
-  label: { color: "rgba(255,255,255,0.4)", fontSize: 8, fontWeight: "700", marginTop: 2 },
-  activeLabel: { color: colors.mint },
+  label: { color: "rgba(255,255,255,0.4)", fontSize: 12, fontWeight: "500", marginTop: 2 },
+  activeLabel: { color: accentOnDark },
 });

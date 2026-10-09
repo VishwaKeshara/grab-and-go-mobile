@@ -1,5 +1,5 @@
 import { AuthFrame, AuthHeader, ErrorBanner } from "@/components/AuthUI";
-import { colors } from "@/constants/colors";
+import { colors, accentText } from "@/constants/colors";
 import { supportConfig } from "@/constants/config";
 import { listShops } from "@/services/shopService";
 import type { Shop } from "@/types/shop";
@@ -23,7 +23,7 @@ const FEATURED_FAQS = [
   {
     id: "preorder-compare",
     number: "1",
-    tone: "#5B7CFA",
+    tone: "#4B5563",
     question: "Pre-Order & Compare",
     answer:
       "Compare prices across Malabe stores before you pay. Live basket, live pricing from Bestway Supermarket, Direct Market, and Daily Fresh.",
@@ -31,7 +31,7 @@ const FEATURED_FAQS = [
   {
     id: "suggested-alternative",
     number: "2",
-    tone: "#55E5BA",
+    tone: "#16A34A",
     question: "Suggested Alternative Store",
     answer:
       "Out of stock items are shown with clear substitute options. Tap Suggest Alternative to browse nearby shops with live prices.",
@@ -39,7 +39,7 @@ const FEATURED_FAQS = [
   {
     id: "scan-grab",
     number: "3",
-    tone: "#F6B84B",
+    tone: "#F59E0B",
     question: "Scan & Grab in under 45s",
     answer:
       "Push your dynamic QR code or enter your order code. Confirm pickup hub, time slot, and continue to checkout.",
@@ -166,7 +166,7 @@ export default function HelpSupport() {
             <TextInput
               onChangeText={setQuery}
               placeholder="Search topics, quantity, orders"
-              placeholderTextColor="#9A98AA"
+              placeholderTextColor={colors.muted}
               returnKeyType="search"
               style={styles.search}
               value={query}
@@ -188,7 +188,7 @@ export default function HelpSupport() {
             label="Live Chat"
             onPress={() => openExternal("mailto:" + supportConfig.email)}
             sub="Typically replies in minutes"
-            tone="#5B7CFA"
+            tone="#4B5563"
           />
           <ContactCard
             icon="✉"
@@ -204,7 +204,7 @@ export default function HelpSupport() {
               openExternal(`https://wa.me/${supportConfig.whatsapp}`)
             }
             sub="Chat on WhatsApp"
-            tone="#F6B84B"
+            tone="#F59E0B"
           />
         </View>
         <Pressable
@@ -377,20 +377,19 @@ function ContactCard({
 const styles = StyleSheet.create({
   scroll: { paddingBottom: 28 },
   hero: {
-    backgroundColor: "#E7E9FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 15,
     marginBottom: 16,
     padding: 15,
   },
   heroTitle: {
     color: colors.ink,
-    fontSize: 19,
-    fontWeight: "800",
+    fontSize: 24,
+    fontWeight: "700",
     letterSpacing: -0.4,
   },
-  heroBody: {
-    color: colors.muted,
-    fontSize: 11,
+  heroBody: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     lineHeight: 17,
     marginTop: 6,
   },
@@ -403,9 +402,9 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 13,
   },
-  search: { color: colors.ink, flex: 1, fontSize: 12, paddingVertical: 11 },
+  search: { fontWeight: "400", color: colors.ink, flex: 1, fontSize: 16, paddingVertical: 11 },
   clear: { alignItems: "center", height: 20, justifyContent: "center", width: 20 },
-  clearText: { color: colors.muted, fontSize: 17, lineHeight: 19 },
+  clearText: {fontWeight: "600", color: colors.muted, fontSize: 14, lineHeight: 19 },
   contactRow: { flexDirection: "row", gap: 9 },
   contactCard: {
     alignItems: "center",
@@ -427,13 +426,12 @@ const styles = StyleSheet.create({
   contactIconText: { color: colors.ink, fontSize: 15, fontWeight: "800" },
   contactLabel: {
     color: colors.ink,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     marginTop: 7,
   },
-  contactSub: {
-    color: colors.muted,
-    fontSize: 8,
+  contactSub: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     marginTop: 3,
     textAlign: "center",
   },
@@ -442,10 +440,9 @@ const styles = StyleSheet.create({
     marginBottom: 18,
     marginTop: 13,
   },
-  urgentText: { color: "#07856A", fontSize: 11, fontWeight: "800" },
-  resultCount: {
-    color: colors.muted,
-    fontSize: 10,
+  urgentText: { color: "#15803D", fontSize: 12, fontWeight: "600" },
+  resultCount: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     marginBottom: 11,
   },
   featuredCard: {
@@ -469,11 +466,10 @@ const styles = StyleSheet.create({
   featuredQuestion: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
   },
-  featuredAnswer: {
-    color: colors.muted,
-    fontSize: 10,
+  featuredAnswer: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 5,
   },
@@ -486,7 +482,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   listRow: {},
-  listRowBorder: { borderBottomColor: "#F0F1FC", borderBottomWidth: 1 },
+  listRowBorder: { borderBottomColor: "#F3F4F6", borderBottomWidth: 1 },
   listHeader: {
     alignItems: "center",
     flexDirection: "row",
@@ -495,24 +491,23 @@ const styles = StyleSheet.create({
   listQuestion: {
     color: colors.ink,
     flex: 1,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
     lineHeight: 16,
     marginRight: 10,
   },
   chevron: { color: colors.muted, fontSize: 17, fontWeight: "700" },
   chevronOpen: { color: colors.ink },
-  listAnswer: {
-    color: colors.muted,
-    fontSize: 10,
+  listAnswer: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     lineHeight: 17,
     paddingBottom: 13,
     paddingHorizontal: 13,
   },
   sectionTitle: {
     color: colors.ink,
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "600",
     marginBottom: 11,
   },
   storeCard: {
@@ -527,23 +522,23 @@ const styles = StyleSheet.create({
   },
   storeIcon: {
     alignItems: "center",
-    backgroundColor: "#EEF0FF",
+    backgroundColor: "#F3F4F6",
     borderRadius: 10,
     height: 38,
     justifyContent: "center",
     width: 38,
   },
-  storeIconText: { fontSize: 17 },
+  storeIconText: {fontWeight: "400", fontSize: 17 },
   storeCopy: { flex: 1, marginLeft: 10 },
-  storeName: { color: colors.ink, fontSize: 12, fontWeight: "800" },
-  storeArea: { color: colors.muted, fontSize: 9, marginTop: 3 },
+  storeName: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  storeArea: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
   callButton: {
     backgroundColor: colors.ink,
     borderRadius: 9,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
-  callButtonText: { color: colors.white, fontSize: 9, fontWeight: "800" },
+  callButtonText: { color: colors.white, fontSize: 12, fontWeight: "600" },
   supplierCard: {
     backgroundColor: colors.white,
     borderColor: colors.line,
@@ -561,16 +556,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32,
   },
-  supplierIconText: { color: "#07856A", fontSize: 15, fontWeight: "900" },
+  supplierIconText: { color: "#15803D", fontSize: 15, fontWeight: "700" },
   supplierCopy: { flex: 1, marginLeft: 10 },
   supplierTitle: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
   },
-  supplierBody: {
-    color: colors.muted,
-    fontSize: 10,
+  supplierBody: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     lineHeight: 16,
     marginTop: 4,
   },
@@ -586,10 +580,9 @@ const styles = StyleSheet.create({
     marginRight: 8,
     width: 7,
   },
-  supplierRowText: { color: colors.ink, fontSize: 10, fontWeight: "600" },
-  version: {
-    color: colors.muted,
-    fontSize: 9,
+  supplierRowText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  version: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     marginBottom: 14,
     textAlign: "center",
   },
@@ -601,34 +594,33 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     minHeight: 46,
   },
-  backButtonText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
+  backButtonText: { color: colors.ink, fontSize: 15, fontWeight: "600" },
   empty: {
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 16,
     marginBottom: 16,
     padding: 26,
   },
   emptySmall: {
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 12,
     marginBottom: 18,
     padding: 16,
   },
-  emptyIcon: { color: colors.mint, fontSize: 28 },
+  emptyIcon: {fontWeight: "400", color: accentText, fontSize: 28 },
   emptyTitle: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "600",
     marginTop: 9,
   },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 11,
+  emptyText: {fontWeight: "400", color: colors.muted,
+    fontSize: 13,
     lineHeight: 17,
     marginTop: 6,
     textAlign: "center",
   },
-  muted: { color: colors.muted, fontSize: 11 },
+  muted: {fontWeight: "400", color: colors.muted, fontSize: 12 },
   pressed: { opacity: 0.75 },
 });

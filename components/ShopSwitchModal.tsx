@@ -38,7 +38,7 @@ export function ShopSwitchModal({ visible, currentShopName, newShopName, onConfi
         <View accessibilityViewIsModal style={[styles.card, { maxHeight: height - topPadding - bottomPadding }]}>
           <ScrollView style={styles.scroller} bounces={false} showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
             <View style={[styles.iconWrap, styles.coralIcon]}>
-              <FontAwesome name="question-circle" size={23} color="#B2433A" />
+              <FontAwesome name="question-circle" size={23} color={colors.error} />
             </View>
             <Text accessibilityRole="header" style={styles.title}>Switch shop?</Text>
             <Text style={styles.message}>
@@ -63,20 +63,20 @@ export function ShopSwitchModal({ visible, currentShopName, newShopName, onConfi
 }
 
 const styles = StyleSheet.create({
-  overlay: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "rgba(14, 13, 39, 0.52)" },
+  overlay: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 20, backgroundColor: "rgba(17,24,39, 0.52)" },
   card: { width: "100%", maxWidth: 400, backgroundColor: colors.white, borderRadius: 22, padding: 20, borderColor: colors.line, borderWidth: 1 },
   scroller: { flexShrink: 1 },
   content: { alignItems: "center", paddingTop: 4, paddingBottom: 20 },
   iconWrap: { width: 52, height: 52, borderRadius: 16, alignItems: "center", justifyContent: "center", marginBottom: 15 },
-  coralIcon: { backgroundColor: "#FFF0ED" },
-  title: { color: colors.ink, fontSize: 19, fontWeight: "800", textAlign: "center" },
-  message: { color: colors.muted, fontSize: 14, lineHeight: 21, textAlign: "center", marginTop: 9 },
+  coralIcon: { backgroundColor: "#FEE2E2" },
+  title: { color: colors.ink, fontSize: 24, fontWeight: "700", textAlign: "center" },
+  message: {fontWeight: "400", color: colors.muted, fontSize: 14, lineHeight: 21, textAlign: "center", marginTop: 9 },
   actions: { flexDirection: "row", gap: 10 },
   button: { flex: 1, minHeight: 52, borderRadius: 14, paddingHorizontal: 10, alignItems: "center", justifyContent: "center" },
   secondary: { backgroundColor: colors.white, borderColor: colors.line, borderWidth: 1 },
-  secondaryText: { color: colors.ink, fontSize: 14, fontWeight: "800", textAlign: "center" },
+  secondaryText: { color: colors.ink, fontSize: 14, fontWeight: "600", textAlign: "center" },
   primary: { backgroundColor: colors.ink },
-  primaryText: { color: colors.white, fontSize: 14, fontWeight: "800", textAlign: "center" },
-  destructive: { backgroundColor: "#B2433A" },
+  primaryText: { color: colors.white, fontSize: 14, fontWeight: "600", textAlign: "center" },
+  destructive: { backgroundColor: "#DC2626" },
   pressed: { opacity: 0.76 },
 });

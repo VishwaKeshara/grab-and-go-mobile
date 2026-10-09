@@ -635,7 +635,7 @@ export default function ShopManagement() {
             <TextInput
               style={styles.searchInput}
               placeholder="Search products..."
-              placeholderTextColor="#9A98AA"
+              placeholderTextColor={colors.muted}
               value={searchQuery}
               onChangeText={setSearchQuery}
             />
@@ -845,7 +845,7 @@ export default function ShopManagement() {
                   <View style={{ marginBottom: 12, alignItems: 'center' }}>
                     <Image
                       source={{ uri: pickedImage ? pickedImage.uri : form.image_url }}
-                      style={{ width: 100, height: 100, borderRadius: 8, backgroundColor: '#f0f0f0' }}
+                      style={{ width: 100, height: 100, borderRadius: 8, backgroundColor: '#F3F4F6' }}
                       contentFit="cover"
                     />
                     <Pressable style={{ marginTop: 8 }} onPress={() => { setPickedImage(null); setForm(prev => ({...prev, image_url: ""})) }}>
@@ -860,7 +860,7 @@ export default function ShopManagement() {
 
                 <TextInput
                   placeholder="Image URL https://..."
-                  placeholderTextColor="#9A98AA"
+                  placeholderTextColor={colors.muted}
                   style={styles.fieldInput}
                   onChangeText={(value) => {
                     setForm({ ...form, image_url: value });
@@ -947,7 +947,7 @@ export default function ShopManagement() {
               keyboardType="number-pad"
               onChangeText={setDiscountValue}
               placeholder={discountMode === "percent" ? "10" : "58"}
-              placeholderTextColor="#9A98AA"
+              placeholderTextColor={colors.muted}
               style={styles.fieldInput}
               value={discountValue}
             />
@@ -984,7 +984,7 @@ export default function ShopManagement() {
                   </View>
                   <View style={styles.discountPreviewRow}>
                     <Text style={styles.discountPreviewLabel}>You save</Text>
-                    <Text style={[styles.discountPreviewValue, { color: "#0A7D5F" }]}>
+                    <Text style={[styles.discountPreviewValue, { color: "#15803D" }]}>
                       {valid ? `LKR ${discountLkr.toLocaleString("en-LK")}` : "-"}
                     </Text>
                   </View>
@@ -1040,7 +1040,7 @@ function ModalField({
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
       <TextInput
-        placeholderTextColor="#9A98AA"
+        placeholderTextColor={colors.muted}
         style={styles.fieldInput}
         {...props}
       />
@@ -1092,7 +1092,7 @@ function CategoryPicker({
         autoCapitalize="words"
         onChangeText={onChange}
         placeholder="e.g. Vegetables, Fruits, Dairy"
-        placeholderTextColor="#9A98AA"
+        placeholderTextColor={colors.muted}
         style={styles.fieldInput}
         value={value}
       />
@@ -1118,8 +1118,10 @@ function CategoryPicker({
                   pressed && styles.dropdownPressed,
                 ]}
               >
+                {/* Follows the chip's background rather than being fixed to ink,
+                    which made the glyph disappear on the selected chip. */}
                 <FontAwesome
-                  color={colors.ink}
+                  color={active ? colors.white : colors.ink}
                   name={categoryIcon(label)}
                   size={11}
                 />
@@ -1167,7 +1169,7 @@ function ProductCardImage({ product }: { product: Product }) {
 
 const styles = StyleSheet.create({
   inlineErrorBanner: {
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#FEE2E2",
     borderRadius: 8,
     padding: 12,
     flexDirection: "row",
@@ -1184,22 +1186,21 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 20,
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
-  inlineErrorText: {
-    color: "#A33D2F",
+  inlineErrorText: {fontWeight: "400", color: "#DC2626",
     fontSize: 12,
     flex: 1,
   },
   retryText: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "bold",
+    fontWeight: "700",
   },
   notice: {
-    color: "#07856A",
-    fontSize: 11,
-    fontWeight: "800",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "600",
     marginBottom: 12,
   },
   loadingContainer: {
@@ -1209,7 +1210,7 @@ const styles = StyleSheet.create({
     gap: 8,
     flexDirection: "row",
   },
-  muted: { color: colors.muted, fontSize: 12 },
+  muted: {fontWeight: "400", color: colors.muted, fontSize: 12 },
   shopSummaryCard: {
     backgroundColor: colors.white,
     borderColor: colors.line,
@@ -1222,8 +1223,8 @@ const styles = StyleSheet.create({
     alignItems: "flex-start",
   },
   shopSummaryInfo: { flex: 1 },
-  shopSummaryName: { color: colors.ink, fontSize: 15, fontWeight: "800", marginBottom: 2 },
-  shopSummaryAddress: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+  shopSummaryName: { color: colors.ink, fontSize: 15, fontWeight: "600", marginBottom: 2 },
+  shopSummaryAddress: {fontWeight: "400", color: colors.muted, fontSize: 12, marginBottom: 6 },
   shopSummaryMeta: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   shopSummaryStatus: {},
   listingHeader: {
@@ -1232,14 +1233,13 @@ const styles = StyleSheet.create({
   searchContainer: {
     marginBottom: 12,
   },
-  searchInput: {
-    backgroundColor: colors.white,
+  searchInput: {fontWeight: "400", backgroundColor: colors.white,
     borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    fontSize: 13,
+    fontSize: 16,
     color: colors.ink,
   },
   filterScroll: {
@@ -1261,21 +1261,21 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F0F1F8",
+    backgroundColor: "#F3F4F6",
     borderWidth: 1,
     borderColor: "transparent",
   },
   filterChipActive: {
-    backgroundColor: "#D8FAED",
-    borderColor: "#45D2A6",
+    backgroundColor: "#DCFCE7",
+    borderColor: "#16A34A",
   },
   filterChipText: {
     color: colors.muted,
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "700",
   },
   filterChipTextActive: {
-    color: "#087A60",
+    color: "#15803D",
     fontWeight: "800",
   },
 
@@ -1295,27 +1295,27 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 10,
-    backgroundColor: "#F1F1F7",
+    backgroundColor: "#F3F4F6",
   },
   productImageFallback: {
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 10,
     height: 48,
     justifyContent: "center",
     width: 48,
   },
-  productImageFallbackText: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  productImageFallbackText: { color: colors.ink, fontSize: 18, fontWeight: "700" },
   productDetails: { flex: 1, marginLeft: 12 },
-  productName: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-  productUnit: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  productPrice: { color: colors.ink, fontSize: 15, fontWeight: "900", marginTop: 4 },
+  productName: { color: colors.ink, fontSize: 15, fontWeight: "500" },
+  productUnit: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 2 },
+  productPrice: { color: colors.ink, fontSize: 17, fontWeight: "700", marginTop: 4 },
   productBadges: { alignItems: "flex-end", marginLeft: 8 },
 
   badgeActive: { backgroundColor: colors.mintSoft, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  badgeActiveText: { color: "#0E8067", fontSize: 9, fontWeight: "800" },
-  badgePaused: { backgroundColor: "#F0F1FC", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  badgePausedText: { color: colors.muted, fontSize: 9, fontWeight: "800" },
+  badgeActiveText: { color: "#15803D", fontSize: 12, fontWeight: "600" },
+  badgePaused: { backgroundColor: "#F3F4F6", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgePausedText: { color: colors.muted, fontSize: 12, fontWeight: "600" },
 
   productBottomRow: {
     marginTop: 10,
@@ -1329,9 +1329,9 @@ const styles = StyleSheet.create({
   },
   stockLabel: { color: colors.ink, fontSize: 13, fontWeight: "700" },
   badgeInStock: { backgroundColor: colors.mintSoft, paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  badgeInStockText: { color: "#0E8067", fontSize: 9, fontWeight: "800" },
-  badgeOutOfStock: { backgroundColor: "#FFF0ED", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
-  badgeOutOfStockText: { color: colors.coral, fontSize: 9, fontWeight: "800" },
+  badgeInStockText: { color: "#15803D", fontSize: 12, fontWeight: "600" },
+  badgeOutOfStock: { backgroundColor: "#FEE2E2", paddingHorizontal: 6, paddingVertical: 3, borderRadius: 4 },
+  badgeOutOfStockText: { color: colors.coral, fontSize: 12, fontWeight: "600" },
 
   productActions: {
     flexDirection: "row",
@@ -1350,16 +1350,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  actionButtonEditText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  actionButtonEditText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   actionButtonPause: {
     alignItems: "center",
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#FEE2E2",
     borderRadius: 8,
     justifyContent: "center",
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  actionButtonPauseText: { color: colors.coral, fontSize: 11, fontWeight: "700" },
+  actionButtonPauseText: { color: colors.coral, fontSize: 12, fontWeight: "700" },
   actionButtonResume: {
     alignItems: "center",
     backgroundColor: colors.mintSoft,
@@ -1368,15 +1368,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
   },
-  actionButtonResumeText: { color: "#0E8067", fontSize: 11, fontWeight: "700" },
+  actionButtonResumeText: { color: "#15803D", fontSize: 12, fontWeight: "700" },
   deleteButton: {
     minHeight: 34,
     paddingHorizontal: 11,
     paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "#FFD2CC",
-    backgroundColor: "#FFF3F1",
+    borderColor: "#FEE2E2",
+    backgroundColor: "#FEE2E2",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1388,8 +1388,8 @@ const styles = StyleSheet.create({
   },
   deleteButtonText: {
     color: colors.coral,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
   },
 
   empty: {
@@ -1401,22 +1401,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
     padding: 32,
   },
-  emptyIcon: { fontSize: 32 },
+  emptyIcon: {fontWeight: "400", fontSize: 32 },
   emptyTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "600",
     marginTop: 12,
   },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 12,
+  emptyText: {fontWeight: "400", color: colors.muted,
+    fontSize: 13,
     lineHeight: 18,
     marginTop: 6,
     textAlign: "center",
   },
   modalBackdrop: {
-    backgroundColor: "rgba(21,20,61,0.45)",
+    backgroundColor: "rgba(17,24,39,0.45)",
     flex: 1,
     justifyContent: "flex-end",
   },
@@ -1433,24 +1432,24 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 20,
   },
-  modalTitle: { color: colors.ink, fontSize: 18, fontWeight: "800" },
-  modalClose: { color: colors.muted, fontSize: 28, lineHeight: 28 },
+  modalTitle: { color: colors.ink, fontSize: 22, fontWeight: "700" },
+  modalClose: {fontWeight: "400", color: colors.muted, fontSize: 28, lineHeight: 28 },
   field: { marginBottom: 16 },
   fieldLabel: {
     color: colors.ink,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "500",
     marginBottom: 8,
   },
-  fieldHint: { color: colors.muted, fontSize: 11, lineHeight: 16 },
+  fieldHint: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 16 },
   discountSummary: {
     backgroundColor: colors.paper,
     borderRadius: 10,
     marginBottom: 14,
     padding: 11,
   },
-  discountProduct: { color: colors.ink, fontSize: 12, fontWeight: "800" },
-  discountBase: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  discountProduct: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  discountBase: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
   discountOptionRow: {
     flexDirection: "row",
     gap: 10,
@@ -1472,11 +1471,10 @@ const styles = StyleSheet.create({
   discountOptionText: {
     color: colors.ink,
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
   },
-  discountOptionHint: {
-    color: colors.muted,
-    fontSize: 10,
+  discountOptionHint: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     marginTop: 2,
   },
   discountOptionTextActive: { color: colors.white },
@@ -1493,7 +1491,7 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     paddingVertical: 3,
   },
-  discountPreviewLabel: { color: colors.muted, fontSize: 11 },
+  discountPreviewLabel: {fontWeight: "400", color: colors.muted, fontSize: 12 },
   discountPreviewValue: { color: colors.ink, fontSize: 12, fontWeight: "800" },
   discountPreviewTotal: {
     borderTopColor: colors.line,
@@ -1502,9 +1500,8 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   discountPreviewTotalValue: { fontSize: 15 },
-  discountError: {
-    color: "#A33D2F",
-    fontSize: 11,
+  discountError: {fontWeight: "400", color: "#DC2626",
+    fontSize: 12,
     marginBottom: 12,
   },
   dropdownField: {
@@ -1520,7 +1517,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  dropdownValue: { color: colors.ink, flex: 1, fontSize: 14 },
+  dropdownValue: {fontWeight: "400", color: colors.ink, flex: 1, fontSize: 14 },
   dropdownValueMuted: { color: colors.muted },
   dropdownList: {
     backgroundColor: colors.white,
@@ -1543,7 +1540,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.line,
     borderBottomWidth: 1,
   },
-  dropdownOptionActive: { backgroundColor: "#F3F1FC" },
+  dropdownOptionActive: { backgroundColor: "#F3F4F6" },
   dropdownOptionText: { color: colors.ink, flex: 1, fontSize: 14, fontWeight: "600" },
   dropdownOptionTextActive: { fontWeight: "800" },
   dropdownPressed: { opacity: 0.7 },
@@ -1561,6 +1558,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: "row",
     gap: 5,
+    // Without this the chip is a shrinkable flex child, so a long label on a
+    // narrow row gets squeezed to fit rather than wrapping to the next line --
+    // which is what squashed the text in the first version of this row.
+    flexShrink: 0,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
@@ -1568,15 +1569,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
     borderColor: colors.ink,
   },
-  categorySuggestionText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  categorySuggestionText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   categorySuggestionTextActive: { color: colors.white },
-  fieldInput: {
-    backgroundColor: colors.white,
+  fieldInput: { fontWeight: "400", backgroundColor: colors.white,
     borderColor: colors.line,
     borderWidth: 1,
     borderRadius: 12,
     color: colors.ink,
-    fontSize: 14,
+    fontSize: 16,
     minHeight: 48,
     paddingHorizontal: 14,
     paddingVertical: 12,

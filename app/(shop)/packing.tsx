@@ -4,6 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { ShopOrder } from "@/types/shopOrder";
 import { getShopOrderById, updateOrderStatus, updatePackingItem, staffGetOrderDetails, staffSetOrderStatus, staffSetOrderItemPacked, getLocalStaffSession } from "@/services/shopService";
+import { colors } from "@/constants/colors";
 
 
 export default function Packing() {
@@ -89,7 +90,7 @@ export default function Packing() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.center}>
-          <ActivityIndicator size="large" color="#00A859" />
+          <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.loadingText}>Loading packing details...</Text>
         </View>
       </SafeAreaView>
@@ -235,7 +236,7 @@ export default function Packing() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F8FC",
+    backgroundColor: "#F3F4F6",
   },
   center: {
     flex: 1,
@@ -244,7 +245,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 12,
-    color: "#8A8A9E",
+    color: "#4B5563",
   },
   header: {
     flexDirection: "row",
@@ -254,12 +255,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     backgroundColor: "#FFFFFF",
     borderBottomWidth: 1,
-    borderBottomColor: "#E0E0EB",
+    borderBottomColor: "#D1D5DB",
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#111827",
   },
   scrollContent: {
     padding: 16,
@@ -271,18 +272,17 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#F0F0F5",
+    borderColor: "#F3F4F6",
   },
   emptyTitle: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 8,
     textAlign: "center",
   },
-  emptyText: {
-    fontSize: 14,
-    color: "#8A8A9E",
+  emptyText: {fontWeight: "400", fontSize: 13,
+    color: "#4B5563",
     textAlign: "center",
   },
   summarySection: {
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: "#E0E0EB",
+    borderColor: "#D1D5DB",
   },
   rowBetween: {
     flexDirection: "row",
@@ -301,29 +301,28 @@ const styles = StyleSheet.create({
   },
   orderRef: {
     fontSize: 20,
-    fontWeight: "800",
-    color: "#1E2030",
+    fontWeight: "600",
+    color: "#111827",
   },
   liveBadge: {
-    backgroundColor: "#FFF5E6",
+    backgroundColor: "#FEF3C2",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
   },
   liveBadgeText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#F5A623",
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#F59E0B",
   },
   customerName: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontSize: 16,
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 2,
   },
-  pickupInfo: {
-    fontSize: 14,
-    color: "#4A4A68",
+  pickupInfo: {fontWeight: "400", fontSize: 14,
+    color: "#4B5563",
     marginBottom: 12,
   },
   progressHeader: {
@@ -332,41 +331,41 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   progressText: {
-    color: "#4A4A68",
+    color: "#4B5563",
     fontSize: 13,
     fontWeight: "600",
   },
   progressPercent: {
-    color: "#00A859",
+    color: "#16A34A",
     fontSize: 13,
     fontWeight: "700",
   },
   progressBarBg: {
     height: 8,
-    backgroundColor: "#F0F0F5",
+    backgroundColor: "#F3F4F6",
     borderRadius: 4,
     overflow: "hidden",
   },
   progressBarFill: {
     height: "100%",
-    backgroundColor: "#00A859",
+    backgroundColor: "#16A34A",
   },
   instructionCard: {
-    backgroundColor: "#FFF5E6",
+    backgroundColor: "#FEF3C2",
     borderWidth: 1,
-    borderColor: "#FFDDB3",
+    borderColor: "#FEF3C2",
     borderRadius: 12,
     padding: 16,
     marginBottom: 16,
   },
   instructionTitle: {
-    color: "#F5A623",
+    color: "#F59E0B",
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     marginBottom: 8,
   },
   instructionText: {
-    color: "#1E2030",
+    color: "#111827",
     fontSize: 15,
     fontWeight: "500",
     marginBottom: 12,
@@ -379,14 +378,14 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   travelBadgeText: {
-    color: "#4A4A68",
+    color: "#4B5563",
     fontSize: 12,
     fontWeight: "600",
   },
   sectionTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#8A8A9E",
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#4B5563",
     marginBottom: 12,
     letterSpacing: 0.5,
   },
@@ -396,7 +395,7 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#F0F0F5",
+    borderColor: "#F3F4F6",
   },
   itemRow: {
     flexDirection: "row",
@@ -406,7 +405,7 @@ const styles = StyleSheet.create({
   itemImagePlaceholder: {
     width: 48,
     height: 48,
-    backgroundColor: "#F1F1F7",
+    backgroundColor: "#F3F4F6",
     borderRadius: 10,
     marginRight: 12,
     justifyContent: "center",
@@ -416,13 +415,13 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 10,
-    backgroundColor: "#F1F1F7",
+    backgroundColor: "#F3F4F6",
     marginRight: 12,
   },
   itemImageFallbackText: {
     fontSize: 20,
     fontWeight: "700",
-    color: "#A0A0B8",
+    color: "#4B5563",
   },
   itemDetails: {
     flex: 1,
@@ -435,25 +434,24 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 15,
     fontWeight: "600",
-    color: "#1E2030",
+    color: "#111827",
     flex: 1,
     marginRight: 8,
   },
   itemQty: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#1E2030",
+    color: "#111827",
   },
-  itemSubText: {
-    fontSize: 13,
-    color: "#8A8A9E",
+  itemSubText: {fontWeight: "400", fontSize: 13,
+    color: "#4B5563",
     marginTop: 2,
     marginBottom: 4,
   },
   itemPrice: {
     fontSize: 14,
     fontWeight: "600",
-    color: "#1E2030",
+    color: "#111827",
   },
   actionRow: {
     flexDirection: "row",
@@ -461,15 +459,15 @@ const styles = StyleSheet.create({
   },
   scanBtnDisabled: {
     flex: 1,
-    backgroundColor: "#F8F8FC",
+    backgroundColor: "#F3F4F6",
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "#E0E0EB",
+    borderColor: "#D1D5DB",
   },
   scanBtnDisabledText: {
-    color: "#A0A0B8",
+    color: "#4B5563",
     fontWeight: "600",
     fontSize: 14,
   },
@@ -477,31 +475,30 @@ const styles = StyleSheet.create({
     flex: 2,
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#00A859",
+    borderColor: "#16A34A",
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
   },
   btnMarkPackedText: {
-    color: "#00A859",
+    color: "#16A34A",
     fontWeight: "700",
     fontSize: 14,
   },
   btnPacked: {
     flex: 2,
-    backgroundColor: "#E6F7ED",
+    backgroundColor: "#DCFCE7",
     paddingVertical: 12,
     borderRadius: 8,
     alignItems: "center",
   },
   btnPackedText: {
-    color: "#00A859",
+    color: "#16A34A",
     fontWeight: "700",
     fontSize: 14,
   },
-  packedTimeText: {
-    fontSize: 11,
-    color: "#A0A0B8",
+  packedTimeText: {fontWeight: "400", fontSize: 12,
+    color: "#4B5563",
     textAlign: "right",
     marginTop: 8,
   },
@@ -512,24 +509,24 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   btnPrimary: {
-    backgroundColor: "#00A859",
+    backgroundColor: "#16A34A",
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: "center",
   },
   btnPrimaryText: {
     color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 15,
+    fontWeight: "600",
   },
   incompleteContainer: {
     paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "#F0F0F5",
+    backgroundColor: "#F3F4F6",
     borderRadius: 12,
   },
   incompleteText: {
-    color: "#8A8A9E",
+    color: "#4B5563",
     fontSize: 15,
     fontWeight: "600",
   }

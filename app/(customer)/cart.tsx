@@ -203,7 +203,7 @@ export default function Cart() {
             <FontAwesome
               name="tag"
               size={15}
-              color="#087A60"
+              color={colors.primaryDark}
             />
             <Text style={styles.savingText}>
               You’re saving {money(totals.savings)} on this basket
@@ -236,8 +236,8 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 11,
   },
-  totalLabel: { color: colors.muted, fontSize: 12 },
-  total: { color: colors.ink, fontSize: 19, fontWeight: "900" },
+  totalLabel: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+  total: { color: colors.ink, fontSize: 19, fontWeight: "700" },
   item: {
     paddingBottom: 11,
     borderBottomColor: colors.line,
@@ -274,11 +274,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.mintSoft,
     borderColor: colors.mintSoft,
   },
-  savingText: { color: "#087A60", fontSize: 12, fontWeight: "800" },
+  savingText: { color: "#15803D", fontSize: 12, fontWeight: "600" },
   emptyWrap: { alignItems: "center", gap: 12, paddingVertical: 20 },
-  emptyTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
-  empty: {
-    color: colors.muted,
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  empty: {fontWeight: "400", color: colors.muted,
     fontSize: 12,
     lineHeight: 18,
     textAlign: "center",

@@ -156,8 +156,8 @@ export default function StaffLogin() {
 const styles = StyleSheet.create({
   fieldLabel: {
     color: colors.ink,
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "500",
     marginBottom: 8,
     marginTop: 14,
   },
@@ -166,8 +166,8 @@ const styles = StyleSheet.create({
   },
   shiftCard: {
     alignItems: "center",
-    backgroundColor: "#EAF8F3",
-    borderColor: "#CBEDE1",
+    backgroundColor: "#DCFCE7",
+    borderColor: "#DCFCE7",
     borderRadius: 14,
     borderWidth: 1,
     flexDirection: "row",
@@ -182,10 +182,10 @@ const styles = StyleSheet.create({
     marginRight: 10,
     width: 36,
   },
-  shiftIconText: { color: colors.ink, fontSize: 18, fontWeight: "800" },
+  shiftIconText: { color: colors.ink, fontSize: 18, fontWeight: "600" },
   shiftCopy: { flex: 1 },
-  shiftTitle: { color: colors.ink, fontSize: 12, fontWeight: "800" },
-  shiftText: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 3 },
+  shiftTitle: { color: colors.ink, fontSize: 12, fontWeight: "600" },
+  shiftText: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 15, marginTop: 3 },
   submitBtn: {
     alignItems: "center",
     backgroundColor: colors.mint,
@@ -200,7 +200,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   submitBtnDisabled: {
-    backgroundColor: "#E0E0EB",
+    backgroundColor: "#D1D5DB",
     shadowOpacity: 0,
     elevation: 0,
   },
@@ -210,21 +210,20 @@ const styles = StyleSheet.create({
   submitBtnText: {
     color: colors.ink,
     fontSize: 14,
-    fontWeight: "800",
+    fontWeight: "600",
   },
   submitBtnTextDisabled: {
-    color: "#9A98AA",
+    color: "#4B5563",
   },
   pinRow: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 11,
     borderWidth: 1,
     borderColor: "transparent",
   },
-  pinInput: {
-    flex: 1,
+  pinInput: {fontWeight: "400", flex: 1,
     color: colors.ink,
     fontSize: 18,
     paddingHorizontal: 14,
@@ -238,5 +237,5 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 40,
   },
-  link: { color: "#07856A", fontSize: 12, fontWeight: "800" },
+  link: { color: "#15803D", fontSize: 12, fontWeight: "600" },
 });
