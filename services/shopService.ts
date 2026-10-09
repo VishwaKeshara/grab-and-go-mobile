@@ -1005,31 +1005,7 @@ export async function getStaffProfile(token: string) {
 export async function staffGetOrders(token: string, status?: string): Promise<ShopOrder[]> {
   const { data, error } = await supabase.rpc('staff_get_orders', { p_token: token, p_status: status });
   if (error) throw error;
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    shopId: row.shop_id,
-    customerId: row.customer_id,
-    reference: row.id.substring(0,8), // fallback
-    pickupPin: '***',
-    status: row.status,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    customerName: row.customer_name,
-    customerPhone: row.customer_phone,
-    packingInstructions: '',
-    travelMethod: 'walking',
-    pickupStartAt: '',
-    pickupEndAt: '',
-    subtotalLkr: 0,
-    savingsLkr: 0,
-    serviceFeeLkr: 0,
-    totalLkr: row.total_lkr,
-    createdAt: row.created_at,
-    updatedAt: row.created_at,
-    acceptedAt: null,
-    packingStartedAt: null,
-    readyAt: null,
-  }));
+  return (data || []).map((row: any) => mapOrderRow(row));
 }
 
 export async function staffGetOrderDetails(token: string, orderId: string): Promise<ShopOrder> {
@@ -1037,44 +1013,14 @@ export async function staffGetOrderDetails(token: string, orderId: string): Prom
   if (error) throw error;
   if (!data) throw new Error("Order not found");
   const row: any = data;
-  return {
-    id: row.id,
-    shopId: '',
-    customerId: '',
-    reference: row.id.substring(0,8),
-    pickupPin: '***',
-    status: row.status,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    customerName: 'Customer',
-    customerPhone: '',
-    packingInstructions: '',
-    travelMethod: 'walking',
-    pickupStartAt: '',
-    pickupEndAt: '',
-    subtotalLkr: row.subtotal_lkr || 0,
-    savingsLkr: 0,
-    serviceFeeLkr: 0,
-    totalLkr: row.total_lkr || 0,
-    createdAt: row.created_at,
-    updatedAt: row.created_at,
-    acceptedAt: null,
-    packingStartedAt: null,
-    readyAt: null,
-    items: (row.items || []).map((item: any) => ({
-      id: item.id,
-      orderId: row.id,
-      productId: item.product_id,
-      productName: item.product_name,
-      productUnit: 'Unit',
-      imageUrl: null,
-      quantity: item.quantity,
-      unitPriceLkr: item.unit_price_lkr,
-      substitution: { type: 'call' },
-      isPacked: item.is_packed,
-      packedAt: null,
-    }))
-  };
+  const rawItems = row.customer_order_items || [];
+  const items: ShopOrderItem[] = rawItems.map(mapItemRow);
+
+  console.log("[StaffOrder] raw RPC row", row);
+  console.log("[StaffOrder] customer_order_items", row.customer_order_items);
+  console.log("[StaffOrder] mapped items", items);
+
+  return mapOrderRow(row, items);
 }
 
 export async function staffAcceptOrder(token: string, orderId: string): Promise<void> {
