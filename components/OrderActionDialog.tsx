@@ -17,6 +17,8 @@ type Props = {
   secondaryLabel?: string;
   onSecondary?: () => void;
   busy?: boolean;
+  busyLabel?: string;
+  busyAccessibilityLabel?: string;
   destructive?: boolean;
 };
 
@@ -27,7 +29,7 @@ const icons = {
   info: "phone" as const,
 };
 
-export function OrderActionDialog({ dialog, onClose, primaryLabel = "Got it", onPrimary, secondaryLabel, onSecondary, busy = false, destructive = false }: Props) {
+export function OrderActionDialog({ dialog, onClose, primaryLabel = "Got it", onPrimary, secondaryLabel, onSecondary, busy = false, busyLabel = "Cancelling...", busyAccessibilityLabel = "Cancelling order", destructive = false }: Props) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
   const topPadding = Math.max(insets.top, 16) + 16;
@@ -49,8 +51,8 @@ export function OrderActionDialog({ dialog, onClose, primaryLabel = "Got it", on
         </ScrollView>
         <View style={styles.actions}>
           {secondaryLabel ? <Pressable accessibilityRole="button" accessibilityLabel={secondaryLabel} accessibilityState={{ disabled: busy }} disabled={busy} onPress={secondary} style={({ pressed }) => [styles.button, styles.secondary, pressed && styles.pressed, busy && styles.disabled]}><Text style={styles.secondaryText}>{secondaryLabel}</Text></Pressable> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={busy ? "Cancelling order" : primaryLabel} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={primary} style={({ pressed }) => [styles.button, styles.primary, destructive && styles.destructive, pressed && styles.pressed, busy && styles.disabled]}>
-            {busy ? <View style={styles.busyContent}><ActivityIndicator color={colors.white} size="small" /><Text style={styles.primaryText}>Cancelling...</Text></View> : <Text style={styles.primaryText}>{primaryLabel}</Text>}
+          <Pressable accessibilityRole="button" accessibilityLabel={busy ? busyAccessibilityLabel : primaryLabel} accessibilityState={{ disabled: busy, busy }} disabled={busy} onPress={primary} style={({ pressed }) => [styles.button, styles.primary, destructive && styles.destructive, pressed && styles.pressed, busy && styles.disabled]}>
+            {busy ? <View style={styles.busyContent}><ActivityIndicator color={colors.white} size="small" /><Text style={styles.primaryText}>{busyLabel}</Text></View> : <Text style={styles.primaryText}>{primaryLabel}</Text>}
           </Pressable>
         </View>
       </View> : null}
