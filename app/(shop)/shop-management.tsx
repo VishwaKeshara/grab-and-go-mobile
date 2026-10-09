@@ -1426,6 +1426,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     maxHeight: "90%",
     padding: 24,
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
   },
   modalHeader: {
     alignItems: "center",

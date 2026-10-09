@@ -175,7 +175,7 @@ export function ErrorBanner({ message }: { message: string }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { backgroundColor: colors.paper, flex: 1, position: "relative" },
+  screen: { backgroundColor: colors.paper, flex: 1, position: "relative", width: "100%", maxWidth: 480, alignSelf: "center", overflow: "hidden" },
   topWash: {
     backgroundColor: "#EEF0FF",
     borderBottomLeftRadius: 120,
