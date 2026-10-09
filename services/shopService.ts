@@ -898,17 +898,47 @@ export async function deleteShop(id: string) {
 }
 
 /**
- * Archives a listing for the shop this screen is managing.
+ * Permanently removes a listing from customer_products.
  *
- * Staff go through staff_archive_product rather than archive_shop_product, which
- * does not exist in the deployed database (PostgREST answers PGRST202) and so
- * made every Delete fail. The owner writes active = false directly, which 022
- * grants and scopes to their own shop.
+ * This used to archive -- active = false -- and the button said "Delete" while
+ * leaving the row in place. It now deletes the row for real, via
+ * delete_product_permanently (migration 025).
  *
- * Archiving sets active = false rather than deleting the row: order history
- * references the product, and it also removes it from customer search.
+ * Both callers go through that one function rather than the two paths writing
+ * the delete themselves. The reason is the foreign keys: customer_cart_items and
+ * customer_products.substitute_for point at customer_products without ON DELETE
+ * CASCADE, so a delete issued from the app would be refused by Postgres with
+ * 23503, and the shop account has no grant on those tables to clean them up. The
+ * function clears both first, and refuses outright on a product that appears in
+ * any order -- order history is not the shop's to discard.
+ *
+ * To hide a product without removing it, use archiveShopProduct below instead.
  */
 export async function deleteShopProduct(productId: string): Promise<void> {
+  const access = await productWriteAccess();
+
+  const { error } = await supabase.rpc("delete_product_permanently", {
+    p_product_id: productId,
+    // Staff hold a PIN token, not a Supabase session, so the function needs it
+    // to resolve their shop. Passing null sends the owner path, which authorises
+    // through RLS and the session instead.
+    p_token: access.kind === "staff" ? access.token : null,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Hides a listing without deleting it: active = false, available = false, and the
+ * stock row marked unavailable.
+ *
+ * This is the one to reach for when a product was sold and must keep existing for
+ * order history. Staff go through staff_archive_product rather than
+ * archive_shop_product, which does not exist in the deployed database (PostgREST
+ * answers PGRST202) and so made every Delete fail. The owner writes the columns
+ * directly, which 022 grants and scopes to their own shop.
+ */
+export async function archiveShopProduct(productId: string): Promise<void> {
   const access = await productWriteAccess();
 
   if (access.kind === "owner") {

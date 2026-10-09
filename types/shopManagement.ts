@@ -1,13 +1,9 @@
-export type ProductCategory = {
-  id: string;
-  name: string;
-  slug: string;
-  icon: string;
-  tint: string;
-  sort_order: number;
-  is_active: boolean;
-  created_at: string;
-};
+// ProductCategory was the row shape of the product_categories table and is
+// deliberately absent. Migration 024 dropped that table; a product's category is
+// now the free-text customer_products.category label, typed as
+// `string | null` on Product and DiscoverCategory carries the browse-rail shape.
+// See services/productService.ts listProductCategories and
+// services/discoveryService.ts listBrowseCategories.
 
 export type FeaturedProduct = {
   id: string;

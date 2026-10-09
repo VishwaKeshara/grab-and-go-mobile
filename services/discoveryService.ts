@@ -4,6 +4,7 @@ import type {
   DiscoveredProduct,
   NearbyShop,
 } from "@/types/discovery";
+import { categoryIcon, categoryTint } from "@/utils/categories";
 import { hasDiscount } from "@/utils/discounts";
 
 /**
@@ -72,17 +73,17 @@ const BASE_COLUMNS = `
  * Shop Management hit before it learned to narrow its select. Discovery needs the
  * same ladder, so the shapes are enumerated and tried in order.
  *
- * `category` is optional because customer_products.category_id arrives with
- * migration 009/010. Without it the rail still renders, every product just reads
+ * `category` is optional because customer_products.category arrives with
+ * migration 024. Without it the rail still renders, every product just reads
  * as uncategorised.
  */
 const OPTIONAL_SHAPES: { category?: string; discounts?: string }[] = [
   {
-    category: "category_id, product_categories(name, slug, tint)",
+    category: "category",
     discounts: "discount_percent, discount_type, discount_amount_lkr",
   },
-  { category: "category_id, product_categories(name, slug, tint)", discounts: "discount_percent" },
-  { category: "category_id, product_categories(name, slug, tint)" },
+  { category: "category", discounts: "discount_percent" },
+  { category: "category" },
   { discounts: "discount_percent, discount_type, discount_amount_lkr" },
   { discounts: "discount_percent" },
   {},
@@ -115,7 +116,7 @@ function isMissingOptionalColumn(error: {
   if (error.code !== "42703" && error.code !== "PGRST204") return false;
 
   const message = error.message ?? "";
-  return ["discount_percent", "discount_type", "discount_amount_lkr", "category_id", "product_categories"].some(
+  return ["discount_percent", "discount_type", "discount_amount_lkr", "category"].some(
     (column) => message.includes(column),
   );
 }
@@ -134,11 +135,6 @@ function toDiscoveredProduct(row: Record<string, unknown>): DiscoveredProduct {
   const inventory = (
     Array.isArray(rawInventory) ? rawInventory[0] : rawInventory
   ) as { quantity?: unknown; is_available?: unknown } | undefined;
-
-  const rawCategory = row.product_categories;
-  const category = (
-    Array.isArray(rawCategory) ? rawCategory[0] : rawCategory
-  ) as { name?: unknown; slug?: unknown; tint?: unknown } | undefined;
 
   const price = Number(row.price_lkr ?? 0);
 
@@ -161,10 +157,8 @@ function toDiscoveredProduct(row: Record<string, unknown>): DiscoveredProduct {
     is_available: inventory
       ? inventory.is_available !== false
       : row.available !== false,
-    category_id: (row.category_id as string | null) ?? null,
-    category_name: category?.name ? String(category.name) : null,
-    category_slug: category?.slug ? String(category.slug) : null,
-    category_tint: category?.tint ? String(category.tint) : null,
+    // A blank or whitespace-only label is no category, not a category called "".
+    category: (row.category as string | null)?.trim() || null,
     discount_percent: (row.discount_percent as number | null) ?? null,
     discount_type: (row.discount_type as DiscoveredProduct["discount_type"]) ?? null,
     discount_amount_lkr: (row.discount_amount_lkr as number | null) ?? null,
@@ -177,8 +171,13 @@ export type DiscoveryFilters = {
   query?: string;
   /** Restrict to one shop. Set by the shop-products screen. */
   shopId?: string;
-  /** Restrict to one product_categories row. Set by the category screen. */
-  categoryId?: string;
+  /**
+   * Restrict to one category label. Set by the category screen.
+   *
+   * The stored text itself, not an id -- migration 024 removed the
+   * product_categories table this used to point at.
+   */
+  category?: string;
   maxPrice?: number;
   inStockOnly?: boolean;
   /** Only rows actually running a discount. Drives the Offers filter. */
@@ -198,8 +197,15 @@ function applyFilters(
     // conditions and fail the whole query. Product names never need them, so they
     // are stripped rather than escaped.
     const pattern = term.replace(/[,"'()\\]/g, " ").trim();
+
+    // category only joins the search once the confirmed shape carries it. Naming
+    // a column PostgREST does not have fails the whole select, and the text search
+    // is worth more than matching on category until migration 024 is applied.
+    const columns = ["name", "unit"];
+    if (shapeSupportsCategory()) columns.push("category");
+
     builder = builder.or(
-      `name.ilike.%${pattern}%,unit.ilike.%${pattern}%,product_categories.name.ilike.%${pattern}%`,
+      columns.map((column) => `${column}.ilike.%${pattern}%`).join(","),
     );
   }
 
@@ -207,11 +213,17 @@ function applyFilters(
     builder = builder.eq("shop_id", filters.shopId);
   }
 
-  // Only applied once the category_id column is confirmed to exist. Before that,
-  // category filtering is silently ignored rather than sending an unknown column
-  // and failing the whole query.
-  if (filters.categoryId && shapeSupportsCategory()) {
-    builder = builder.eq("category_id", filters.categoryId);
+  // ilike, not eq: the column is free text that nobody normalises on the way in,
+  // so "Vegetables" and "vegetables" are both in the database and must both land
+  // on the same product list. Without wildcards this is a case-insensitive
+  // equality, which is the intended match.
+  //
+  // Gated on the same shape check as the search term above: before migration 024
+  // is applied the column does not exist, and sending it fails the whole query
+  // rather than returning nothing.
+  const category = filters.category?.trim();
+  if (category && shapeSupportsCategory()) {
+    builder = builder.ilike("category", category);
   }
 
   if (typeof filters.maxPrice === "number") {
@@ -238,7 +250,7 @@ function applyFilters(
   return builder;
 }
 
-/** Whether the confirmed select shape carries customer_products.category_id. */
+/** Whether the confirmed select shape carries customer_products.category. */
 function shapeSupportsCategory(): boolean {
   return Boolean(OPTIONAL_SHAPES[shapeIndex].category);
 }
@@ -376,58 +388,57 @@ export async function listOffers(limit = 8): Promise<DiscoveredProduct[]> {
 }
 
 /**
- * Active categories with how many live listings each one holds.
+ * The categories actually in use, with how many live listings each one holds.
  *
- * Public read, matching the grant in 011, so this works signed out. Ordered by
- * the curated sort_order rather than alphabetically. Categories with nothing in
- * them are dropped, so the rail never offers a tap that leads to an empty screen.
+ * Derived from customer_products.category rather than read from a table, because
+ * migration 024 dropped product_categories: the label is now the only record of
+ * what a category is. A rail built this way can only show categories a shop has
+ * already used, which is the same guarantee the old version had by filtering to
+ * a non-zero count -- a category with nothing behind it is not offered as a tap
+ * leading to an empty screen.
+ *
+ * Public read, matching the grant in 011, so this works signed out. Busiest
+ * first, ties broken alphabetically so the rail order is stable between loads.
  */
 export async function listBrowseCategories(): Promise<BrowseCategory[]> {
+  // One request for the whole rail. Counting per category would be one request
+  // each; reading the single column the counts need and tallying it here is one.
   const { data, error } = await supabase
-    .from("product_categories")
-    .select("id, name, slug, icon, tint")
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
+    .from("customer_products")
+    .select("category")
+    .eq("active", true);
 
   if (error) throw error;
 
-  const categories = ((data ?? []) as {
-    id: string;
-    name: string;
-    slug: string;
-    icon: string;
-    tint: string;
-  }[]).map((row) => ({ ...row, productCount: 0 }));
+  // Folded on the lower-cased label. Nothing normalises the text on write, so
+  // "Vegetables" and "vegetables" are stored as two different values and would
+  // otherwise render as two identical tiles that each open half the results.
+  const counts = new Map<string, { label: string; count: number }>();
 
-  if (!categories.length) return [];
+  for (const row of (data ?? []) as { category: string | null }[]) {
+    const label = row.category?.trim();
+    if (!label) continue;
 
-  // A count per category would be one request each; reading the single column the
-  // counts need and tallying it here is one request total.
-  const { data: productRows, error: productError } = await supabase
-    .from("customer_products")
-    .select("category_id")
-    .eq("active", true);
+    const key = label.toLowerCase();
+    const existing = counts.get(key);
 
-  if (productError) {
-    // Without the counts the rail cannot tell a stocked category from an empty
-    // one, so every category is kept rather than the rail going blank.
-    return categories;
+    // The first spelling seen wins as the display label, so whichever shop wrote
+    // it first decides whether the rail reads "Vegetables" or "vegetables".
+    if (existing) existing.count += 1;
+    else counts.set(key, { label, count: 1 });
   }
 
-  const counts = new Map<string, number>();
-
-  for (const row of (productRows ?? []) as { category_id: string | null }[]) {
-    if (!row.category_id) continue;
-    counts.set(row.category_id, (counts.get(row.category_id) ?? 0) + 1);
-  }
-
-  return categories
-    .map((category) => ({
-      ...category,
-      productCount: counts.get(category.id) ?? 0,
+  return [...counts.values()]
+    .map(({ label, count }) => ({
+      name: label,
+      icon: categoryIcon(label),
+      tint: categoryTint(label),
+      productCount: count,
     }))
-    .filter((category) => category.productCount > 0);
+    .sort(
+      (a, b) =>
+        b.productCount - a.productCount || a.name.localeCompare(b.name),
+    );
 }
 
 /**

@@ -19,22 +19,25 @@ import {
 /**
  * Products in one category, reached from the home "Browse categories" rail.
  *
- * The categories themselves come from product_categories (see
- * discoveryService.listBrowseCategories), so a category a shop has since filled
- * with products appears on the rail with a real count behind it, and one with
- * nothing in it never appears at all.
+ * The categories themselves come from the distinct customer_products.category
+ * values (see discoveryService.listBrowseCategories), so a category a shop has
+ * since filled with products appears on the rail with a real count behind it,
+ * and one with nothing in it never appears at all.
  */
 export default function CategoryProducts() {
-  const { categoryId, categoryName } = useLocalSearchParams<{
-    categoryId?: string;
+  // The label is the id: migration 024 dropped product_categories, so there is no
+  // separate key to route with. categoryName is only the heading, and falls back
+  // to this when a link omits it.
+  const { category, categoryName } = useLocalSearchParams<{
+    category?: string;
     categoryName?: string;
   }>();
 
   const { addItem, adding, error: cartError } = useCart();
 
-  // A link with no category id is the only way to land here without one, and it
-  // is handled as a render branch rather than as thrown state.
-  const missingCategory = !categoryId;
+  // A link with no category is the only way to land here without one, and it is
+  // handled as a render branch rather than as thrown state.
+  const missingCategory = !category;
 
   const [products, setProducts] = useState<DiscoveredProduct[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,9 +60,9 @@ export default function CategoryProducts() {
     // With no category there is nothing to ask for. `missingCategory` is rendered
     // instead, so there is no state to set here -- a synchronous setState in an
     // effect body cascades a render before a request is even sent.
-    if (!categoryId) return;
+    if (!category) return;
 
-    fetchDiscoveryProducts({ categoryId, offersOnly })
+    fetchDiscoveryProducts({ category, offersOnly })
       .then((found) => {
         setProducts(found);
         // Cleared here rather than before the request, so a successful load always
@@ -76,7 +79,7 @@ export default function CategoryProducts() {
       .finally(() => {
         setLoading(false);
       });
-  }, [categoryId, offersOnly]);
+  }, [category, offersOnly]);
 
   useEffect(() => {
     void load();
@@ -95,7 +98,7 @@ export default function CategoryProducts() {
     setAddingId(null);
   };
 
-  const title = categoryName || "Category";
+  const title = categoryName || category || "Category";
 
   const header = (
     <View>
@@ -173,7 +176,7 @@ export default function CategoryProducts() {
           onPress={() =>
             router.push({
               pathname: "/(customer)/search",
-              params: { categoryId, categoryName: title },
+              params: { category, categoryName: title },
             })
           }
           style={styles.back}

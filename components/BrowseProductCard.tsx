@@ -103,7 +103,7 @@ export function BrowseProductCard({
         </Text>
 
         <Text numberOfLines={1} style={styles.meta}>
-          {product.category_name ? `${product.category_name} · ` : ""}
+          {product.category ? `${product.category} · ` : ""}
           {product.unit}
         </Text>
 

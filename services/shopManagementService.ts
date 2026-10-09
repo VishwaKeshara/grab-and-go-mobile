@@ -2,7 +2,6 @@ import { supabase } from "@/lib/supabase";
 import { currentUserId } from "@/services/productService";
 import type {
     FeaturedProduct,
-    ProductCategory,
     StockAdjustment,
     SupportTicket,
     SupportTicketInput,
@@ -10,11 +9,10 @@ import type {
 } from "@/types/shopManagement";
 
 /**
- * Categories, featured items, the stock adjustment log and support tickets -
- * the Member 2 tables created in migrations 008 and 009.
+ * Featured items, the stock adjustment log and support tickets - the Member 2
+ * tables created in migrations 008 and 009.
  */
 
-const CATEGORY_COLUMNS = "id, name, slug, icon, tint, sort_order, is_active, created_at";
 const FEATURED_COLUMNS =
     "id, product_id, headline, sort_order, starts_at, ends_at, is_active, created_at";
 const ADJUSTMENT_COLUMNS =
@@ -23,28 +21,12 @@ const TICKET_COLUMNS =
     "id, user_id, shop_id, subject, category, message, status, priority, contact_email, resolution, resolved_at, created_at, updated_at";
 
 // -------------------------------------------------------------- categories
-
-export async function listCategories(): Promise<ProductCategory[]> {
-    const { data, error } = await supabase
-        .from("product_categories")
-        .select(CATEGORY_COLUMNS)
-        .eq("is_active", true)
-        .order("sort_order", { ascending: true });
-
-    if (error) throw error;
-    return (data ?? []) as ProductCategory[];
-}
-
-export async function getCategory(id: string): Promise<ProductCategory | null> {
-    const { data, error } = await supabase
-        .from("product_categories")
-        .select(CATEGORY_COLUMNS)
-        .eq("id", id)
-        .maybeSingle();
-
-    if (error) throw error;
-    return (data as ProductCategory) ?? null;
-}
+//
+// product_categories, and with it listCategories/getCategory, was dropped in
+// migration 024. A product's category is now the free-text
+// customer_products.category label the shop typed when adding the listing;
+// discoveryService.listBrowseCategories and productService.listProductCategories
+// both derive their lists from that column.
 
 // --------------------------------------------------------- featured items
 

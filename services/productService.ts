@@ -1,6 +1,7 @@
 import { supabase } from "@/lib/supabase";
 import { fetchDiscoveryProducts } from "@/services/discoveryService";
 import { getLocalStaffSession } from "@/services/shopService";
+import { SUGGESTED_CATEGORIES } from "@/utils/categories";
 import type {
   DiscountType,
   InventoryProduct,
@@ -427,31 +428,73 @@ export type { ProductSort };
 
 // --- CANONICAL FUNCTIONS ---
 
-/** One selectable category for the product form. */
-export type ProductCategoryOption = {
-    id: string;
-    name: string;
-    slug: string;
-    icon: string;
-};
-
 /**
- * Active categories for the Add Product dropdown.
+ * Category labels already in use, as suggestions for the product form.
+ *
+ * Migration 024 dropped the product_categories table, so there is no reference
+ * list to read any more and the form takes free text. This offers what the shops
+ * have already typed -- the label and its count in one request -- so a clerk
+ * adding a second "Vegetables" reuses the spelling the first one used instead of
+ * inventing a third variant.
+ *
+ * Not a whitelist: whatever is typed is still accepted, so a genuinely new
+ * category works without a database change.
+ *
+ * The in-use labels are listed first, then SUGGESTED_CATEGORIES for any that are
+ * not already there. Without that the form would offer nothing on an empty
+ * catalogue, which is the one moment a picker has to work.
  *
  * Public read, matching the grant in migrations/011_grant_anon_public_access.sql,
- * so this works from a shop screen running as `anon`. Sorted by the curated
- * sort_order rather than alphabetically.
+ * so this works from a shop screen running as `anon`.
  */
-export async function listProductCategories(): Promise<ProductCategoryOption[]> {
+export async function listProductCategories(): Promise<string[]> {
   const { data, error } = await supabase
-    .from("product_categories")
-    .select("id, name, slug, icon")
-    .eq("is_active", true)
-    .order("sort_order", { ascending: true })
-    .order("name", { ascending: true });
+    .from("customer_products")
+    .select("category")
+    .eq("active", true);
 
-  if (error) throw error;
-  return (data ?? []) as ProductCategoryOption[];
+  // A failure here costs the in-use half only. The suggestions still render, so
+  // the form stays usable on a read the shop account is not allowed to make.
+  if (error) {
+    if (__DEV__) {
+      console.warn(
+        "[productService] could not read categories in use, offering the defaults only",
+        error.message,
+      );
+    }
+
+    return [...SUGGESTED_CATEGORIES];
+  }
+
+  // Folded on the lower-cased label, because nothing normalises the text on the
+  // way in and "Vegetables" / "vegetables" would otherwise be offered twice.
+  // The first spelling seen is the one shown, which is what makes the suggestion
+  // list agree with itself.
+  const byLower = new Map<string, { label: string; count: number }>();
+
+  for (const row of (data ?? []) as { category: string | null }[]) {
+    const label = row.category?.trim();
+    if (!label) continue;
+
+    const key = label.toLowerCase();
+    const existing = byLower.get(key);
+
+    if (existing) existing.count += 1;
+    else byLower.set(key, { label, count: 1 });
+  }
+
+  // Most-used first: those are the ones a clerk is most likely to be re-picking,
+  // and it also means the list stays useful as it grows past a screenful.
+  const inUse = [...byLower.values()]
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .map(({ label }) => label);
+
+  // Then the defaults, minus any the catalogue already spells differently. The
+  // comparison is on the lower-cased label, so a catalogue holding "vegetables"
+  // does not also gain a "Vegetables" chip two rows later.
+  const seen = new Set(byLower.keys());
+
+  return [...inUse, ...SUGGESTED_CATEGORIES.filter((label) => !seen.has(label.toLowerCase()))];
 }
 
 /**
@@ -470,14 +513,16 @@ export async function createShopProduct(
   shopId: string,
   input: Partial<InventoryProduct>,
   initialStock: number,
-  categoryId?: string | null,
+  category?: string | null,
 ) {
   const quantity = Math.max(0, Math.trunc(Number(initialStock) || 0));
   const priceLkr = Math.max(0, Math.trunc(Number(input.priceLkr) || 0));
   const name = input.name ?? "Unnamed product";
   const unit = input.unit || "unit";
   const imageUrl = input.imageUrl || null;
-  const category = categoryId || null;
+  // Whitespace-only means the clerk left it blank, not that they named a category
+  // "". staff_create_product applies the same rule, so both write paths agree.
+  const categoryLabel = category?.trim() || null;
 
   const access = await productWriteAccess();
 
@@ -497,7 +542,7 @@ export async function createShopProduct(
         // stock_quantity, and every customer-facing read filters on it.
         available: quantity > 0,
         stock_quantity: quantity,
-        category_id: category,
+        category: categoryLabel,
       })
       .select("id")
       .single();
@@ -529,7 +574,7 @@ export async function createShopProduct(
     p_price_lkr: priceLkr,
     p_image_url: imageUrl,
     p_initial_quantity: quantity,
-    p_category_id: category,
+    p_category: categoryLabel,
   });
 
   if (error) throw error;
@@ -554,7 +599,8 @@ export async function createShopProduct(
 export async function updateShopProduct(
   productId: string,
   changes: Partial<InventoryProduct> & {
-    categoryId?: string | null;
+    /** The category label to store. Trimmed here, as on create. */
+    category?: string | null;
     clearCategory?: boolean;
     clearDiscount?: boolean;
   },
@@ -578,10 +624,11 @@ export async function updateShopProduct(
       patch.image_url = changes.imageUrl || null;
     }
     if (changes.active !== undefined) patch.active = changes.active;
-    if (changes.categoryId) {
-      patch.category_id = changes.categoryId;
+    const category = changes.category?.trim();
+    if (category) {
+      patch.category = category;
     } else if (changes.clearCategory) {
-      patch.category_id = null;
+      patch.category = null;
     }
     if (changes.clearDiscount) {
       patch.discount_percent = 0;
@@ -614,7 +661,7 @@ export async function updateShopProduct(
         ? null
         : Math.max(0, Math.trunc(changes.regularPriceLkr)),
     p_image_url: changes.imageUrl ?? null,
-    p_category_id: changes.categoryId ?? null,
+    p_category: changes.category?.trim() ?? null,
     p_clear_category: changes.clearCategory ?? false,
     p_active: changes.active ?? null,
   });
@@ -844,7 +891,7 @@ export async function searchCanonicalProducts(
   const products = await fetchDiscoveryProducts({
     query: filters.query,
     shopId: filters.shopId,
-    categoryId: filters.categoryId,
+    category: filters.category,
     maxPrice: filters.maxPrice,
     inStockOnly: filters.inStockOnly,
     offersOnly: filters.offersOnly,
@@ -898,7 +945,7 @@ export async function deleteCanonicalProduct(id: string) {
 /** Everything a listing needs to render, and which every project has. */
 const LISTING_COLUMNS = `
   id, shop_id, name, unit, price_lkr, regular_price_lkr,
-  image_url, active, available, stock_quantity, category_id,
+  image_url, active, available, stock_quantity, category,
   shop_inventory(quantity, is_available)
 `;
 
@@ -1027,8 +1074,9 @@ export async function listCanonicalProductsByShop(shopId: string) {
         : row.available !== false,
       image_url: row.image_url,
       active: row.active,
-      category_id: row.category_id ?? null,
-      category: "Grocery", // stub for UI compatibility
+      // The real stored label. This was a hardcoded "Grocery" stub while the
+      // column was a foreign key, because the value only existed as an id here.
+      category: (row.category as string | null)?.trim() || null,
     };
   }) as Product[];
 }

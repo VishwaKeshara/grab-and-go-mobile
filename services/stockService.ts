@@ -14,8 +14,7 @@ import type { CheapestElsewhere, StockItem } from "@/types/stockUpdate";
 
 const ITEM_COLUMNS = `
   id, shop_id, name, unit, price_lkr, regular_price_lkr, image_url,
-  active, available, stock_quantity, category_id,
-  product_categories(name),
+  active, available, stock_quantity, category,
   shop_inventory(quantity, low_stock_threshold, is_available, updated_at)
 `;
 
@@ -44,7 +43,6 @@ export async function listStockItems(shopId: string): Promise<StockItem[]> {
 
     return ((data as unknown as Record<string, unknown>[]) ?? []).map((row) => {
         const inventory = one(row.shop_inventory);
-        const category = one(row.product_categories);
 
         return {
             id: row.id as string,
@@ -68,7 +66,7 @@ export async function listStockItems(shopId: string): Promise<StockItem[]> {
                 : row.available !== false,
             updatedAt: (inventory?.updated_at as string | null) ?? null,
             hasInventoryRow: inventory !== null,
-            categoryName: (category?.name as string | null) ?? null,
+            categoryName: (row.category as string | null)?.trim() || null,
         };
     });
 }

@@ -7,21 +7,35 @@ import {
     Pressable,
     ScrollView,
     Image,
+    StyleProp,
     StyleSheet,
     Text,
     TextInput,
     TextInputProps,
     View,
+    ViewStyle,
 } from "react-native";
 
+/**
+ * The padded, background-washed frame every screen in here sits in.
+ *
+ * contentStyle is for a caller that renders its own header instead of AuthHeader.
+ * The default paddingTop of 42 exists to clear AuthHeader, so dropping that
+ * header without adjusting it leaves the screen starting 42px lower than every
+ * other one -- visible as a band of nothing above the first control. Passing
+ * { paddingTop: smaller } is the way to say "this screen starts its own content".
+ */
 export function AuthFrame({
   children,
+  contentStyle,
   scroll = true,
 }: {
   children: ReactNode;
+  /** Merged over the default content padding. Use when not rendering AuthHeader. */
+  contentStyle?: StyleProp<ViewStyle>;
   scroll?: boolean;
 }) {
-  const content = <View style={styles.content}>{children}</View>;
+  const content = <View style={[styles.content, contentStyle]}>{children}</View>;
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : undefined}
