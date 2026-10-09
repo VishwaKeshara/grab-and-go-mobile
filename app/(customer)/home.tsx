@@ -1,20 +1,28 @@
 import { colors } from "@/constants/colors";
+import { DealsRail } from "@/components/DealsRail";
+import { HeroCarousel, type HeroSlide } from "@/components/HeroCarousel";
+import { HomeSearchBar } from "@/components/HomeSearchBar";
 import { useCart } from "@/hooks/useCart";
+import { useHomeSearch } from "@/hooks/useHomeSearch";
 import { homeFeaturedProducts, HOME_SHOP_NAME } from "@/services/cartService";
 import type { GroceryProduct } from "@/types/cart";
 import { getHomeContext } from "@/services/homeService";
+import { listBrowseCategories } from "@/services/discoveryService";
+import type { BrowseCategory, DiscoveredProduct } from "@/types/discovery";
+import { categoryIcon, categoryTint, SUGGESTED_CATEGORIES } from "@/utils/categories";
+import { toCartProduct } from "@/components/BrowseProductCard";
 import { FontAwesome } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { router } from "expo-router";
 import type { ComponentProps } from "react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
     Alert,
     Pressable,
     ScrollView,
     StyleSheet,
     Text,
-    TextInput,
+    useWindowDimensions,
     View,
 } from "react-native";
 
@@ -35,14 +43,84 @@ function getTimeGreeting(date = new Date()) {
   return "GOOD EVENING";
 }
 
-const categories: Category[] = [
-  { icon: "leaf", label: "Fresh produce", tint: colors.mintSoft },
-  { icon: "cutlery", label: "Rice & grains", tint: "#FFF0D5" },
-  { icon: "tint", label: "Dairy & chilled", tint: "#E8ECFF" },
-  { icon: "heart", label: "Spices & pantry", tint: "#FFE6E0" },
-  { icon: "shopping-basket", label: "Bakery & bites", tint: "#ECE8FF" },
-  { icon: "glass", label: "Beverages", tint: "#DFF7F1" },
-];
+/**
+ * Shown until the categories arrive, and kept if the query fails.
+ *
+ * The same SUGGESTED_CATEGORIES the shop's Add Product form offers, so the rail
+ * is never an empty grey strip while the request is in flight -- and so a shopper
+ * browses the categories a shop can actually file a product under, rather than
+ * waiting for one shop to happen to have typed a label.
+ */
+const PLACEHOLDER_CATEGORIES: Category[] = SUGGESTED_CATEGORIES.map((label) => ({
+  icon: categoryIcon(label),
+  label,
+  tint: categoryTint(label),
+}));
+
+/**
+ * Hero slides.
+ *
+ * The images are remote and fixed rather than read from the database, for two
+ * reasons. They are brand art, not inventory, so there is no row they belong to;
+ * and tying them to a listing would mean an empty hero whenever a shop archives
+ * its stock, which is the one place a promotion cannot afford to be empty.
+ *
+ * Every slide's CTA goes to the same deals list -- these are different ways of
+ * saying "there are discounts", not different destinations. The fifth is the
+ * original produce shot so the set keeps the look the hero already had.
+ */
+/**
+ * Built per render because the copy names the shopper's own pickup hub, which is
+ * not known until getHomeContext resolves. useMemo would be wrong here: the hub is
+ * a late-arriving value, and caching the slides on anything else would freeze the
+ * generic copy in place.
+ */
+function heroSlides(pickupHub: string): HeroSlide[] {
+  return [
+  {
+    image:
+      "https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=1000&q=85",
+    badge: "THIS WEEK",
+    title: "Fresh picks,\nbetter prices.",
+    // The one slide that names the hub, so the hero still personalises after the
+    // original copy moved out of the JSX.
+    copy: `Hand-picked produce from shops near ${pickupHub}.`,
+    cta: "Explore deals",
+  },
+  {
+    image:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTAgpTmavFvGTjd4znIlr5rqXO1Bd4HvdZ6lMZrVjws-Q&s=10",
+    badge: "OFFER",
+    title: "Save on\neveryday staples.",
+    copy: "Rice, flour, oil and pantry basics at a discount.",
+    cta: "Explore deals",
+  },
+  {
+    image:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTGCc0SDjF7-PgEVbMtxhZja6-MGLd47yYrCL6R2BTU3A&s=10",
+    badge: "DISCOUNT",
+    title: "Dairy and\nchilled, marked down.",
+    copy: "Milk, yoghurt and cheese while stocks last.",
+    cta: "Explore deals",
+  },
+  {
+    image:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTcqu5FYgrBIPw73OE0sHaQRmkGv_vMu8JLbJ-74T9ofw&s=10",
+    badge: "THIS WEEKEND",
+    title: "Weekend\nbargains.",
+    copy: "Snacks and treats picked for the trip home.",
+    cta: "Explore deals",
+  },
+  {
+    image:
+      "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSHwRr_GIfdjWS89WbVLqRz9su2517PtnVhSdDL99CTjg&s=10",
+    badge: "NEAR YOU",
+    title: "Discounts from\nshops near you.",
+    copy: `Collect from ${pickupHub} without the detour.`,
+    cta: "Explore deals",
+  },
+  ];
+}
 
 export default function Home() {
   const { addItem, adding, loading: cartLoading, error: cartError, products: catalogProducts, shop } = useCart();
@@ -58,13 +136,13 @@ export default function Home() {
     catalogProduct,
     shop: shop?.name ?? HOME_SHOP_NAME,
     tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
-    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
+    tagColor: [colors.mintSoft, "#FEE2E2", "#FEF3C2"][index],
   })) : homeFeaturedProducts.map((display, index) => ({
     ...display,
     catalogProduct: null,
     shop: HOME_SHOP_NAME,
     tag: ["Fresh today", "Baked fresh", "Local favourite"][index],
-    tagColor: [colors.mintSoft, "#FFE6E0", "#FFF0D5"][index],
+    tagColor: [colors.mintSoft, "#FEE2E2", "#FEF3C2"][index],
   }));
   const addFeaturedProduct = async (product: Product) => {
     if (__DEV__) console.log("[Home cart] add callback", { product: product.name, productId: product.catalogProduct?.id ?? null });
@@ -81,10 +159,147 @@ export default function Home() {
       setHomeAddError("Could not add this product. Check your cart and try again.");
     }
   };
-  const [search, setSearch] = useState("");
   const [firstName, setFirstName] = useState("Dilshan");
   const [pickupHub, setPickupHub] = useState("Malabe Bazaar Hub");
   const [timeGreeting, setTimeGreeting] = useState(() => getTimeGreeting());
+  const [categories, setCategories] = useState<BrowseCategory[]>([]);
+  const [dealsAddingId, setDealsAddingId] = useState<string | null>(null);
+
+  /**
+   * The live search dropdown.
+   *
+   * The rail's categories are handed in rather than refetched, so a suggestion
+   * for a category and the tile for that category can never disagree.
+   */
+  const search = useHomeSearch(categories);
+
+  const { width } = useWindowDimensions();
+  // Desktop gets a wider measure; the phone layout is the default and unchanged.
+  const wide = width >= 900;
+
+  // Where "Explore deals" scrolls to. A ref rather than a query for the section,
+  // so the tap always lands even if the offers rail is still loading and has not
+  // measured itself yet.
+  const dealsRef = useRef<View>(null);
+
+  // The outer ScrollView, needed to scroll a measured child into view.
+  const scrollRef = useRef<ScrollView>(null);
+
+  const scrollToDeals = () => {
+    // measureLayout is how a child of a ScrollView asks "where am I on screen"
+    // without knowing the content offset, which is what a ref cannot tell you.
+    // The callback fires with an absolute y, so it is converted to a scroll
+    // position against the viewport height this render already measured.
+    dealsRef.current?.measure?.((_x, _y, _w, _h) => {
+      // 12px of breathing room above the section heading rather than flush
+      // against the section above it.
+      scrollRef.current?.scrollTo({
+        y: Math.max(0, _y - 12),
+        animated: true,
+      });
+      void _w;
+      void _h;
+    });
+  };
+
+  const openProduct = (product: DiscoveredProduct) =>
+    router.push({
+      pathname: "/(customer)/product-details",
+      params: { id: product.id },
+    });
+
+  const openCategoryFromSearch = (entry: BrowseCategory) =>
+    router.push({
+      pathname: "/(customer)/category-products",
+      params: { category: entry.name, categoryName: entry.name },
+    });
+
+  /**
+   * The Search screen, for the cases where the dropdown is not enough: the "see
+   * all" row, the filter button, and Enter with nothing highlighted. It keeps
+   * whatever has been typed, so a shopper who refines on the full screen does not
+   * lose the query.
+   */
+  const runFullSearch = () => {
+    const term = search.query.trim();
+
+    router.push({
+      pathname: "/(customer)/search",
+      params: term ? { query: term } : undefined,
+    });
+  };
+
+  const addDiscovered = async (product: DiscoveredProduct) => {
+    setHomeAddError("");
+
+    const result = await addItem(toCartProduct(product));
+
+    if (!result.added && result.reason) {
+      setHomeAddError(result.reason);
+    }
+  };
+
+  /**
+   * The "Browse categories" rail, read from the distinct
+   * customer_products.category values.
+   *
+   * It was a hard-coded list of six, which had two problems once the category
+   * became free text: a shop's own "Vegetables" never appeared because the label
+   * was "Fresh produce", and every tap went to Search rather than to that
+   * category, so the rail was six decorative tiles. Now a tile is a category
+   * something is actually filed under, and tapping it opens that category.
+   *
+   * A failure is swallowed rather than surfaced: the rail is one section of the
+   * home screen, and an error banner about a section the shopper did not ask
+   * for would be noise while the rest of the screen still works.
+   */
+  const loadCategories = useCallback(() => {
+    listBrowseCategories()
+      .then(setCategories)
+      .catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    loadCategories();
+  }, [loadCategories]);
+
+  /**
+   * What the rail shows: the categories that actually have products, then the
+   * default suggestions for anything not in use yet.
+   *
+   * Both halves, rather than one or the other. The database half is what makes the
+   * rail trustworthy -- a tile is a shelf that has something on it -- but a rail
+   * built only from that would be empty on a new catalogue and would hide every
+   * category the shop could file a product under until it happened to type one.
+   * The suggestions half is the same list the Add Product form offers, so what a
+   * shopper browses here is what a shop can actually choose.
+   *
+   * Until the query resolves, the suggestions alone -- an empty grey strip while
+   * loading would be worse than showing something the shopper recognises.
+   */
+  const railCategories: Category[] = (() => {
+    const merged = categories.map((category) => ({
+      icon: categoryIcon(category.name),
+      label: category.name,
+      tint: category.tint,
+    }));
+
+    // Compared on the lower-cased label, so a catalogue holding "vegetables"
+    // does not also gain a "Vegetables" tile two positions later.
+    const seen = new Set(categories.map((entry) => entry.name.toLowerCase()));
+
+    const extra = SUGGESTED_CATEGORIES.filter(
+      (label) => !seen.has(label.toLowerCase()),
+    ).map((label) => ({
+      icon: categoryIcon(label),
+      label,
+      tint: categoryTint(label),
+    }));
+
+    const all = [...merged, ...extra];
+
+    return all.length ? all : PLACEHOLDER_CATEGORIES;
+  })();
 
   useEffect(() => {
     const updateGreeting = () => setTimeGreeting(getTimeGreeting());
@@ -110,10 +325,24 @@ export default function Home() {
       .catch(() => undefined);
   }, []);
 
+  /**
+   * Opens the products filed under one category.
+   *
+   * category-products, not search: search is a keyword screen, so arriving there
+   * with a category filter set looked like a search result the shopper had not
+   * asked for. This screen is scoped to the category and back-navigates to here.
+   */
+  const openCategory = (label: string) =>
+    router.push({
+      pathname: "/(customer)/category-products",
+      params: { category: label, categoryName: label },
+    });
+
   return (
     <View style={styles.screen}>
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, wide && styles.contentWide]}
+        ref={scrollRef}
         showsVerticalScrollIndicator={false}
       >
         <View style={styles.greetingRow}>
@@ -132,64 +361,62 @@ export default function Home() {
           </Pressable>
         </View>
 
-        <Pressable
-          accessibilityLabel="Search products and shops"
-          onPress={() => router.push("/(customer)/search")}
-          style={styles.searchBox}
-        >
-          <FontAwesome color={colors.muted} name="search" size={15} />
-          <TextInput
-            editable={false}
-            onChangeText={setSearch}
-            placeholder="Search groceries, shops or brands"
-            placeholderTextColor="#9693A6"
-            style={styles.searchInput}
-            value={search}
-          />
-          <View style={styles.filterButton}>
-            <FontAwesome color={colors.white} name="sliders" size={13} />
-          </View>
-        </Pressable>
+        <HomeSearchBar
+          categories={search.categories}
+          empty={search.empty}
+          error={search.error}
+          loading={search.loading}
+          onChangeText={search.setQuery}
+          onPickCategory={openCategoryFromSearch}
+          onPickProduct={openProduct}
+          onSubmit={runFullSearch}
+          products={search.products}
+          value={search.query}
+        />
 
         <View style={styles.quickRow}>
           <QuickAction
             icon="bolt"
             label="Express pickup"
+            onPress={scrollToDeals}
             tint={colors.mintSoft}
           />
-          <QuickAction icon="repeat" label="Buy again" tint="#FFF0D5" />
-          <QuickAction icon="map-marker" label="Nearby shops" tint="#E8ECFF" />
+          <QuickAction
+            icon="repeat"
+            label="Buy again"
+            onPress={() => router.push("/(customer)/my-orders")}
+            tint="#FEF3C2"
+          />
+          <QuickAction
+            icon="map-marker"
+            label="Nearby shops"
+            onPress={() => router.push("/(customer)/nearby-shops")}
+            tint="#F3F4F6"
+          />
         </View>
 
-        <Pressable
-          accessibilityLabel="Shop this week's fresh picks"
-          onPress={() => router.push("/(customer)/search")}
-          style={styles.hero}
-        >
-          <Image
-            accessibilityLabel="Fresh produce at a market"
-            contentFit="cover"
-            source="https://images.unsplash.com/photo-1488459716781-31db52582fe9?w=1000&q=85"
-            style={styles.heroImage}
-            transition={250}
+        <HeroCarousel
+          onCtaPress={scrollToDeals}
+          slides={heroSlides(pickupHub)}
+        />
+
+        {/* The section the hero's Explore button scrolls to. Placed directly under
+            the carousel because that is where the tap starts, and it carries the
+            real filtered offers -- the hero is the advert, this is the answer. */}
+        <View ref={dealsRef}>
+          <SectionHeader
+            title="Deals on now"
+            action="See all"
+            onPress={runFullSearch}
           />
-          <View style={styles.heroShade} />
-          <View style={styles.heroContent}>
-            <View style={styles.heroBadge}>
-              <Text style={styles.heroBadgeText}>THIS WEEK</Text>
-            </View>
-            <Text style={styles.heroTitle}>
-              Fresh picks,{"\n"}better prices.
-            </Text>
-            <Text style={styles.heroCopy}>
-              Hand-picked produce from shops near {pickupHub}.
-            </Text>
-            <View style={styles.heroCta}>
-              <Text style={styles.heroCtaText}>Explore deals</Text>
-              <FontAwesome color={colors.ink} name="arrow-right" size={12} />
-            </View>
-          </View>
-        </Pressable>
+          <DealsRail
+            addDisabled={cartLoading || adding}
+            addingId={dealsAddingId}
+            onAdd={addDiscovered}
+            onAddingChange={setDealsAddingId}
+            onSeeAll={runFullSearch}
+          />
+        </View>
 
         <SectionHeader
           title="Browse categories"
@@ -201,10 +428,11 @@ export default function Home() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryRow}
         >
-          {categories.map((category) => (
+          {railCategories.map((category) => (
             <Pressable
+              accessibilityLabel={`Browse ${category.label}`}
               key={category.label}
-              onPress={() => router.push("/(customer)/search")}
+              onPress={() => openCategory(category.label)}
               style={styles.category}
             >
               <View
@@ -228,10 +456,15 @@ export default function Home() {
 
         <SectionHeader
           title="Popular near you"
-          action="View map"
-          onPress={() => router.push("/(customer)/search")}
+          action="All shops"
+          onPress={() => router.push("/(customer)/nearby-shops")}
         />
-        <View style={styles.shopCard}>
+        <Pressable
+          accessibilityLabel={`Browse ${HOME_SHOP_NAME}`}
+          accessibilityRole="button"
+          onPress={() => router.push("/(customer)/nearby-shops")}
+          style={({ pressed }) => [styles.shopCard, pressed && styles.pressed]}
+        >
           <View style={styles.shopIcon}>
             <FontAwesome color={colors.ink} name="shopping-basket" size={18} />
           </View>
@@ -244,12 +477,12 @@ export default function Home() {
             <Text style={styles.shopDelivery}>Free pickup from 4:30 PM</Text>
           </View>
           <FontAwesome color={colors.muted} name="chevron-right" size={12} />
-        </View>
+        </Pressable>
 
         <SectionHeader
           title="Picked for your basket"
           action="See all"
-          onPress={() => router.push("/(customer)/search")}
+          onPress={runFullSearch}
         />
         <ScrollView
           horizontal
@@ -271,15 +504,18 @@ function QuickAction({
   icon,
   label,
   tint,
+  onPress,
 }: {
   icon: IconName;
   label: string;
   tint: string;
+  onPress: () => void;
 }) {
   return (
     <Pressable
-      onPress={() => router.push("/(customer)/search")}
-      style={styles.quickAction}
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [styles.quickAction, pressed && styles.pressed]}
     >
       <View style={[styles.quickIcon, { backgroundColor: tint }]}>
         <FontAwesome color={colors.ink} name={icon} size={14} />
@@ -312,7 +548,18 @@ function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onA
   return (
     <View style={styles.productCard}>
       <View style={styles.productImageWrap}>
-        <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")} style={styles.productImageTouch}>
+        <Pressable
+          accessibilityLabel={`View ${product.name}`}
+          accessibilityRole="button"
+          onPress={() =>
+            product.catalogProduct &&
+            router.push({
+              pathname: "/(customer)/product-details",
+              params: { id: product.catalogProduct.id },
+            })
+          }
+          style={styles.productImageTouch}
+        >
           <Image contentFit="cover" source={product.image} style={styles.productImage} transition={200} />
         </Pressable>
         <View
@@ -327,7 +574,17 @@ function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onA
           <FontAwesome color={colors.white} name="plus" size={12} />
         </Pressable>
       </View>
-      <Pressable accessibilityLabel={`View ${product.name}`} accessibilityRole="button" onPress={() => router.push("/(customer)/product-details")}>
+      <Pressable
+        accessibilityLabel={`View ${product.name}`}
+        accessibilityRole="button"
+        onPress={() =>
+          product.catalogProduct &&
+          router.push({
+            pathname: "/(customer)/product-details",
+            params: { id: product.catalogProduct.id },
+          })
+        }
+      >
         <Text numberOfLines={1} style={styles.productName}>{product.name}</Text>
       </Pressable>
       <Text numberOfLines={1} style={styles.productShop}>
@@ -344,21 +601,24 @@ function ProductCard({ product, onAdd, addingDisabled }: { product: Product; onA
 const styles = StyleSheet.create({
   screen: { backgroundColor: colors.paper, flex: 1 },
   content: { paddingHorizontal: 20, paddingTop: 18 },
+  // Desktop: a wider measure with the content centred, so a 1920px window does
+  // not stretch a product rail to a length nobody scans.
+  contentWide: { alignSelf: "center", maxWidth: 1120, width: "100%" },
   greetingRow: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
   },
   kicker: {
-    color: "#07856A",
-    fontSize: 10,
-    fontWeight: "900",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 1.1,
   },
   title: {
     color: colors.ink,
-    fontSize: 23,
-    fontWeight: "900",
+    fontSize: 24,
+    fontWeight: "700",
     letterSpacing: -0.3,
     marginTop: 5,
     maxWidth: 280,
@@ -373,32 +633,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 38,
   },
-  searchBox: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderColor: colors.line,
-    borderRadius: 14,
-    borderWidth: 1,
-    flexDirection: "row",
-    height: 50,
-    marginTop: 18,
-    paddingLeft: 15,
-  },
-  searchInput: {
-    color: colors.ink,
-    flex: 1,
-    fontSize: 12,
-    paddingHorizontal: 10,
-  },
-  filterButton: {
-    alignItems: "center",
-    backgroundColor: colors.ink,
-    borderRadius: 10,
-    height: 34,
-    justifyContent: "center",
-    marginRight: 7,
-    width: 34,
-  },
+  
   quickRow: {
     flexDirection: "row",
     justifyContent: "space-between",
@@ -415,60 +650,22 @@ const styles = StyleSheet.create({
   quickLabel: {
     color: colors.ink,
     flexShrink: 1,
-    fontSize: 10,
+    fontSize: 12,
     fontWeight: "700",
     marginLeft: 6,
   },
-  hero: { borderRadius: 22, height: 188, marginTop: 20, overflow: "hidden" },
-  heroImage: { height: "100%", position: "absolute", width: "100%" },
-  heroShade: {
-    backgroundColor: "rgba(19, 18, 61, 0.62)",
-    height: "100%",
-    position: "absolute",
-    width: "100%",
-  },
-  heroContent: { padding: 20 },
-  heroBadge: {
-    alignSelf: "flex-start",
-    backgroundColor: colors.mint,
-    borderRadius: 5,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-  },
-  heroBadgeText: {
-    color: colors.ink,
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  heroTitle: {
-    color: colors.white,
-    fontSize: 25,
-    fontWeight: "900",
-    lineHeight: 27,
-    marginTop: 12,
-  },
-  heroCopy: { color: "#E9E8F6", fontSize: 10, marginTop: 7, maxWidth: 180 },
-  heroCta: {
-    alignItems: "center",
-    backgroundColor: colors.white,
-    borderRadius: 13,
-    flexDirection: "row",
-    gap: 9,
-    marginTop: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    width: 112,
-  },
-  heroCtaText: { color: colors.ink, fontSize: 10, fontWeight: "900" },
+  // One pressed state for every tappable row on the screen, so a tap reads the
+  // same everywhere rather than each card inventing its own feedback.
+  pressed: { opacity: 0.75 },
+  
   sectionHeader: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 24,
   },
-  sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "900" },
-  sectionAction: { color: "#07856A", fontSize: 10, fontWeight: "900" },
+  sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: "600" },
+  sectionAction: { color: "#15803D", fontSize: 12, fontWeight: "700" },
   categoryRow: { gap: 12, paddingTop: 14 },
   category: { alignItems: "center", width: 68 },
   categoryIcon: {
@@ -480,12 +677,13 @@ const styles = StyleSheet.create({
   },
   categoryLabel: {
     color: colors.ink,
-    fontSize: 9,
-    fontWeight: "700",
-    lineHeight: 12,
+    fontSize: 12,
+    fontWeight: "500",
+    lineHeight: 15,
     marginTop: 7,
     textAlign: "center",
   },
+  
   shopCard: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -506,22 +704,22 @@ const styles = StyleSheet.create({
   },
   shopCopy: { flex: 1, marginLeft: 11 },
   shopTitleRow: { alignItems: "center", flexDirection: "row" },
-  shopName: { color: colors.ink, fontSize: 12, fontWeight: "900" },
+  shopName: { color: colors.ink, fontSize: 16, fontWeight: "600" },
   open: {
     backgroundColor: colors.mintSoft,
     borderRadius: 5,
-    color: "#07856A",
-    fontSize: 8,
-    fontWeight: "900",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "700",
     marginLeft: 7,
     paddingHorizontal: 5,
     paddingVertical: 3,
   },
-  shopMeta: { color: colors.muted, fontSize: 9, marginTop: 4 },
+  shopMeta: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 4 },
   shopDelivery: {
-    color: "#07856A",
-    fontSize: 9,
-    fontWeight: "800",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "600",
     marginTop: 5,
   },
   productRow: { gap: 12, paddingTop: 13 },
@@ -549,7 +747,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 6,
   },
-  productTagText: { color: colors.ink, fontSize: 7, fontWeight: "900" },
+  productTagText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   addButton: {
     alignItems: "center",
     backgroundColor: colors.ink,
@@ -564,16 +762,16 @@ const styles = StyleSheet.create({
     width: 38,
   },
   addButtonDisabled: { opacity: 0.45 },
-  cartError: { color: "#A43A32", fontSize: 12, marginTop: 10 },
+  cartError: {fontWeight: "400", color: "#DC2626", fontSize: 13, marginTop: 10 },
   productName: {
     color: colors.ink,
-    fontSize: 11,
-    fontWeight: "900",
+    fontSize: 15,
+    fontWeight: "500",
     marginTop: 9,
   },
-  productShop: { color: colors.muted, fontSize: 9, marginTop: 3 },
+  productShop: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
   priceRow: { alignItems: "baseline", flexDirection: "row", marginTop: 7 },
-  productPrice: { color: colors.ink, fontSize: 12, fontWeight: "900" },
-  productUnit: { color: colors.muted, fontSize: 8, marginLeft: 4 },
+  productPrice: { color: colors.ink, fontSize: 17, fontWeight: "700" },
+  productUnit: {fontWeight: "400", color: colors.muted, fontSize: 12, marginLeft: 4 },
   bottomSpace: { height: 105 },
 });
