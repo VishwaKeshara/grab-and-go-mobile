@@ -106,13 +106,18 @@ export type Product = {
   shop_id: string;
   name: string;
   description: string;
-  category: string;
+  /**
+   * Free-text category label, e.g. "Vegetables". Null when uncategorised.
+   *
+   * This replaced a category_id foreign key into a product_categories table in
+   * migration 024. It is plain text the shop types, not a reference, so matching
+   * on it is always case-insensitive.
+   */
+  category: string | null;
   unit: string;
   price: number;
   stock_quantity: number;
   image_url: string | null;
-  /** FK to product_categories.id, nullable when a product is uncategorised. */
-  category_id?: string | null;
   is_available: boolean;
   active?: boolean;
   regular_price?: number;
@@ -163,19 +168,10 @@ export type ProductFilters = {
   inStockOnly?: boolean;
   sort?: ProductSort;
   /**
-   * product_categories.id, for the customer browse screens.
-   *
-   * Distinct from `category`, which matches the legacy free-text `category`
-   * column on the old products table and is used by the legacy searchProducts().
-   */
-  categoryId?: string;
-  /**
    * Only listings running a discount. Drives the Offers filter.
    * @see utils/discounts.ts
    */
   offersOnly?: boolean;
-  /** Set by discoveryService so a screen can tell which extra fields it can use. */
-  supportsCategoryId?: boolean;
 };
 
 export type ProductSort = "relevance" | "price_asc" | "price_desc" | "name";

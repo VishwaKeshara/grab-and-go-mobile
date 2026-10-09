@@ -466,7 +466,7 @@ function StockCard({
 }
 
 const styles = StyleSheet.create({
-  screen: { backgroundColor: colors.paper, flex: 1 },
+  screen: { backgroundColor: colors.paper, flex: 1, width: "100%", maxWidth: 480, alignSelf: "center" },
   centre: {
     alignItems: "center",
     backgroundColor: colors.paper,
@@ -508,14 +508,18 @@ const styles = StyleSheet.create({
     width: 28,
   },
   filterIcon: { color: colors.ink, fontSize: 13, fontWeight: "800" },
-  chipRow: { gap: 7, paddingHorizontal: 18, paddingVertical: 12 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7, paddingHorizontal: 18, paddingVertical: 12 },
   chip: {
     backgroundColor: colors.white,
     borderColor: colors.line,
-    borderRadius: 15,
+    borderRadius: 18,
     borderWidth: 1,
     paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingVertical: 9,
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "flex-start",
+    minHeight: 36,
   },
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
   chipText: { color: colors.ink, fontSize: 10, fontWeight: "700" },

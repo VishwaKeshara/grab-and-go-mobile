@@ -151,11 +151,11 @@ export default function Packing() {
           <View style={styles.instructionCard}>
             <Text style={styles.instructionTitle}>SPECIAL INSTRUCTIONS</Text>
             <Text style={styles.instructionText}>{order.packingInstructions}</Text>
-            {order.travelMethod && (
+            {order.travelMethod ? (
               <View style={styles.travelBadge}>
                 <Text style={styles.travelBadgeText}>For {order.travelMethod} transport</Text>
               </View>
-            )}
+            ) : null}
           </View>
         ) : null}
 

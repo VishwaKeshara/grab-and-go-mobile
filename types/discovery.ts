@@ -25,11 +25,12 @@ export type DiscoveredProduct = {
   /** From shop_inventory, falling back to the copy on customer_products. */
   stock_quantity: number;
   is_available: boolean;
-  category_id: string | null;
-  /** Denormalised from the product_categories join, so a card needs no 2nd query. */
-  category_name: string | null;
-  category_slug: string | null;
-  category_tint: string | null;
+  /**
+   * Free-text category the shop picked when it added the listing, e.g.
+   * "Vegetables". Was a uuid foreign key until migration 023, which dropped the
+   * product_categories table in favour of storing the label directly.
+   */
+  category: string | null;
   discount_percent: number | null;
   discount_type: DiscountType | null;
   discount_amount_lkr: number | null;
@@ -52,12 +53,17 @@ export type NearbyShop = {
   isPreferredHub: boolean;
 };
 
-/** One category for the home rail. */
+/**
+ * One category for the home rail.
+ *
+ * Derived from the distinct customer_products.category values rather than a
+ * reference table, so the label IS the id: it is what the rail routes with and
+ * what the product list filters on. Icon and tint come from
+ * utils/categories.ts, which keys them off the name.
+ */
 export type BrowseCategory = {
-  id: string;
+  /** The stored label, used both as display text and as the filter value. */
   name: string;
-  slug: string;
-  /** Curated in product_categories, so the rail needs no icon mapping here. */
   icon: string;
   tint: string;
   /** Active listings in this category. 0 categories are dropped from the rail. */

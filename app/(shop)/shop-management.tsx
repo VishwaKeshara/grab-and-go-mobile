@@ -15,7 +15,6 @@ import {
   clearDiscount,
   createShopProduct,
   listProductCategories,
-  type ProductCategoryOption,
   deleteCanonicalProduct as deleteProduct,
   listCanonicalProductsByShop as listProductsByShop,
   updateShopProduct,
@@ -26,6 +25,7 @@ import {
   deleteShopProduct,
 } from "@/services/shopService";
 import { saveStock } from "@/services/stockService";
+import { categoryIcon } from "@/utils/categories";
 import { router } from "expo-router";
 import { getLocalStaffSession, getStaffProfile } from "@/services/shopService";
 import type { DiscountType, Product } from "@/types/product";
@@ -87,7 +87,7 @@ export default function ShopManagement() {
   const [mode, setMode] = useState<Mode | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [pickedImage, setPickedImage] = useState<any>(null);
-  const [categories, setCategories] = useState<ProductCategoryOption[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [discountProduct, setDiscountProduct] = useState<Product | null>(null);
   /** Which of the two mutually exclusive options the clerk has selected. */
   const [discountMode, setDiscountMode] = useState<DiscountType>("percent");
@@ -99,13 +99,14 @@ export default function ShopManagement() {
     name: "",
     price: "",
     stock_quantity: "",
-    category_id: "",
+    category: "",
     unit: "",
     image_url: "",
   });
 
-  // Categories are a shop-independent reference list, so they are fetched once
-  // on mount. A failure here must not block the rest of the screen.
+  // The labels already in use, fetched once on mount as suggestions. A failure
+  // here only costs the chips -- the field itself still accepts free text, so it
+  // must not block the rest of the screen.
   useEffect(() => {
     listProductCategories()
       .then(setCategories)
@@ -320,6 +321,14 @@ export default function ShopManagement() {
 
   const [deletingProductId, setDeletingProductId] = useState<string | null>(null);
 
+  /**
+   * Deletes a product, permanently.
+   *
+   * The failure message is shown as the server wrote it, because the two refusals
+   * this can hit are answers rather than faults: a product that has been ordered
+   * cannot be deleted, and a product belonging to another shop is not the clerk's
+   * to remove. describeError carries both through unchanged.
+   */
   const handleDeleteProduct = async (productId: string) => {
     if (deletingProductId) return;
     setDeletingProductId(productId);
@@ -328,9 +337,9 @@ export default function ShopManagement() {
       await deleteShopProduct(productId);
       if (selectedShop) loadProducts(selectedShop.id);
       if (Platform.OS === "web") {
-        globalThis.alert?.("The product was removed successfully.");
+        globalThis.alert?.("The product was permanently deleted.");
       } else {
-        Alert.alert("Product deleted", "The product was removed successfully.");
+        Alert.alert("Product deleted", "The product was permanently deleted.");
       }
     } catch (err) {
       console.error("[ShopManagement] delete product failed", err);
@@ -345,10 +354,21 @@ export default function ShopManagement() {
     }
   };
 
+  /**
+   * Confirms a permanent delete.
+   *
+   * The wording says "permanently" rather than just "Delete" because that is now
+   * what happens: the row leaves customer_products, and unlike the archive this
+   * used to do there is no undo. A product that has already been sold is refused
+   * by the database, and its message is shown verbatim, because that refusal is
+   * the answer to "why did it not delete" rather than a fault to retry.
+   */
   const confirmDeleteProduct = (product: Product) => {
     if (Platform.OS === "web") {
       const confirmed = globalThis.confirm?.(
-        `Delete ${product.name} from your shop catalog?`
+        `Permanently delete ${product.name}?\n\n` +
+          `This removes it for good and cannot be undone. ` +
+          `Anyone who already ordered it will keep their order history.`
       );
 
       if (confirmed) {
@@ -358,8 +378,9 @@ export default function ShopManagement() {
     }
 
     Alert.alert(
-      "Delete product?",
-      `${product.name} will be removed from your shop catalog.`,
+      "Delete product permanently?",
+      `${product.name} will be removed for good. This cannot be undone.\n\n` +
+        `Anyone who already ordered it keeps their order history.`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -380,7 +401,7 @@ export default function ShopManagement() {
       name: "",
       price: "",
       stock_quantity: "",
-      category_id: "",
+      category: "",
       unit: "",
       image_url: "",
     });
@@ -394,7 +415,7 @@ export default function ShopManagement() {
       name: product.name,
       price: String(product.price),
       stock_quantity: String(product.stock_quantity),
-      category_id: product.category_id ?? "",
+      category: product.category ?? "",
       unit: product.unit ?? "",
       image_url: product.image_url ?? "",
     });
@@ -469,10 +490,10 @@ export default function ShopManagement() {
           // column mirrors the selling price rather than being left stale.
           regularPriceLkr: price,
           imageUrl: finalImageUrl || null,
-          // An empty picker means "None", which has to be sent as an explicit
-          // clear. Omitting it would leave the previous category in place.
-          ...(form.category_id
-            ? { categoryId: form.category_id }
+          // An empty field means "None", which has to be sent as an
+          // explicit clear. Omitting it would leave the previous category in place.
+          ...(form.category.trim()
+            ? { category: form.category }
             : { clearCategory: true }),
           // Mirroring the price into regular_price_lkr means a discount is no
           // longer supported the moment this saves, so it is cleared here rather
@@ -501,7 +522,7 @@ export default function ShopManagement() {
             active: true
           },
           stock,
-          form.category_id || null,
+          form.category || null,
         );
         setNotice("✓ Listing created");
       }
@@ -726,6 +747,10 @@ export default function ShopManagement() {
                         {hasDiscount(product) ? "Discount ✓" : "Discount"}
                       </Text>
                     </Pressable>
+                    {/* Hide/Restore, not Pause/Resume. It sets active = false and leaves the row
+                          in place, which is the opposite of the Delete button next
+                          to it -- and it is the only way to remove a product that
+                          has already been ordered. */}
                     <Pressable
                       onPress={async () => {
                         if (!selectedShop) return;
@@ -741,7 +766,7 @@ export default function ShopManagement() {
                       style={product.active !== false ? styles.actionButtonPause : styles.actionButtonResume}
                     >
                       <Text style={product.active !== false ? styles.actionButtonPauseText : styles.actionButtonResumeText}>
-                        {product.active !== false ? "Pause" : "Resume"}
+                        {product.active !== false ? "Hide" : "Restore"}
                       </Text>
                     </Pressable>
                     <Pressable
@@ -796,8 +821,8 @@ export default function ShopManagement() {
               />
               <CategoryPicker
                 categories={categories}
-                onChange={(id) => setForm({ ...form, category_id: id })}
-                value={form.category_id}
+                onChange={(label) => setForm({ ...form, category: label })}
+                value={form.category}
               />
               <ModalField
                 keyboardType="decimal-pad"
@@ -1024,101 +1049,89 @@ function ModalField({
 }
 
 /**
- * Category dropdown for the product form.
+ * Category field for the product form.
  *
- * Built from Pressable rather than @expo/ui's Picker. That Picker is a wheel on
- * iOS and therefore permanently visible there, which is not a dropdown, and it
- * styles as the platform control rather than as this screen's input field. A
- * tap-to-open list gives the same interaction on web and native and reuses the
- * fieldInput styling the rest of the form uses.
+ * Free text with suggestions, not a fixed dropdown. Migration 024 dropped
+ * product_categories, so there is no reference table to read the list from and
+ * nothing would stop a shop typing "Vegetables" on a database that has never
+ * heard of it.
  *
- * "None" is a real option rather than an absence of one: an empty value is what
- * clears an existing category on save, so it has to be selectable and it has to
- * be shown when it is the stored state.
+ * The chips below the field are the labels the catalogue already uses,
+ * most-used first, followed by SUGGESTED_CATEGORIES for anything not yet in use
+ * -- so Fruits, Vegetables and Dairy are there to tap on a shop's very first
+ * product, not just the second. They are suggestions, not a whitelist: tapping
+ * one fills the field, and typing anything else is accepted. Offering the
+ * existing spellings matters because nothing normalises the text on the way in,
+ * so a chip is what stops "Veg", "Vegtables" and "Vegetables" becoming three
+ * categories that each open a different product list.
  *
- * Categories come from product_categories, so the list is whatever the database
- * holds.
+ * Leaving it empty is a real choice, not an absent one -- it is what clears the
+ * category on an edit -- so the field shows a placeholder rather than a stored
+ * value when there is nothing to show.
  */
 function CategoryPicker({
   categories,
   onChange,
   value,
 }: {
-  categories: ProductCategoryOption[];
-  onChange: (id: string) => void;
+  categories: string[];
+  onChange: (label: string) => void;
   value: string;
 }) {
-  const [open, setOpen] = useState(false);
-
-  if (categories.length === 0) {
-    return (
-      <View style={styles.field}>
-        <Text style={styles.fieldLabel}>Category</Text>
-        <Text style={styles.fieldHint}>
-          No categories available yet.
-        </Text>
-      </View>
-    );
-  }
-
-  const selected = categories.find((category) => category.id === value);
+  // The chip is compared case-insensitively because the stored text is free, and
+  // a chip that reads "Vegetables" should still look picked for "vegetables".
+  const matches = (label: string) =>
+    label.trim().toLowerCase() === value.trim().toLowerCase();
 
   return (
     <View style={styles.field}>
-      <Text style={styles.fieldLabel}>Category</Text>
+      <Text style={styles.fieldLabel}>Category (optional)</Text>
 
-      <Pressable
-        accessibilityHint="Opens a list to choose one category"
-        accessibilityLabel={selected ? `Category, ${selected.name}` : "Category, none"}
-        accessibilityRole="button"
-        accessibilityState={{ expanded: open }}
-        onPress={() => setOpen((current) => !current)}
-        style={({ pressed }) => [
-          styles.dropdownField,
-          pressed && styles.dropdownPressed,
-        ]}
-      >
-        {/* Shows the stored value rather than a prompt, so "None" reads as the
-            choice that is actually saved instead of looking unanswered. */}
-        <Text
-          numberOfLines={1}
-          style={[styles.dropdownValue, !selected && styles.dropdownValueMuted]}
-        >
-          {selected ? selected.name : "None"}
-        </Text>
-        <FontAwesome name={open ? "chevron-up" : "chevron-down"} size={13} color={colors.muted} />
-      </Pressable>
+      <TextInput
+        accessibilityLabel="Category"
+        autoCapitalize="words"
+        onChangeText={onChange}
+        placeholder="e.g. Vegetables, Fruits, Dairy"
+        placeholderTextColor="#9A98AA"
+        style={styles.fieldInput}
+        value={value}
+      />
 
-      {open ? (
-        <View style={styles.dropdownList}>
-          {[{ id: "", name: "None" }, ...categories].map((option, index, all) => {
-            const active = option.id === value;
-            const isLast = index === all.length - 1;
+      <Text style={styles.fieldHint}>
+        Pick a category below, or type your own. Leave empty for none.
+      </Text>
+
+      {categories.length ? (
+        <View style={styles.categorySuggestions}>
+          {categories.map((label) => {
+            const active = matches(label);
+
             return (
               <Pressable
-                key={option.id || "none"}
-                accessibilityRole="menuitem"
+                accessibilityRole="button"
                 accessibilityState={{ selected: active }}
-                onPress={() => {
-                  onChange(option.id);
-                  setOpen(false);
-                }}
+                key={label}
+                onPress={() => onChange(active ? "" : label)}
                 style={({ pressed }) => [
-                  styles.dropdownOption,
-                  // The last option has no divider below it, so the border is
-                  // applied per row rather than baked into the shared style.
-                  !isLast && styles.dropdownOptionDivider,
-                  active && styles.dropdownOptionActive,
+                  styles.categorySuggestion,
+                  active && styles.categorySuggestionActive,
                   pressed && styles.dropdownPressed,
                 ]}
               >
+                <FontAwesome
+                  color={colors.ink}
+                  name={categoryIcon(label)}
+                  size={11}
+                />
                 <Text
                   numberOfLines={1}
-                  style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}
+                  style={[
+                    styles.categorySuggestionText,
+                    active && styles.categorySuggestionTextActive,
+                  ]}
                 >
-                  {option.name}
+                  {label}
                 </Text>
-                {active ? <FontAwesome name="check" size={13} color={colors.ink} /> : null}
               </Pressable>
             );
           })}
@@ -1413,6 +1426,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     maxHeight: "90%",
     padding: 24,
+    width: "100%",
+    maxWidth: 480,
+    alignSelf: "center",
   },
   modalHeader: {
     alignItems: "center",
@@ -1534,6 +1550,29 @@ const styles = StyleSheet.create({
   dropdownOptionText: { color: colors.ink, flex: 1, fontSize: 14, fontWeight: "600" },
   dropdownOptionTextActive: { fontWeight: "800" },
   dropdownPressed: { opacity: 0.7 },
+  categorySuggestions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 7,
+    marginTop: 9,
+  },
+  categorySuggestion: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  categorySuggestionActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  categorySuggestionText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  categorySuggestionTextActive: { color: colors.white },
   fieldInput: {
     backgroundColor: colors.white,
     borderColor: colors.line,

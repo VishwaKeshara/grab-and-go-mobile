@@ -105,7 +105,7 @@ function CartSheetItem({ item, onDecrease, onIncrease, onRemove }: { item: CartI
 const styles = StyleSheet.create({
   overlay: { flex: 1, justifyContent: "flex-end" },
   backdrop: { backgroundColor: "rgba(14, 13, 39, 0.48)", bottom: 0, left: 0, position: "absolute", right: 0, top: 0 },
-  sheet: { backgroundColor: colors.paper, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 9, width: "100%" },
+  sheet: { backgroundColor: colors.paper, borderTopLeftRadius: 28, borderTopRightRadius: 28, paddingHorizontal: 20, paddingTop: 9, width: "100%", maxWidth: 480, alignSelf: "center" },
   handle: { alignSelf: "center", backgroundColor: "#C7C5D6", borderRadius: 3, height: 5, width: 38 },
   heading: { alignItems: "center", flexDirection: "row", paddingTop: 17, paddingBottom: 13 },
   headingCopy: { flex: 1, minWidth: 0 },

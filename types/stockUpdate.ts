@@ -37,7 +37,7 @@ export type StockItem = {
     updatedAt: string | null;
     /** Whether an inventory row backs this item. False means writes must insert. */
     hasInventoryRow: boolean;
-    /** Category label from product_categories, or null when uncategorised. */
+    /** customer_products.category label, or null when uncategorised. */
     categoryName: string | null;
 };
 

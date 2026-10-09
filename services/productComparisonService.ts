@@ -4,8 +4,8 @@ import { supabase } from "@/lib/supabase";
  * Cross-shop price comparison for the Product Details screen.
  *
  * customer_products has no shared catalogue identity between shops -- there is
- * no product_group or catalogue_id column, and category_id is null for every row
- * currently in the database. The only signal linking the same item across shops
+ * no product_group or catalogue_id column, and the free-text category is null for
+ * every row currently in the database. The only signal linking the same item across shops
  * is the product name, so that is what this module matches on.
  *
  * Two tiers are returned and kept strictly separate, so the UI never implies

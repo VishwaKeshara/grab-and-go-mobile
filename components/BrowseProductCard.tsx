@@ -103,7 +103,7 @@ export function BrowseProductCard({
         </Text>
 
         <Text numberOfLines={1} style={styles.meta}>
-          {product.category_name ? `${product.category_name} · ` : ""}
+          {product.category ? `${product.category} · ` : ""}
           {product.unit}
         </Text>
 
@@ -171,7 +171,7 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   cardRail: { flex: 0, width: 152 },
-  imageWrap: { backgroundColor: "#F4F4FB", height: 116 },
+  imageWrap: { backgroundColor: "#F3F4F6", height: 116 },
   imageWrapRail: { height: 104 },
   image: { height: "100%", width: "100%" },
   thumb: {
@@ -181,7 +181,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: "100%",
   },
-  thumbText: { color: colors.ink, fontSize: 30, fontWeight: "900" },
+  thumbText: { color: colors.ink, fontSize: 30, fontWeight: "700" },
   discountBadge: {
     alignItems: "center",
     backgroundColor: colors.coral,
@@ -194,9 +194,9 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 6,
   },
-  discountBadgeText: { color: colors.white, fontSize: 8, fontWeight: "900" },
+  discountBadgeText: { color: colors.white, fontSize: 12, fontWeight: "600" },
   soldOutBadge: {
-    backgroundColor: "rgba(23,21,67,0.82)",
+    backgroundColor: "rgba(17,24,39,0.82)",
     borderRadius: 6,
     paddingHorizontal: 6,
     paddingVertical: 4,
@@ -204,22 +204,21 @@ const styles = StyleSheet.create({
     right: 6,
     top: 6,
   },
-  soldOutBadgeText: { color: colors.white, fontSize: 8, fontWeight: "900" },
+  soldOutBadgeText: { color: colors.white, fontSize: 12, fontWeight: "700" },
   body: { flex: 1, padding: 10 },
   name: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "700",
     lineHeight: 16,
     minHeight: 32,
   },
-  shop: { color: "#07856A", fontSize: 9, fontWeight: "700", marginTop: 4 },
-  meta: { color: colors.muted, fontSize: 9, marginTop: 3 },
+  shop: { color: "#15803D", fontSize: 12, fontWeight: "700", marginTop: 4 },
+  meta: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
   priceRow: { alignItems: "baseline", flexDirection: "row", gap: 5, marginTop: 7 },
-  price: { color: colors.ink, fontSize: 13, fontWeight: "900" },
-  wasPrice: {
-    color: colors.muted,
-    fontSize: 10,
+  price: { color: colors.ink, fontSize: 16, fontWeight: "700" },
+  wasPrice: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     textDecorationLine: "line-through",
   },
   addButton: {
@@ -233,5 +232,5 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   addButtonDisabled: { backgroundColor: colors.muted },
-  addButtonText: { color: colors.white, fontSize: 11, fontWeight: "900" },
+  addButtonText: { color: colors.white, fontSize: 12, fontWeight: "700" },
 });

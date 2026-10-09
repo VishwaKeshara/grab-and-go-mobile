@@ -1,4 +1,4 @@
-import { AuthFrame, AuthHeader, ErrorBanner } from "@/components/AuthUI";
+import { AuthFrame, ErrorBanner } from "@/components/AuthUI";
 import { BrowseProductCard, toCartProduct } from "@/components/BrowseProductCard";
 import { colors } from "@/constants/colors";
 import { useCart } from "@/hooks/useCart";
@@ -185,7 +185,8 @@ export default function Search() {
   const params = useLocalSearchParams<{
     shopId?: string;
     shopName?: string;
-    categoryId?: string;
+    /** The category label itself, not an id. See migration 024. */
+    category?: string;
     categoryName?: string;
     offers?: string;
   }>();
@@ -251,7 +252,7 @@ export default function Search() {
       fetchDiscoveryProducts({
         query: term,
         shopId: params.shopId,
-        categoryId: params.categoryId,
+        category: params.category,
         inStockOnly,
         offersOnly,
         sort,
@@ -269,7 +270,7 @@ export default function Search() {
           setSearching(false);
         });
     },
-    [inStockOnly, offersOnly, params.categoryId, params.shopId, sort],
+    [inStockOnly, offersOnly, params.category, params.shopId, sort],
   );
 
   useEffect(() => {
@@ -300,7 +301,7 @@ export default function Search() {
     void fetchDiscoveryProducts({
       query: trimmed,
       shopId: params.shopId,
-      categoryId: params.categoryId,
+      category: params.category,
     })
       .then((found) => recordSearch(trimmed, found.length))
       .then(refreshRecent)
@@ -387,8 +388,8 @@ export default function Search() {
 
       {/* Category chips used to sit here. They duplicated the "Browse categories"
           rail on the home screen and pushed a separate screen per tap, so they are
-          gone; categoryId still filters this list when a category screen links here
-          with its search icon. Categories remain reachable from home. */}
+          gone; the category param still filters this list when a category screen
+          links here with its search icon. Categories remain reachable from home. */}
       <FlatList
         contentContainerStyle={styles.chipRow}
         data={SORTS}
@@ -480,9 +481,11 @@ export default function Search() {
     // scroll={false} because the FlatList below is this screen's scroller. Inside
     // AuthFrame's default ScrollView it would be a vertical list inside another
     // vertical scroller with no bounded height, so it collapsed to zero rows and
-    // the screen showed the header with no products under it.
-    <AuthFrame scroll={false}>
-      <AuthHeader title="Search" />
+    // the screen showed nothing under the header.
+    //
+    // contentStyle because this screen renders no AuthHeader, and the frame's
+    // default paddingTop exists only to clear one.
+    <AuthFrame contentStyle={styles.frame} scroll={false}>
       <FlatList
         // Handed an element rather than a function reference: a component-type
         // header whose identity changes every render remounts the subtree and
@@ -516,6 +519,10 @@ export default function Search() {
 }
 
 const styles = StyleSheet.create({
+  // AuthFrame's default 42 top padding is there to clear an AuthHeader this
+  // screen does not render. 16 puts the search box level under the app header
+  // instead of leaving a band of empty space above it.
+  frame: { paddingTop: 16 },
   headerContainer: { paddingBottom: 10 },
   searchWrap: {
     alignItems: "center",

@@ -162,14 +162,14 @@ export default function ShopOrderDetails() {
               {order.pickupStartAt ? new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "ASAP"}
             </Text>
           </View>
-          {order.pickupStartAt && order.pickupEndAt && (
+          {order.pickupStartAt && order.pickupEndAt ? (
             <View style={styles.detailRow}>
               <Text style={styles.detailLabel}>Pickup Window:</Text>
               <Text style={styles.detailValue}>
                 {new Date(order.pickupStartAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {new Date(order.pickupEndAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Text>
             </View>
-          )}
+          ) : null}
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>Pickup PIN:</Text>
             <Text style={styles.detailValueStrong}>{order.pickupPin}</Text>

@@ -898,17 +898,47 @@ export async function deleteShop(id: string) {
 }
 
 /**
- * Archives a listing for the shop this screen is managing.
+ * Permanently removes a listing from customer_products.
  *
- * Staff go through staff_archive_product rather than archive_shop_product, which
- * does not exist in the deployed database (PostgREST answers PGRST202) and so
- * made every Delete fail. The owner writes active = false directly, which 022
- * grants and scopes to their own shop.
+ * This used to archive -- active = false -- and the button said "Delete" while
+ * leaving the row in place. It now deletes the row for real, via
+ * delete_product_permanently (migration 025).
  *
- * Archiving sets active = false rather than deleting the row: order history
- * references the product, and it also removes it from customer search.
+ * Both callers go through that one function rather than the two paths writing
+ * the delete themselves. The reason is the foreign keys: customer_cart_items and
+ * customer_products.substitute_for point at customer_products without ON DELETE
+ * CASCADE, so a delete issued from the app would be refused by Postgres with
+ * 23503, and the shop account has no grant on those tables to clean them up. The
+ * function clears both first, and refuses outright on a product that appears in
+ * any order -- order history is not the shop's to discard.
+ *
+ * To hide a product without removing it, use archiveShopProduct below instead.
  */
 export async function deleteShopProduct(productId: string): Promise<void> {
+  const access = await productWriteAccess();
+
+  const { error } = await supabase.rpc("delete_product_permanently", {
+    p_product_id: productId,
+    // Staff hold a PIN token, not a Supabase session, so the function needs it
+    // to resolve their shop. Passing null sends the owner path, which authorises
+    // through RLS and the session instead.
+    p_token: access.kind === "staff" ? access.token : null,
+  });
+
+  if (error) throw error;
+}
+
+/**
+ * Hides a listing without deleting it: active = false, available = false, and the
+ * stock row marked unavailable.
+ *
+ * This is the one to reach for when a product was sold and must keep existing for
+ * order history. Staff go through staff_archive_product rather than
+ * archive_shop_product, which does not exist in the deployed database (PostgREST
+ * answers PGRST202) and so made every Delete fail. The owner writes the columns
+ * directly, which 022 grants and scopes to their own shop.
+ */
+export async function archiveShopProduct(productId: string): Promise<void> {
   const access = await productWriteAccess();
 
   if (access.kind === "owner") {
@@ -975,31 +1005,7 @@ export async function getStaffProfile(token: string) {
 export async function staffGetOrders(token: string, status?: string): Promise<ShopOrder[]> {
   const { data, error } = await supabase.rpc('staff_get_orders', { p_token: token, p_status: status });
   if (error) throw error;
-  return (data || []).map((row: any) => ({
-    id: row.id,
-    shopId: row.shop_id,
-    customerId: row.customer_id,
-    reference: row.id.substring(0,8), // fallback
-    pickupPin: '***',
-    status: row.status,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    customerName: row.customer_name,
-    customerPhone: row.customer_phone,
-    packingInstructions: '',
-    travelMethod: 'walking',
-    pickupStartAt: '',
-    pickupEndAt: '',
-    subtotalLkr: 0,
-    savingsLkr: 0,
-    serviceFeeLkr: 0,
-    totalLkr: row.total_lkr,
-    createdAt: row.created_at,
-    updatedAt: row.created_at,
-    acceptedAt: null,
-    packingStartedAt: null,
-    readyAt: null,
-  }));
+  return (data || []).map((row: any) => mapOrderRow(row));
 }
 
 export async function staffGetOrderDetails(token: string, orderId: string): Promise<ShopOrder> {
@@ -1007,44 +1013,14 @@ export async function staffGetOrderDetails(token: string, orderId: string): Prom
   if (error) throw error;
   if (!data) throw new Error("Order not found");
   const row: any = data;
-  return {
-    id: row.id,
-    shopId: '',
-    customerId: '',
-    reference: row.id.substring(0,8),
-    pickupPin: '***',
-    status: row.status,
-    paymentMethod: 'card',
-    paymentStatus: 'paid',
-    customerName: 'Customer',
-    customerPhone: '',
-    packingInstructions: '',
-    travelMethod: 'walking',
-    pickupStartAt: '',
-    pickupEndAt: '',
-    subtotalLkr: row.subtotal_lkr || 0,
-    savingsLkr: 0,
-    serviceFeeLkr: 0,
-    totalLkr: row.total_lkr || 0,
-    createdAt: row.created_at,
-    updatedAt: row.created_at,
-    acceptedAt: null,
-    packingStartedAt: null,
-    readyAt: null,
-    items: (row.items || []).map((item: any) => ({
-      id: item.id,
-      orderId: row.id,
-      productId: item.product_id,
-      productName: item.product_name,
-      productUnit: 'Unit',
-      imageUrl: null,
-      quantity: item.quantity,
-      unitPriceLkr: item.unit_price_lkr,
-      substitution: { type: 'call' },
-      isPacked: item.is_packed,
-      packedAt: null,
-    }))
-  };
+  const rawItems = row.customer_order_items || [];
+  const items: ShopOrderItem[] = rawItems.map(mapItemRow);
+
+  console.log("[StaffOrder] raw RPC row", row);
+  console.log("[StaffOrder] customer_order_items", row.customer_order_items);
+  console.log("[StaffOrder] mapped items", items);
+
+  return mapOrderRow(row, items);
 }
 
 export async function staffAcceptOrder(token: string, orderId: string): Promise<void> {
