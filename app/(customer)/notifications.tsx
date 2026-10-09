@@ -60,8 +60,16 @@ export default function Notifications() {
   };
 
   const remove = async (id: string) => {
-    await deleteNotification(id);
-    setNotifications((items) => items.filter((item) => item.id !== id));
+    try {
+      await deleteNotification(id);
+      setNotifications((items) => items.filter((item) => item.id !== id));
+    } catch (deleteError) {
+      setError(
+        deleteError instanceof Error
+          ? deleteError.message
+          : "We could not delete this notification.",
+      );
+    }
   };
 
   return (

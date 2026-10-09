@@ -3,7 +3,8 @@ import { View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable, ActivityIn
 import { router, useLocalSearchParams } from "expo-router";
 import { Image } from "expo-image";
 import { ShopOrder } from "@/types/shopOrder";
-import { getShopOrderById, updateOrderStatus, updatePackingItem } from "@/services/shopService";
+import { getShopOrderById, updateOrderStatus, updatePackingItem, staffGetOrderDetails, staffSetOrderStatus, staffSetOrderItemPacked, getLocalStaffSession } from "@/services/shopService";
+
 
 export default function Packing() {
   const { orderId } = useLocalSearchParams<{ orderId?: string }>();
@@ -24,7 +25,8 @@ export default function Packing() {
     setLoading(true);
     setError("");
     try {
-      const data = await getShopOrderById(id);
+      const staffToken = await getLocalStaffSession();
+      const data = staffToken ? await staffGetOrderDetails(staffToken, id) : await getShopOrderById(id);
       if (!data) {
         setError("Order not found");
       } else {
@@ -51,7 +53,12 @@ export default function Packing() {
           )
         };
       });
-      await updatePackingItem(itemId, !currentPackedState);
+      const staffToken = await getLocalStaffSession();
+      if (staffToken) {
+        await staffSetOrderItemPacked(staffToken, itemId, !currentPackedState);
+      } else {
+        await updatePackingItem(itemId, !currentPackedState);
+      }
     } catch (err: any) {
       console.error("Failed to pack item:", err);
       // Revert if failed
@@ -64,7 +71,12 @@ export default function Packing() {
     if (!order) return;
     setActionLoading(true);
     try {
-      await updateOrderStatus(order.id, "ready");
+      const staffToken = await getLocalStaffSession();
+      if (staffToken) {
+        await staffSetOrderStatus(staffToken, order.id, "ready");
+      } else {
+        await updateOrderStatus(order.id, "ready");
+      }
       router.push("/(shop)/new-orders");
     } catch (err: any) {
       alert(err.message || "Failed to mark order ready");

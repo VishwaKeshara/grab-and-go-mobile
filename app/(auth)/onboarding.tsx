@@ -2,7 +2,14 @@ import { colors } from "@/constants/colors";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { Animated, Pressable, StyleSheet, Text, View } from "react-native";
+import {
+  Animated,
+  Image,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from "react-native";
 
 export default function Onboarding() {
   const [slide, setSlide] = useState(0);
@@ -30,10 +37,18 @@ export default function Onboarding() {
     <View style={styles.screen}>
       <StatusBar style="dark" />
       <View style={styles.topBar}>
-        <View style={styles.savePill}>
-          <Text style={styles.saveIcon}>▣</Text>
-          <Text style={styles.saveText}>SAVE YOUR TIME WITH OUR APP</Text>
-          <View style={styles.saveDot} />
+        <View style={styles.brandLockup}>
+          <View style={styles.brandLogoFrame}>
+            <Image
+              accessibilityLabel="Grab And Go logo"
+              source={require("../../assets/images/grab-and-go-logo.png")}
+              style={styles.brandLogo}
+            />
+          </View>
+          <View>
+            <Text style={styles.brandName}>Grab &amp; Go</Text>
+            <Text style={styles.brandCaption}>FRESH PICKS • FASTER PICKUP</Text>
+          </View>
         </View>
         <Pressable accessibilityRole="button" onPress={finish}>
           <Text style={styles.skip}>Skip</Text>
@@ -202,27 +217,39 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
   },
-  savePill: {
+  brandLockup: {
     alignItems: "center",
-    backgroundColor: "#E6E7FF",
-    borderRadius: 12,
     flexDirection: "row",
-    paddingHorizontal: 9,
-    paddingVertical: 5,
   },
-  saveIcon: { color: "#1A1853", fontSize: 10, marginRight: 5 },
-  saveText: {
+  brandLogoFrame: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: "#E6E7FF",
+    borderRadius: 13,
+    borderWidth: 1,
+    elevation: 2,
+    height: 44,
+    justifyContent: "center",
+    marginRight: 9,
+    overflow: "hidden",
+    shadowColor: colors.ink,
+    shadowOpacity: 0.08,
+    shadowRadius: 5,
+    width: 44,
+  },
+  brandLogo: { height: 42, width: 42 },
+  brandName: {
     color: colors.ink,
-    fontSize: 8,
+    fontSize: 16,
     fontWeight: "800",
-    letterSpacing: 0.2,
+    letterSpacing: -0.4,
   },
-  saveDot: {
-    backgroundColor: colors.mint,
-    borderRadius: 4,
-    height: 7,
-    marginLeft: 5,
-    width: 7,
+  brandCaption: {
+    color: colors.muted,
+    fontSize: 7,
+    fontWeight: "800",
+    letterSpacing: 0.65,
+    marginTop: 2,
   },
   skip: { color: colors.ink, fontSize: 12, fontWeight: "600", padding: 8 },
   content: { flex: 1, justifyContent: "center", paddingBottom: 16 },

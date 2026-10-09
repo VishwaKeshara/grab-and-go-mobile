@@ -1,7 +1,9 @@
 import React from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView, TouchableOpacity, Pressable } from "react-native";
+import { Alert, Image, View, Text, StyleSheet, SafeAreaView, ScrollView, Pressable } from "react-native";
+import { FontAwesome } from "@expo/vector-icons";
 import { router } from "expo-router";
 import { colors } from "@/constants/colors";
+import { signOut } from "@/services/authService";
 
 // --- Mock Data ---
 
@@ -39,24 +41,58 @@ const RECENT_EVENTS = [
 ];
 
 export default function AdminDashboard() {
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      router.replace("/(auth)/login");
+    } catch {
+      Alert.alert("Logout failed", "We could not end your admin session. Please try again.");
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerLeft}>
-          <Text style={styles.brandText}>GRAB & GO</Text>
-          <Text style={styles.title}>Admin Dashboard</Text>
+          <View style={styles.brandRow}>
+            <Image
+              accessibilityLabel="Grab And Go logo"
+              source={require("../../assets/images/grab-and-go-logo.png")}
+              style={styles.brandLogo}
+            />
+            <View>
+              <Text style={styles.brandText}>GRAB &amp; GO</Text>
+              <Text style={styles.brandCaption}>OPERATIONS CONSOLE</Text>
+            </View>
+          </View>
+          <Text style={styles.title}>Good evening, Admin</Text>
+          <Text style={styles.headerSubtitle}>
+            Keep the Malabe network running smoothly.
+          </Text>
           <View style={styles.adminBadge}>
             <Text style={styles.adminBadgeText}>Platform Superadmin</Text>
           </View>
         </View>
         <View style={styles.headerIcons}>
-          <View style={styles.iconPlaceholder}>
-            <Text style={styles.iconText}>🔔</Text>
+          <Pressable
+            accessibilityLabel="Manage notifications"
+            onPress={() => router.push("/(admin)/notification-management")}
+            style={styles.iconPlaceholder}
+          >
+            <FontAwesome color={colors.mint} name="bell-o" size={16} />
+          </Pressable>
+          <View style={styles.adminAvatar}>
+            <Text style={styles.adminAvatarText}>AD</Text>
           </View>
-          <View style={styles.iconPlaceholder}>
-            <Text style={styles.iconText}>👤</Text>
-          </View>
+          <Pressable
+            accessibilityLabel="Log out"
+            onPress={() => void handleLogout()}
+            style={({ pressed }) => [styles.logoutButton, pressed && styles.pressedState]}
+          >
+            <FontAwesome color={colors.coral} name="sign-out" size={14} />
+            <Text style={styles.logoutText}>Log out</Text>
+          </Pressable>
         </View>
       </View>
 
@@ -64,9 +100,14 @@ export default function AdminDashboard() {
         
         {/* System Status Card */}
         <View style={styles.systemStatusCard}>
-          <View>
+          <View style={styles.systemStatusCopy}>
+            <View style={styles.statusIcon}>
+              <FontAwesome color={colors.ink} name="heartbeat" size={15} />
+            </View>
+            <View>
             <Text style={styles.systemTitle}>Platform Operations</Text>
             <Text style={styles.systemContext}>Malabe / current hub context</Text>
+            </View>
           </View>
           <View style={styles.liveBadge}>
             <Text style={styles.liveBadgeText}>LIVE</Text>
@@ -224,58 +265,105 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-    backgroundColor: colors.white,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    paddingTop: 18,
+    paddingBottom: 22,
+    backgroundColor: colors.night,
+    borderBottomLeftRadius: 26,
+    borderBottomRightRadius: 26,
   },
   headerLeft: {
     flex: 1,
+    paddingRight: 132,
   },
   brandText: {
     fontSize: 10,
     fontWeight: "800",
-    color: colors.muted,
+    color: colors.white,
     letterSpacing: 1,
-    marginBottom: 4,
   },
-  title: {
-    fontSize: 22,
+  brandCaption: {
+    color: colors.mint,
+    fontSize: 7,
     fontWeight: "800",
-    color: colors.night,
-    marginBottom: 6,
+    letterSpacing: 0.7,
+    marginTop: 2,
+  },
+  brandRow: { alignItems: "center", flexDirection: "row", marginBottom: 22 },
+  brandLogo: { backgroundColor: colors.white, borderRadius: 10, height: 42, width: 42 },
+  title: {
+    color: colors.white,
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.6,
+    marginBottom: 5,
+  },
+  headerSubtitle: {
+    color: "#C8C6DF",
+    fontSize: 11,
+    marginBottom: 12,
   },
   adminBadge: {
-    backgroundColor: colors.nightSoft,
+    alignSelf: "flex-start",
+    backgroundColor: "rgba(85,229,186,0.16)",
+    borderColor: "rgba(85,229,186,0.3)",
+    borderWidth: 1,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,
-    alignSelf: "flex-start",
   },
   adminBadgeText: {
-    color: colors.white,
+    color: colors.mint,
     fontSize: 10,
     fontWeight: "700",
     textTransform: "uppercase",
   },
   headerIcons: {
+    alignItems: "center",
     flexDirection: "row",
-    gap: 12,
+    gap: 8,
+    position: "absolute",
+    right: 18,
+    top: 22,
   },
   iconPlaceholder: {
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.lilac,
+    backgroundColor: "rgba(255,255,255,0.12)",
     alignItems: "center",
     justifyContent: "center",
   },
-  iconText: {
-    fontSize: 16,
+  adminAvatar: {
+    alignItems: "center",
+    backgroundColor: colors.mint,
+    borderRadius: 18,
+    height: 36,
+    justifyContent: "center",
+    width: 36,
+  },
+  adminAvatarText: {
+    color: colors.ink,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+  logoutButton: {
+    alignItems: "center",
+    backgroundColor: "rgba(239,126,105,0.12)",
+    borderColor: "rgba(239,126,105,0.25)",
+    borderWidth: 1,
+    borderRadius: 9,
+    flexDirection: "row",
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  logoutText: {
+    color: colors.coral,
+    fontSize: 10,
+    fontWeight: "800",
   },
   scrollContent: {
-    padding: 16,
+    padding: 18,
     paddingBottom: 60,
   },
   systemStatusCard: {
@@ -283,24 +371,44 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: colors.white,
-    padding: 16,
+    padding: 14,
     borderRadius: 16,
-    marginBottom: 20,
+    marginBottom: 22,
     borderWidth: 1,
     borderColor: colors.line,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  systemStatusCopy: {
+    alignItems: "center",
+    flexDirection: "row",
+    flex: 1,
+    gap: 10,
+  },
+  statusIcon: {
+    alignItems: "center",
+    backgroundColor: colors.mintSoft,
+    borderRadius: 12,
+    height: 34,
+    justifyContent: "center",
+    width: 34,
   },
   systemTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: "700",
     color: colors.night,
   },
   systemContext: {
-    fontSize: 13,
+    fontSize: 10,
     color: colors.muted,
     marginTop: 4,
   },
   liveBadge: {
     backgroundColor: colors.mintSoft,
+    flexShrink: 0,
+    marginLeft: 10,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -320,11 +428,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: "45%",
     backgroundColor: colors.white,
-    padding: 16,
+    borderColor: "#ECEBF4",
+    borderWidth: 1,
+    padding: 14,
     borderRadius: 16,
     shadowColor: colors.night,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.06,
     shadowRadius: 6,
     elevation: 2,
   },
@@ -334,13 +444,13 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   kpiLabel: {
-    fontSize: 13,
+    fontSize: 11,
     color: colors.muted,
     fontWeight: "600",
     marginBottom: 8,
   },
   kpiValue: {
-    fontSize: 28,
+    fontSize: 26,
     fontWeight: "800",
     color: colors.night,
     marginBottom: 4,
@@ -355,7 +465,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   sectionTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
     color: colors.night,
     marginBottom: 12,
@@ -377,17 +487,22 @@ const styles = StyleSheet.create({
   opLabel: {
     fontSize: 14,
     color: colors.muted,
+    flex: 1,
     fontWeight: "500",
   },
   opValue: {
     fontSize: 15,
     fontWeight: "700",
     color: colors.night,
+    marginLeft: 16,
+    textAlign: "right",
   },
   opValueMint: {
     fontSize: 15,
     fontWeight: "700",
     color: "#00A859",
+    marginLeft: 16,
+    textAlign: "right",
   },
   divider: {
     height: 1,
@@ -403,17 +518,20 @@ const styles = StyleSheet.create({
   actionBtn: {
     flex: 1,
     minWidth: "45%",
-    backgroundColor: colors.night,
-    paddingVertical: 14,
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderWidth: 1,
+    paddingVertical: 15,
     paddingHorizontal: 12,
     borderRadius: 12,
     alignItems: "center",
     justifyContent: "center",
+    minHeight: 54,
   },
   actionBtnText: {
-    color: colors.white,
-    fontSize: 14,
-    fontWeight: "600",
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: "800",
     textAlign: "center",
   },
   listCard: {
@@ -439,8 +557,11 @@ const styles = StyleSheet.create({
   shopMetrics: {
     fontSize: 13,
     color: colors.muted,
+    lineHeight: 18,
   },
   statusPill: {
+    flexShrink: 0,
+    marginLeft: 12,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 6,

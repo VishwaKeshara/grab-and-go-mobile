@@ -27,6 +27,14 @@ type Product = Pick<GroceryProduct, "name" | "unit" | "price" | "image"> & {
   tagColor: string;
 };
 
+function getTimeGreeting(date = new Date()) {
+  const hour = date.getHours();
+
+  if (hour < 12) return "GOOD MORNING";
+  if (hour < 17) return "GOOD AFTERNOON";
+  return "GOOD EVENING";
+}
+
 const categories: Category[] = [
   { icon: "leaf", label: "Fresh produce", tint: colors.mintSoft },
   { icon: "cutlery", label: "Rice & grains", tint: "#FFF0D5" },
@@ -76,6 +84,14 @@ export default function Home() {
   const [search, setSearch] = useState("");
   const [firstName, setFirstName] = useState("Dilshan");
   const [pickupHub, setPickupHub] = useState("Malabe Bazaar Hub");
+  const [timeGreeting, setTimeGreeting] = useState(() => getTimeGreeting());
+
+  useEffect(() => {
+    const updateGreeting = () => setTimeGreeting(getTimeGreeting());
+    const interval = setInterval(updateGreeting, 60_000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     if (__DEV__) console.log("[Home cart] add button state", {
@@ -103,7 +119,7 @@ export default function Home() {
         <View style={styles.greetingRow}>
           <View>
             <Text style={styles.kicker}>
-              GOOD MORNING, {firstName.toUpperCase()}
+              {timeGreeting}, {firstName.toUpperCase()}
             </Text>
             <Text style={styles.title}>What are we getting today?</Text>
           </View>

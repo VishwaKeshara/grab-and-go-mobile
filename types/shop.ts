@@ -55,6 +55,7 @@ export interface ShopProfile {
   /** Real-time open/closed flag toggled per shift. */
   isOpen: boolean;
   openedAt: string | null;
+  shopCode?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────

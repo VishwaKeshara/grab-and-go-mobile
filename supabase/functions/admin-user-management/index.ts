@@ -6,7 +6,7 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-type Role = "customer" | "shop" | "admin";
+type Role = "customer" | "shop" | "staff" | "admin";
 type Status = "active" | "suspended";
 
 const json = (body: Record<string, unknown>, status = 200) =>
@@ -30,7 +30,7 @@ const validateUser = (value: unknown, requiresPassword: boolean) => {
   const phone = typeof user.phone === "string" ? user.phone.trim() : "";
   const role = user.role as Role;
   const status = user.status as Status;
-  if (!["customer", "shop", "admin"].includes(role)) throw new Error("Invalid role.");
+  if (!["customer", "shop", "staff", "admin"].includes(role)) throw new Error("Invalid role.");
   if (!["active", "suspended"].includes(status)) throw new Error("Invalid status.");
   const password = typeof user.password === "string" ? user.password : "";
   if (requiresPassword && password.length < 8) {

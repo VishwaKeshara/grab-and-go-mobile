@@ -17,6 +17,7 @@ export async function listNotifications() {
     .select(
       "id, kind, title, body, action_label, action_route, is_read, created_at",
     )
+    .is("recipient_deleted_at", null)
     .order("created_at", { ascending: false });
 
   if (error) throw error;
@@ -45,6 +46,15 @@ export async function markAllNotificationsRead() {
 }
 
 export async function deleteNotification(id: string) {
-  const { error } = await supabase.from("notifications").delete().eq("id", id);
+  const { data: userData, error: userError } = await supabase.auth.getUser();
+  if (userError) throw userError;
+  if (!userData.user) throw new Error("You must be signed in to delete a notification.");
+
+  const { error } = await supabase
+    .from("notifications")
+    .update({ recipient_deleted_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", userData.user.id)
+    .is("recipient_deleted_at", null);
   if (error) throw error;
 }

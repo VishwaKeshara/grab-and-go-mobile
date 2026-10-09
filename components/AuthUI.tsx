@@ -6,6 +6,7 @@ import {
     Platform,
     Pressable,
     ScrollView,
+    Image,
     StyleSheet,
     Text,
     TextInput,
@@ -26,6 +27,7 @@ export function AuthFrame({
       behavior={Platform.OS === "ios" ? "padding" : undefined}
       style={styles.screen}
     >
+      <View pointerEvents="none" style={styles.topWash} />
       {scroll ? (
         <ScrollView
           contentContainerStyle={styles.scrollContent}
@@ -44,16 +46,18 @@ export function AuthHeader({
   title,
   eyebrow = "GRAB & GO",
   subtitle,
+  backRoute,
 }: {
   title: string;
   eyebrow?: string;
   subtitle?: string;
+  backRoute?: Parameters<typeof router.replace>[0];
 }) {
   return (
     <View style={styles.header}>
       <Pressable
         accessibilityLabel="Go back"
-        onPress={() => router.back()}
+        onPress={() => (backRoute ? router.replace(backRoute) : router.back())}
         style={styles.backButton}
       >
         <Text style={styles.backIcon}>←</Text>
@@ -64,7 +68,11 @@ export function AuthHeader({
         {subtitle ? <Text style={styles.headerSubtitle}>{subtitle}</Text> : null}
       </View>
       <View style={styles.headerAvatar}>
-        <Text style={styles.avatarText}>◉</Text>
+        <Image
+          accessibilityLabel="Grab And Go logo"
+          source={require("../assets/images/grab-and-go-logo.png")}
+          style={styles.headerLogo}
+        />
       </View>
     </View>
   );
@@ -119,18 +127,23 @@ export function PrimaryButton({
 
 export function SecondaryButton({
   children,
+  disabled,
   onPress,
 }: {
   children: ReactNode;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       accessibilityRole="button"
+      accessibilityState={{ disabled: !!disabled }}
+      disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
         styles.secondaryButton,
         pressed && styles.pressed,
+        disabled && styles.disabled,
       ]}
     >
       <Text style={styles.secondaryText}>{children}</Text>
@@ -148,7 +161,17 @@ export function ErrorBanner({ message }: { message: string }) {
 }
 
 const styles = StyleSheet.create({
-  screen: { backgroundColor: colors.paper, flex: 1 },
+  screen: { backgroundColor: colors.paper, flex: 1, position: "relative" },
+  topWash: {
+    backgroundColor: "#EEF0FF",
+    borderBottomLeftRadius: 120,
+    height: 150,
+    position: "absolute",
+    right: -54,
+    top: 0,
+    transform: [{ rotate: "-8deg" }],
+    width: 230,
+  },
   scrollContent: { flexGrow: 1 },
   content: {
     flex: 1,
@@ -156,7 +179,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 22,
     paddingTop: 42,
   },
-  header: { alignItems: "center", flexDirection: "row", marginBottom: 26 },
+  header: {
+    alignItems: "center",
+    flexDirection: "row",
+    marginBottom: 28,
+    paddingTop: 4,
+  },
   backButton: {
     alignItems: "center",
     height: 38,
@@ -195,12 +223,19 @@ const styles = StyleSheet.create({
   headerAvatar: {
     alignItems: "center",
     backgroundColor: "#E5E6FB",
-    borderRadius: 18,
-    height: 36,
+    borderColor: colors.white,
+    borderRadius: 24,
+    borderWidth: 3,
+    elevation: 3,
+    height: 48,
     justifyContent: "center",
-    width: 36,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    width: 48,
   },
   avatarText: { color: colors.ink, fontSize: 15 },
+  headerLogo: { height: 42, width: 42 },
   fieldWrap: { marginBottom: 14 },
   fieldLabel: {
     color: colors.ink,
@@ -210,10 +245,14 @@ const styles = StyleSheet.create({
   },
   inputWrap: {
     backgroundColor: "#F0F1FC",
-    borderColor: "transparent",
+    borderColor: "#E8E8F3",
     borderRadius: 11,
     borderWidth: 1,
+    elevation: 1,
     minHeight: 48,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.03,
+    shadowRadius: 4,
   },
   input: {
     color: colors.ink,

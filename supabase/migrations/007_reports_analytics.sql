@@ -75,7 +75,7 @@ create index if not exists report_manifests_listing_idx
 
 create table if not exists public.dispatch_settings (
   id uuid primary key default gen_random_uuid(),
-  node_id text primary key,
+  node_id text not null unique,
   enabled boolean not null default true,
   window_label text not null default '',
   recipient_email text not null default '',

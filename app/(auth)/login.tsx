@@ -11,131 +11,189 @@ import {
   signInWithApple,
   signInWithGoogle,
   getProfile,
+  resendSignupConfirmation,
 } from "@/services/authService";
-import { getShopByProfileId, verifyStaffPin, listShops } from "@/services/shopService";
-import { Shop } from "@/types/shop";
+import { getShopByProfileId, clearLocalStaffSession } from "@/services/shopService";
 import { FontAwesome } from "@expo/vector-icons";
-import { router, useLocalSearchParams } from "expo-router";
-import { useState, useEffect } from "react";
+import { router } from "expo-router";
+import { useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from "react-native";
 
 export default function Login() {
-  const params = useLocalSearchParams<{
-    accountType?: "customer" | "shop";
-    shopMode?: "owner" | "staff";
-  }>();
-
-  const [accountType, setAccountType] =
-    useState<"customer" | "shop">(params.accountType || "customer");
-
-  const [shopRole, setShopRole] =
-    useState<"owner" | "staff">(params.shopMode || "owner");
-
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [selectedShopId, setSelectedShopId] = useState("");
-  const [staffId, setStaffId] = useState("");
-  const [pin, setPin] = useState("");
-  const [showPin, setShowPin] = useState(false);
 
   const [error, setError] = useState("");
+  const [confirmationNeeded, setConfirmationNeeded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [appleLoading, setAppleLoading] = useState(false);
 
-  useEffect(() => {
-    if (accountType === "shop" && shopRole === "staff") {
-      listShops().then(data => {
-        setShops(data);
-        if (data.length > 0) {
-          setSelectedShopId(prev => prev || data[0].id);
-        }
-      }).catch(err => {
-        console.error(err);
-        setError("Could not load shop list for staff login.");
-      });
-    }
-  }, [accountType, shopRole]);
-
-  const isCustomerValid = email.trim().length > 0 && password.length > 0;
-  const isOwnerValid = email.trim().length > 0 && password.length > 0;
-  const isStaffValid = selectedShopId !== "" && staffId.trim().length > 0 && pin.length === 4;
-
-  const isCurrentValid = accountType === "customer"
-    ? isCustomerValid
-    : (shopRole === "owner" ? isOwnerValid : isStaffValid);
+  const isValid = email.trim().length > 0 && password.length > 0;
 
   const handleAuth = async () => {
-    setError("");
-    setLoading(true);
+  setError("");
+  setConfirmationNeeded(false);
+  const normalizedEmail = email.trim().toLowerCase();
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+    setError("Enter a valid email address.");
+    return;
+  }
+  if (!password) {
+    setError("Enter your password.");
+    return;
+  }
+  setLoading(true);
+  try {
+    // Clear any staff session first
+    await clearLocalStaffSession();
+    // Sign in with email & password
+    await signIn(normalizedEmail, password);
 
-    try {
-      if (accountType === "customer") {
-        await signIn(email.trim(), password);
-
-        const profile = await getProfile();
-
-        if (profile?.role === "customer") {
-          router.replace("/(customer)/home");
-        } else {
-          await supabase.auth.signOut();
-          throw new Error("This account is not a customer account.");
-        }
-
-        return;
-      }
-
-      if (shopRole === "owner") {
-        await signIn(email.trim(), password);
-
-        const profile = await getProfile();
-
-        if (profile?.role !== "shop") {
-          await supabase.auth.signOut();
-          throw new Error("This account does not have merchant access.");
-        }
-
-        const shop = await getShopByProfileId(profile.id);
-
-        if (!shop) {
-          throw new Error("No shop found. Please complete shop setup.");
-        }
-
-        router.replace("/(shop)/shop-dashboard");
-        return;
-      }
-
-      const staff = await verifyStaffPin(
-        staffId.trim(),
-        pin,
-        selectedShopId
-      );
-
-      if (!staff) {
-        throw new Error("Invalid Staff ID or PIN.");
-      }
-
-      router.replace("/(shop)/new-orders");
-    } catch (submitError) {
-      setError(
-        submitError instanceof Error
-          ? submitError.message
-          : "We could not sign you in. Please try again."
-      );
-    } finally {
-      setLoading(false);
+    // Verify signed‑in user via Supabase auth
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+    if (userError || !user) {
+      throw userError ?? new Error("Could not verify signed‑in user.");
     }
-  };
+
+    // ---------- Shop intent recovery ----------
+    if (user.user_metadata?.registration_intent === "shop") {
+      const pending = user.user_metadata?.pending_shop_registration;
+      const validPending =
+        pending &&
+        typeof pending.shopName === "string" && !!pending.shopName.trim() &&
+        typeof pending.shopAddress === "string" && !!pending.shopAddress.trim() &&
+        typeof pending.shopPhone === "string" && !!pending.shopPhone.trim() &&
+        typeof pending.pickupCounter === "string" && !!pending.pickupCounter.trim() &&
+        typeof pending.prepMinutes === "number" &&
+        Number.isInteger(pending.prepMinutes) &&
+        pending.prepMinutes >= 1 && pending.prepMinutes <= 180;
+
+      if (!validPending) {
+        setError(
+          "Your saved shop registration details are incomplete. Please return to Register Shop."
+        );
+        return;
+      }
+
+      // Check if shop is already completed for this user
+      const currentProfile = await getProfile();
+      if (currentProfile?.role === "shop") {
+        const existingShop = await getShopByProfileId(currentProfile.id);
+        if (!existingShop) {
+          setError(
+            "Your shop account exists, but the shop record could not be found."
+          );
+          return;
+        }
+        // Clear onboarding metadata and route to dashboard
+        await supabase.auth.updateUser({
+          data: { registration_intent: null, pending_shop_registration: null },
+        });
+        router.replace("/(shop)/shop-dashboard" as any);
+        return;
+      }
+
+      // Register shop via RPC
+      const { error: rpcError } = await supabase.rpc("register_shop", {
+        p_shop_name: pending.shopName.trim(),
+        p_address: pending.shopAddress.trim(),
+        p_phone: pending.shopPhone.trim(),
+        p_pickup_counter: pending.pickupCounter.trim(),
+        p_prep_minutes: pending.prepMinutes,
+      });
+
+      if (rpcError) {
+        if (!rpcError.message.toLowerCase().includes("already owns a shop")) {
+          setError(rpcError.message);
+          return;
+        }
+        // else fall through to verification below
+      }
+
+      // Verify database state before clearing metadata
+      const freshProfile = await getProfile();
+      if (freshProfile?.role !== "shop") {
+        setError(
+          "Your shop account could not be verified. Please sign out and try again."
+        );
+        return;
+      }
+      const shop = await getShopByProfileId(freshProfile.id);
+      if (!shop) {
+        setError("Shop not found after registration.");
+        return;
+      }
+      // Clear onboarding metadata and route to dashboard
+      await supabase.auth.updateUser({
+        data: { registration_intent: null, pending_shop_registration: null },
+      });
+      router.replace("/(shop)/shop-dashboard" as any);
+      return;
+    }
+
+    // ---------- Normal role routing ----------
+    const profile = await getProfile();
+    if (!profile) {
+      await supabase.auth.signOut();
+      throw new Error("Could not fetch profile.");
+    }
+    if (profile.role === "customer") {
+      router.replace("/(customer)/home");
+    } else if (profile.role === "shop") {
+      const shop = await getShopByProfileId(profile.id);
+      if (!shop) {
+        router.replace("/(shop)/shop-dashboard");
+      } else {
+        router.replace("/(shop)/shop-dashboard");
+      }
+    } else if (profile.role === "admin") {
+      router.replace("/(admin)/admin-dashboard");
+    } else {
+      await supabase.auth.signOut();
+      throw new Error("Unknown account role.");
+    }
+  } catch (submitError) {
+    const message = submitError instanceof Error ? submitError.message : "";
+    const lowerMessage = message.toLowerCase();
+    const needsConfirmation = lowerMessage.includes("email not confirmed");
+    setConfirmationNeeded(needsConfirmation);
+    setError(
+      needsConfirmation
+        ? "Please confirm your email using the link we sent you before signing in."
+        : lowerMessage.includes("invalid login credentials")
+          ? "The email or password is incorrect."
+          : message || "We could not sign you in. Please try again.",
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+const resendConfirmation = async () => {
+  setError("");
+  setLoading(true);
+  try {
+    await resendSignupConfirmation(email);
+    setError("A new confirmation email has been sent. Please check your inbox.");
+  } catch (resendError) {
+    setError(
+      resendError instanceof Error
+        ? resendError.message
+        : "We could not resend the confirmation email.",
+    );
+  } finally {
+    setLoading(false);
+  }
+};
+
+
 
   const continueWithGoogle = async () => {
     setError("");
@@ -143,7 +201,6 @@ export default function Login() {
 
     try {
       await signInWithGoogle();
-
       const profile = await getProfile();
 
       if (profile?.role === "customer") {
@@ -169,7 +226,6 @@ export default function Login() {
 
     try {
       await signInWithApple();
-
       const profile = await getProfile();
 
       if (profile?.role === "customer") {
@@ -189,229 +245,102 @@ export default function Login() {
     }
   };
 
-  const renderSubmitButton = () => {
-    const valid = isCurrentValid;
-    let label = "Sign In";
-    if (accountType === "shop" && shopRole === "staff") {
-      label = "Start Shift";
-    }
-
-    return (
-      <Pressable
-        disabled={!valid || loading}
-        onPress={handleAuth}
-        style={({ pressed }) => [
-          styles.submitBtn,
-          !valid && styles.submitBtnDisabled,
-          valid && !loading && pressed && styles.submitBtnPressed
-        ]}
-      >
-        {loading ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <ActivityIndicator color={colors.ink} size="small" style={{ marginRight: 8 }} />
-            <Text style={styles.submitBtnText}>Signing in...</Text>
-          </View>
-        ) : (
-          <Text style={[styles.submitBtnText, !valid && styles.submitBtnTextDisabled]}>
-            {label}
-          </Text>
-        )}
-      </Pressable>
-    );
-  };
-
   return (
     <AuthFrame>
       <AuthHeader
         title="Welcome"
         eyebrow="GRAB & GO"
-        subtitle="Choose how you want to continue"
+        subtitle="Sign in to your account"
       />
-      
-      <Text style={styles.fieldLabel}>Choose account type:</Text>
-      <View style={styles.segmented}>
-        <Pressable
-          onPress={() => setAccountType("customer")}
-          style={[styles.segment, accountType === "customer" && styles.segmentActive]}
-        >
-          <Text style={[styles.segmentText, accountType === "customer" && styles.segmentTextActive]}>
-            Customer
-          </Text>
-        </Pressable>
-        <Pressable
-          onPress={() => setAccountType("shop")}
-          style={[styles.segment, accountType === "shop" && styles.segmentActive]}
-        >
-          <Text style={[styles.segmentText, accountType === "shop" && styles.segmentTextActive]}>
-            Shop
-          </Text>
-        </Pressable>
-      </View>
 
       {error ? <ErrorBanner message={error} /> : null}
+      {confirmationNeeded ? (
+        <Pressable disabled={loading} onPress={() => void resendConfirmation()}>
+          <Text style={styles.resendLink}>Resend confirmation email</Text>
+        </Pressable>
+      ) : null}
 
-      {accountType === "customer" ? (
-        <View style={styles.modeContainer}>
-          <Text style={styles.modeHeading}>CUSTOMER MODE</Text>
-          
-          <Field
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            label="Email Address"
-            onChangeText={setEmail}
-            value={email}
-          />
-          <Field
-            label="Password"
-            onChangeText={setPassword}
-            secureTextEntry
-            value={password}
-          />
+      <View style={styles.formContainer}>
+        <Field
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="email-address"
+          label="Email Address"
+          onChangeText={setEmail}
+          value={email}
+        />
+        <Field
+          label="Password"
+          onChangeText={setPassword}
+          secureTextEntry
+          value={password}
+        />
 
-          <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
-            <Text style={styles.forgotLink}>Forgot Password?</Text>
-          </Pressable>
+        <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
+          <Text style={styles.forgotLink}>Forgot Password?</Text>
+        </Pressable>
 
-          {renderSubmitButton()}
-
-          <View style={styles.signupRow}>
-            <Text style={styles.footerText}>Don&apos;t have an account? </Text>
-            <Pressable onPress={() => router.push("/(auth)/signup")}>
-              <Text style={styles.link}>Create Customer Account</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.divider}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
-            <View style={styles.dividerLine} />
-          </View>
-          <View style={styles.socialRow}>
-            <SocialButton
-              icon="google"
-              loading={googleLoading}
-              onPress={continueWithGoogle}
-              title="Google"
-            />
-            <SocialButton
-              icon="apple"
-              loading={appleLoading}
-              onPress={continueWithApple}
-              title="Apple"
-            />
-          </View>
-        </View>
-      ) : (
-        <View style={styles.modeContainer}>
-          <View style={styles.segmentedSmall}>
-            <Pressable
-              onPress={() => setShopRole("owner")}
-              style={[styles.segmentSmall, shopRole === "owner" && styles.segmentSmallActive]}
-            >
-              <Text style={[styles.segmentTextSmall, shopRole === "owner" && styles.segmentTextSmallActive]}>
-                Owner / Manager
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setShopRole("staff")}
-              style={[styles.segmentSmall, shopRole === "staff" && styles.segmentSmallActive]}
-            >
-              <Text style={[styles.segmentTextSmall, shopRole === "staff" && styles.segmentTextSmallActive]}>
-                Staff
-              </Text>
-            </Pressable>
-          </View>
-
-          {shopRole === "owner" ? (
-            <View style={styles.roleContainer}>
-              <Text style={styles.modeHeading}>OWNER / MANAGER</Text>
-              <Field
-                autoCapitalize="none"
-                autoCorrect={false}
-                keyboardType="email-address"
-                label="Email Address"
-                onChangeText={setEmail}
-                value={email}
-              />
-              <Field
-                label="Password"
-                onChangeText={setPassword}
-                secureTextEntry
-                value={password}
-              />
-              
-              <Pressable onPress={() => router.push("/(auth)/forgot-password")}>
-                <Text style={styles.forgotLink}>Forgot Password?</Text>
-              </Pressable>
-
-              {renderSubmitButton()}
-
-              <View style={styles.signupRow}>
-                <Text style={styles.footerText}>New merchant? </Text>
-                <Pressable disabled={true}>
-                  <Text style={[styles.link, { opacity: 0.5 }]}>Register Shop</Text>
-                </Pressable>
-              </View>
+        <Pressable
+          disabled={!isValid || loading}
+          onPress={handleAuth}
+          style={({ pressed }) => [
+            styles.submitBtn,
+            !isValid && styles.submitBtnDisabled,
+            isValid && !loading && pressed && styles.submitBtnPressed
+          ]}
+        >
+          {loading ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <ActivityIndicator color={colors.ink} size="small" style={{ marginRight: 8 }} />
+              <Text style={styles.submitBtnText}>Signing in...</Text>
             </View>
           ) : (
-            <View style={styles.roleContainer}>
-              <Text style={styles.modeHeading}>STAFF</Text>
-              
-              <Text style={styles.fieldLabel}>Shop</Text>
-              {shops.length === 0 ? (
-                <Text style={styles.helper}>Loading shops...</Text>
-              ) : (
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.shopScroll}>
-                  {shops.map((s) => (
-                    <Pressable
-                      key={s.id}
-                      style={[styles.shopPill, selectedShopId === s.id && styles.shopPillActive]}
-                      onPress={() => setSelectedShopId(s.id)}
-                    >
-                      <Text style={[styles.shopPillText, selectedShopId === s.id && styles.shopPillTextActive]}>
-                        {s.name}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </ScrollView>
-              )}
-
-              <View style={{ marginTop: 14 }}>
-                <Field
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  label="Staff ID"
-                  onChangeText={setStaffId}
-                  value={staffId}
-                />
-              </View>
-
-              <Text style={styles.fieldLabel}>4-digit PIN</Text>
-              <View style={styles.pinRow}>
-                <TextInput
-                  style={styles.pinInput}
-                  keyboardType="number-pad"
-                  maxLength={4}
-                  secureTextEntry={!showPin}
-                  value={pin}
-                  onChangeText={setPin}
-                />
-                <Pressable onPress={() => setShowPin(!showPin)} style={styles.eyeBtn}>
-                  <FontAwesome color={colors.muted} name={showPin ? "eye-slash" : "eye"} size={20} />
-                </Pressable>
-              </View>
-
-              {renderSubmitButton()}
-            </View>
+            <Text style={[styles.submitBtnText, !isValid && styles.submitBtnTextDisabled]}>
+              Sign In
+            </Text>
           )}
-        </View>
-      )}
-
-      <View style={styles.adminFooter}>
-        <Pressable onPress={() => router.push("/(admin)/admin-login")}>
-          <Text style={styles.adminLink}>Admin Access</Text>
         </Pressable>
+
+        <View style={styles.signupRow}>
+          <Text style={styles.footerText}>Don&apos;t have an account? </Text>
+          <Pressable onPress={() => router.push("/(auth)/signup")}>
+            <Text style={styles.link}>Sign Up</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.signupRow}>
+          <Text style={styles.footerText}>New merchant? </Text>
+          <Pressable onPress={() => router.push("/(auth)/shop-register")}>
+            <Text style={styles.link}>Register Shop</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.signupRow}>
+          <Text style={styles.footerText}>Shop Staff? </Text>
+          <Pressable onPress={() => router.push("/(auth)/staff-login")}>
+            <Text style={styles.link}>Start Shift</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.divider}>
+          <View style={styles.dividerLine} />
+          <Text style={styles.dividerText}>OR CONTINUE WITH</Text>
+          <View style={styles.dividerLine} />
+        </View>
+        <View style={styles.socialRow}>
+          <SocialButton
+            icon="google"
+            loading={googleLoading}
+            onPress={continueWithGoogle}
+            title="Google"
+          />
+          <SocialButton
+            icon="apple"
+            loading={appleLoading}
+            onPress={continueWithApple}
+            title="Apple"
+          />
+        </View>
       </View>
     </AuthFrame>
   );
@@ -454,64 +383,17 @@ function SocialButton({
 }
 
 const styles = StyleSheet.create({
-  fieldLabel: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "700",
-    marginBottom: 8,
-  },
-  segmented: {
-    backgroundColor: "#E7E8F9",
-    borderRadius: 10,
-    flexDirection: "row",
-    marginBottom: 20,
-    padding: 4,
-  },
-  segment: {
-    alignItems: "center",
-    borderRadius: 7,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 44,
-  },
-  segmentActive: { backgroundColor: colors.ink },
-  segmentText: { color: colors.ink, fontSize: 13, fontWeight: "800" },
-  segmentTextActive: { color: colors.white },
-  
-  modeContainer: {
-    marginBottom: 10,
-  },
-  modeHeading: {
-    color: colors.muted,
+  resendLink: {
+    color: "#07856A",
     fontSize: 11,
     fontWeight: "800",
-    letterSpacing: 1,
-    marginBottom: 16,
+    marginBottom: 10,
+    marginTop: 8,
     textAlign: "center",
   },
-  
-  segmentedSmall: {
-    backgroundColor: "rgba(0,0,0,0.04)",
-    borderRadius: 8,
-    flexDirection: "row",
-    marginBottom: 20,
-    padding: 3,
+  formContainer: {
+    marginBottom: 10,
   },
-  segmentSmall: {
-    alignItems: "center",
-    borderRadius: 6,
-    flex: 1,
-    justifyContent: "center",
-    minHeight: 36,
-  },
-  segmentSmallActive: { backgroundColor: colors.white, shadowColor: "#000", shadowOpacity: 0.05, shadowRadius: 3, elevation: 2 },
-  segmentTextSmall: { color: colors.muted, fontSize: 12, fontWeight: "700" },
-  segmentTextSmallActive: { color: colors.ink },
-  
-  roleContainer: {
-    flex: 1,
-  },
-  
   submitBtn: {
     alignItems: "center",
     backgroundColor: colors.mint,
@@ -541,7 +423,6 @@ const styles = StyleSheet.create({
   submitBtnTextDisabled: {
     color: "#9A98AA",
   },
-
   forgotLink: {
     alignSelf: "flex-end",
     color: "#07856A",
@@ -550,16 +431,14 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     marginTop: -4,
   },
-
   signupRow: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
-    marginTop: 20,
+    marginTop: 16,
   },
   footerText: { color: colors.muted, fontSize: 12 },
   link: { color: "#07856A", fontSize: 12, fontWeight: "800" },
-
   divider: {
     alignItems: "center",
     flexDirection: "row",
@@ -593,65 +472,4 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     marginLeft: 5,
   },
-
-  adminFooter: {
-    alignItems: "center",
-    marginTop: 40,
-  },
-  adminLink: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: "700",
-  },
-
-  shopScroll: {
-    flexGrow: 0,
-    marginBottom: 10,
-  },
-  shopPill: {
-    backgroundColor: "#F0F1FC",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  shopPillActive: {
-    backgroundColor: colors.mint,
-    borderColor: "#0E8067",
-  },
-  shopPillText: {
-    color: colors.ink,
-    fontSize: 12,
-    fontWeight: "600",
-  },
-  shopPillTextActive: {
-    fontWeight: "800",
-  },
-  helper: {
-    color: colors.muted,
-    fontSize: 12,
-    fontStyle: "italic",
-    marginBottom: 10,
-  },
-  pinRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#F0F1FC",
-    borderRadius: 11,
-    borderWidth: 1,
-    borderColor: "transparent",
-  },
-  pinInput: {
-    flex: 1,
-    color: colors.ink,
-    fontSize: 18,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    letterSpacing: 4,
-  },
-  eyeBtn: {
-    padding: 14,
-  }
 });

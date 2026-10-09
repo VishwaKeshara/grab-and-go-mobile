@@ -1,5 +1,6 @@
 import { Image } from "expo-image";
 import * as ImagePicker from "expo-image-picker";
+import { FontAwesome } from "@expo/vector-icons";
 import { supabase } from "@/lib/supabase";
 import {
   AuthFrame,
@@ -10,7 +11,11 @@ import {
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
 import {
+  applyDiscount,
+  clearDiscount,
   createShopProduct,
+  listProductCategories,
+  type ProductCategoryOption,
   deleteCanonicalProduct as deleteProduct,
   listCanonicalProductsByShop as listProductsByShop,
   updateShopProduct,
@@ -18,10 +23,12 @@ import {
 } from "@/services/productService";
 import {
   listMyShops,
-  updateStock,
   deleteShopProduct,
 } from "@/services/shopService";
-import type { Product } from "@/types/product";
+import { saveStock } from "@/services/stockService";
+import { router } from "expo-router";
+import { getLocalStaffSession, getStaffProfile } from "@/services/shopService";
+import type { DiscountType, Product } from "@/types/product";
 import type { Shop } from "@/types/shop";
 import { useCallback, useEffect, useState, useMemo } from "react";
 import {
@@ -37,10 +44,34 @@ import {
   Platform,
 } from "react-native";
 import { formatCurrencyShort } from "@/utils/formatters";
+import { describeError } from "@/utils/errors";
 
 type Mode = "product-create" | "product-edit";
 
+/**
+ * The two mutually exclusive discount options. Rendered as a single-choice
+ * pair, so exactly one can be applied to a product at a time.
+ */
+const DISCOUNT_OPTIONS: { type: DiscountType; label: string; hint: string }[] = [
+  { type: "percent", label: "Percentage", hint: "% off the price" },
+  { type: "fixed", label: "Fixed amount", hint: "LKR off the price" },
+];
+
 export default function ShopManagement() {
+    useEffect(() => {
+    const check = async () => {
+      const token = await getLocalStaffSession();
+      if (token) {
+        const staffProfile = await getStaffProfile(token);
+        if (staffProfile) {
+          router.replace("/(shop)/new-orders");
+          return;
+        }
+      }
+    };
+    void check();
+  }, []);
+
   const [shops, setShops] = useState<Shop[]>([]);
   const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -56,14 +87,168 @@ export default function ShopManagement() {
   const [mode, setMode] = useState<Mode | null>(null);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [pickedImage, setPickedImage] = useState<any>(null);
+  const [categories, setCategories] = useState<ProductCategoryOption[]>([]);
+  const [discountProduct, setDiscountProduct] = useState<Product | null>(null);
+  /** Which of the two mutually exclusive options the clerk has selected. */
+  const [discountMode, setDiscountMode] = useState<DiscountType>("percent");
+  /** The typed value for the selected option: a percent, or rupees off. */
+  const [discountValue, setDiscountValue] = useState("10");
+  const [discountSaving, setDiscountSaving] = useState(false);
+  const [discountError, setDiscountError] = useState("");
   const [form, setForm] = useState({
     name: "",
     price: "",
-    regular_price: "",
     stock_quantity: "",
+    category_id: "",
     unit: "",
     image_url: "",
   });
+
+  // Categories are a shop-independent reference list, so they are fetched once
+  // on mount. A failure here must not block the rest of the screen.
+  useEffect(() => {
+    listProductCategories()
+      .then(setCategories)
+      .catch(() => undefined);
+  }, []);
+
+  /**
+   * The pre-discount price every discount is calculated from.
+   *
+   * This is regular_price_lkr rather than price_lkr on purpose: once a discount
+   * is applied price_lkr is already reduced, so taking a second discount off it
+   * would compound instead of replacing. Falls back to price_lkr for products
+   * with no regular price recorded.
+   */
+  const basePriceOf = (product: Product): number =>
+    Number(product.regular_price ?? product.price ?? 0);
+
+  /**
+   * Reads which of the two options is stored, falling back to "percent" for
+   * rows written before migration 021 added discount_type.
+   */
+  const discountModeOf = (product: Product): DiscountType =>
+    product.discount_type === "fixed" ? "fixed" : "percent";
+
+  /**
+   * Reads the discount as a percentage.
+   *
+   * Derived from the price pair whenever nothing is stored, which covers two
+   * cases: a fixed discount (the CHECK constraint in 021 forbids storing a
+   * percentage alongside one, so the column is 0 by design) and a row written
+   * before 019 added the column at all.
+   */
+  const discountPercentOf = (product: Product): number => {
+    const stored = Number(product.discount_percent ?? 0);
+    if (stored > 0) return stored;
+
+    const regular = basePriceOf(product);
+    const price = Number(product.price ?? 0);
+    if (regular <= 0 || regular <= price) return 0;
+    return Math.round(((regular - price) / regular) * 100);
+  };
+
+  /** The stored fixed discount in rupees, derived when only the prices exist. */
+  const discountAmountOf = (product: Product): number =>
+    Number(product.discount_amount_lkr ?? 0) ||
+    Math.max(0, basePriceOf(product) - Number(product.price ?? 0));
+
+  const hasDiscount = (product: Product): boolean =>
+    discountModeOf(product) === "fixed"
+      ? discountAmountOf(product) > 0
+      : discountPercentOf(product) > 0;
+
+  const openDiscount = (product: Product) => {
+    const mode = discountModeOf(product);
+    setDiscountProduct(product);
+    setDiscountMode(mode);
+    // Pre-fill with what is already stored so reopening the modal shows the
+    // current discount rather than a blank box.
+    setDiscountValue(
+      String((mode === "fixed" ? discountAmountOf(product) : discountPercentOf(product)) || 10),
+    );
+    setDiscountError("");
+  };
+
+  /**
+   * Switching options resets the box, so the old value can never be applied
+   * under the wrong option -- 10 typed as a percent is not LKR 10 off.
+   */
+  const selectDiscountMode = (mode: DiscountType) => {
+    setDiscountMode(mode);
+    setDiscountValue(mode === "percent" ? "10" : "50");
+    setDiscountError("");
+  };
+
+  const closeDiscount = () => {
+    if (discountSaving) return;
+    setDiscountProduct(null);
+    setDiscountError("");
+  };
+
+  const submitDiscount = async () => {
+    if (!discountProduct || !selectedShop) return;
+
+    const value = Number(discountValue);
+    const base = basePriceOf(discountProduct);
+
+    if (!Number.isFinite(value) || value <= 0) {
+      setDiscountError(
+        discountMode === "percent"
+          ? "Enter a percentage greater than zero."
+          : "Enter an amount greater than zero.",
+      );
+      return;
+    }
+
+    if (discountMode === "percent" && value > 100) {
+      setDiscountError("Enter a percentage between 1 and 100.");
+      return;
+    }
+
+    if (discountMode === "fixed" && value > base) {
+      setDiscountError(
+        `That is more than the selling price of ${base.toLocaleString("en-LK")}.`,
+      );
+      return;
+    }
+
+    setDiscountSaving(true);
+    setDiscountError("");
+
+    try {
+      await applyDiscount(discountProduct.id, discountMode, value);
+      setNotice(`✓ Discount applied to ${discountProduct.name}`);
+      setDiscountProduct(null);
+      loadProducts(selectedShop.id);
+    } catch (discountError) {
+      setDiscountError(
+        describeError(discountError, "That discount could not be applied."),
+      );
+    } finally {
+      setDiscountSaving(false);
+    }
+  };
+
+  const removeDiscount = async () => {
+    if (!discountProduct || !selectedShop) return;
+
+    setDiscountSaving(true);
+    setDiscountError("");
+
+    try {
+      await clearDiscount(discountProduct.id);
+      setNotice(`✓ Discount removed from ${discountProduct.name}`);
+      setDiscountProduct(null);
+      loadProducts(selectedShop.id);
+    } catch (discountError) {
+      setDiscountError(
+        describeError(discountError, "That discount could not be removed."),
+      );
+    } finally {
+      setDiscountSaving(false);
+    }
+  };
 
   const loadShops = useCallback(() => {
     listMyShops()
@@ -75,25 +260,21 @@ export default function ShopManagement() {
         });
       })
       .catch((loadError: unknown) => {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "We could not load your shops.",
-        );
+        setError(describeError(loadError, "We could not load your shops."));
       })
       .finally(() => setLoading(false));
   }, []);
 
   const loadProducts = useCallback((shopId: string) => {
     setProductsLoading(true);
+    setError("");
     listProductsByShop(shopId)
       .then(setProducts)
       .catch((loadError: unknown) => {
-        setError(
-          loadError instanceof Error
-            ? loadError.message
-            : "We could not load your listings.",
-        );
+        // The real reason matters here: this list is the one screen whose
+        // failure looks like an empty shop, and a generic sentence hid a
+        // missing database column for a whole catalogue that was saved fine.
+        setError(describeError(loadError, "We could not load your listings."));
       })
       .finally(() => setProductsLoading(false));
   }, []);
@@ -153,7 +334,7 @@ export default function ShopManagement() {
       }
     } catch (err) {
       console.error("[ShopManagement] delete product failed", err);
-      const msg = err instanceof Error ? err.message : "Please try again.";
+      const msg = describeError(err, "Please try again.");
       if (Platform.OS === "web") {
         globalThis.alert?.("Could not delete product: " + msg);
       } else {
@@ -198,8 +379,8 @@ export default function ShopManagement() {
     setForm({
       name: "",
       price: "",
-      regular_price: "",
       stock_quantity: "",
+      category_id: "",
       unit: "",
       image_url: "",
     });
@@ -212,8 +393,8 @@ export default function ShopManagement() {
     setForm({
       name: product.name,
       price: String(product.price),
-      regular_price: product.regular_price ? String(product.regular_price) : "",
       stock_quantity: String(product.stock_quantity),
+      category_id: product.category_id ?? "",
       unit: product.unit ?? "",
       image_url: product.image_url ?? "",
     });
@@ -231,7 +412,6 @@ export default function ShopManagement() {
     if (!selectedShop) return;
 
     const price = Number(form.price);
-    const regularPrice = form.regular_price ? Number(form.regular_price) : price;
     const stock = Number(form.stock_quantity || 0);
     const unit = form.unit.trim();
 
@@ -245,10 +425,6 @@ export default function ShopManagement() {
     }
     if (!Number.isFinite(price) || price < 0) {
       setError("Enter a valid selling price.");
-      return;
-    }
-    if (!Number.isFinite(regularPrice) || regularPrice < price) {
-      setError("Regular price must be greater than or equal to selling price.");
       return;
     }
     if (!Number.isFinite(stock) || stock < 0) {
@@ -289,10 +465,29 @@ export default function ShopManagement() {
           name: form.name,
           unit,
           priceLkr: price,
-          regularPriceLkr: regularPrice,
+          // The form no longer collects a separate regular price, so the
+          // column mirrors the selling price rather than being left stale.
+          regularPriceLkr: price,
           imageUrl: finalImageUrl || null,
+          // An empty picker means "None", which has to be sent as an explicit
+          // clear. Omitting it would leave the previous category in place.
+          ...(form.category_id
+            ? { categoryId: form.category_id }
+            : { clearCategory: true }),
+          // Mirroring the price into regular_price_lkr means a discount is no
+          // longer supported the moment this saves, so it is cleared here rather
+          // than left describing a promotion the prices no longer show.
+          ...(hasDiscount(editingProduct) ? { clearDiscount: true } : {}),
         });
-        await updateStock(selectedShop.id, editingProduct.id, stock, true);
+        // saveStock inserts the shop_inventory row when one is missing.
+        // shopService.updateStock only issues an UPDATE, which silently matched
+        // zero rows for every product because that table started empty.
+        await saveStock({
+          shopId: selectedShop.id,
+          productId: editingProduct.id,
+          quantity: stock,
+          isAvailable: stock > 0,
+        });
         setNotice("✓ Listing updated");
       } else {
         await createShopProduct(
@@ -301,22 +496,19 @@ export default function ShopManagement() {
             name: form.name,
             unit,
             priceLkr: price,
-            regularPriceLkr: regularPrice,
+            regularPriceLkr: price,
             imageUrl: finalImageUrl || null,
             active: true
           },
-          stock
+          stock,
+          form.category_id || null,
         );
         setNotice("✓ Listing created");
       }
       closeModal();
       loadProducts(selectedShop.id);
     } catch (saveError) {
-      setError(
-        saveError instanceof Error
-          ? saveError.message
-          : "We could not save your listing.",
-      );
+      setError(describeError(saveError, "We could not save your listing."));
     } finally {
       setSaving(false);
     }
@@ -362,7 +554,15 @@ export default function ShopManagement() {
         <View style={styles.inlineErrorBanner}>
           <Text style={styles.errorIcon}>!</Text>
           <Text style={styles.inlineErrorText}>{error}</Text>
-          <Pressable onPress={() => { setError(""); loadShops(); }}>
+          <Pressable
+            onPress={() => {
+              setError("");
+              // Retry the thing that actually failed. Re-running loadShops()
+              // alone leaves a failed product load unrecovered on screen.
+              if (selectedShop) loadProducts(selectedShop.id);
+              else loadShops();
+            }}
+          >
             <Text style={styles.retryText}>Retry</Text>
           </Pressable>
         </View>
@@ -519,13 +719,23 @@ export default function ShopManagement() {
                       <Text style={styles.actionButtonEditText}>Edit</Text>
                     </Pressable>
                     <Pressable
+                      onPress={() => openDiscount(product)}
+                      style={styles.actionButtonEdit}
+                    >
+                      <Text style={styles.actionButtonEditText}>
+                        {hasDiscount(product) ? "Discount ✓" : "Discount"}
+                      </Text>
+                    </Pressable>
+                    <Pressable
                       onPress={async () => {
                         if (!selectedShop) return;
                         try {
                           await setProductActive(product.id, !product.active);
                           loadProducts(selectedShop.id);
                         } catch (err) {
-                          setError(err instanceof Error ? err.message : "Failed to update product state.");
+                          setError(
+                            describeError(err, "Failed to update product state."),
+                          );
                         }
                       }}
                       style={product.active !== false ? styles.actionButtonPause : styles.actionButtonResume}
@@ -584,17 +794,16 @@ export default function ShopManagement() {
                 onChangeText={(value) => setForm({ ...form, unit: value })}
                 value={form.unit}
               />
+              <CategoryPicker
+                categories={categories}
+                onChange={(id) => setForm({ ...form, category_id: id })}
+                value={form.category_id}
+              />
               <ModalField
                 keyboardType="decimal-pad"
                 label="Selling Price (LKR)"
                 onChangeText={(value) => setForm({ ...form, price: value })}
                 value={form.price}
-              />
-              <ModalField
-                keyboardType="decimal-pad"
-                label="Regular Price (LKR) - Optional"
-                onChangeText={(value) => setForm({ ...form, regular_price: value })}
-                value={form.regular_price}
               />
               <ModalField
                 keyboardType="number-pad"
@@ -647,6 +856,153 @@ export default function ShopManagement() {
           </View>
         </View>
       </Modal>
+
+      <Modal
+        animationType="fade"
+        onRequestClose={closeDiscount}
+        transparent
+        visible={discountProduct !== null}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalSheet}>
+            <Text style={styles.modalTitle}>Apply Discount</Text>
+
+            {discountProduct ? (
+              <View style={styles.discountSummary}>
+                <Text numberOfLines={1} style={styles.discountProduct}>
+                  {discountProduct.name}
+                </Text>
+                <Text style={styles.discountBase}>
+                  Selling price LKR{" "}
+                  {basePriceOf(discountProduct).toLocaleString("en-LK")}
+                </Text>
+              </View>
+            ) : null}
+
+            <Text style={styles.fieldLabel}>Discount option</Text>
+            <View style={styles.discountOptionRow}>
+              {DISCOUNT_OPTIONS.map((option) => {
+                const selected = discountMode === option.type;
+                return (
+                  <Pressable
+                    key={option.type}
+                    onPress={() => selectDiscountMode(option.type)}
+                    style={[
+                      styles.discountOption,
+                      selected && styles.discountOptionActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.discountOptionText,
+                        selected && styles.discountOptionTextActive,
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.discountOptionHint,
+                        selected && styles.discountOptionTextActive,
+                      ]}
+                    >
+                      {option.hint}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            <Text style={styles.fieldLabel}>
+              {discountMode === "percent"
+                ? "Discount percentage"
+                : "Discount amount (LKR)"}
+            </Text>
+            <TextInput
+              keyboardType="number-pad"
+              onChangeText={setDiscountValue}
+              placeholder={discountMode === "percent" ? "10" : "58"}
+              placeholderTextColor="#9A98AA"
+              style={styles.fieldInput}
+              value={discountValue}
+            />
+
+            {/* Live preview so the clerk sees the money, not just the number. */}
+            {discountProduct ? (() => {
+              const base = basePriceOf(discountProduct);
+              const entered = Number(discountValue);
+              const valid =
+                Number.isFinite(entered) &&
+                entered > 0 &&
+                (discountMode === "percent" ? entered <= 100 : entered <= base);
+
+              const discountLkr = !valid
+                ? 0
+                : discountMode === "percent"
+                  ? Math.round(base * (entered / 100))
+                  : Math.trunc(entered);
+              const finalPrice = Math.max(0, base - discountLkr);
+              const equivalentPercent =
+                valid && base > 0 ? Math.round((discountLkr / base) * 100) : 0;
+
+              return (
+                <View style={styles.discountPreview}>
+                  <View style={styles.discountPreviewRow}>
+                    <Text style={styles.discountPreviewLabel}>Discount</Text>
+                    <Text style={styles.discountPreviewValue}>
+                      {valid
+                        ? discountMode === "percent"
+                          ? `${Math.trunc(entered)}%`
+                          : `LKR ${discountLkr.toLocaleString("en-LK")}`
+                        : "-"}
+                    </Text>
+                  </View>
+                  <View style={styles.discountPreviewRow}>
+                    <Text style={styles.discountPreviewLabel}>You save</Text>
+                    <Text style={[styles.discountPreviewValue, { color: "#0A7D5F" }]}>
+                      {valid ? `LKR ${discountLkr.toLocaleString("en-LK")}` : "-"}
+                    </Text>
+                  </View>
+                  {/* Only meaningful for a fixed amount, where the rupees are
+                      what the clerk chose and the percent is derived. */}
+                  {discountMode === "fixed" ? (
+                    <View style={styles.discountPreviewRow}>
+                      <Text style={styles.discountPreviewLabel}>That is</Text>
+                      <Text style={styles.discountPreviewValue}>
+                        {valid ? `${equivalentPercent}% off` : "-"}
+                      </Text>
+                    </View>
+                  ) : null}
+                  <View style={[styles.discountPreviewRow, styles.discountPreviewTotal]}>
+                    <Text style={styles.discountPreviewLabel}>Discount price</Text>
+                    <Text style={[styles.discountPreviewValue, styles.discountPreviewTotalValue]}>
+                      LKR {finalPrice.toLocaleString("en-LK")}
+                    </Text>
+                  </View>
+                </View>
+              );
+            })() : null}
+
+            {discountError ? (
+              <Text style={styles.discountError}>{discountError}</Text>
+            ) : null}
+
+            <PrimaryButton loading={discountSaving} onPress={submitDiscount}>
+              {discountSaving ? "Applying..." : "Apply Discount"}
+            </PrimaryButton>
+
+            {discountProduct && hasDiscount(discountProduct) ? (
+              <SecondaryButton disabled={discountSaving} onPress={removeDiscount}>
+                Remove Discount
+              </SecondaryButton>
+            ) : null}
+
+            <SecondaryButton disabled={discountSaving} onPress={closeDiscount}>
+              Cancel
+            </SecondaryButton>
+          </View>
+        </View>
+      </Modal>
     </AuthFrame>
   );
 }
@@ -663,6 +1019,111 @@ function ModalField({
         style={styles.fieldInput}
         {...props}
       />
+    </View>
+  );
+}
+
+/**
+ * Category dropdown for the product form.
+ *
+ * Built from Pressable rather than @expo/ui's Picker. That Picker is a wheel on
+ * iOS and therefore permanently visible there, which is not a dropdown, and it
+ * styles as the platform control rather than as this screen's input field. A
+ * tap-to-open list gives the same interaction on web and native and reuses the
+ * fieldInput styling the rest of the form uses.
+ *
+ * "None" is a real option rather than an absence of one: an empty value is what
+ * clears an existing category on save, so it has to be selectable and it has to
+ * be shown when it is the stored state.
+ *
+ * Categories come from product_categories, so the list is whatever the database
+ * holds.
+ */
+function CategoryPicker({
+  categories,
+  onChange,
+  value,
+}: {
+  categories: ProductCategoryOption[];
+  onChange: (id: string) => void;
+  value: string;
+}) {
+  const [open, setOpen] = useState(false);
+
+  if (categories.length === 0) {
+    return (
+      <View style={styles.field}>
+        <Text style={styles.fieldLabel}>Category</Text>
+        <Text style={styles.fieldHint}>
+          No categories available yet.
+        </Text>
+      </View>
+    );
+  }
+
+  const selected = categories.find((category) => category.id === value);
+
+  return (
+    <View style={styles.field}>
+      <Text style={styles.fieldLabel}>Category</Text>
+
+      <Pressable
+        accessibilityHint="Opens a list to choose one category"
+        accessibilityLabel={selected ? `Category, ${selected.name}` : "Category, none"}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen((current) => !current)}
+        style={({ pressed }) => [
+          styles.dropdownField,
+          pressed && styles.dropdownPressed,
+        ]}
+      >
+        {/* Shows the stored value rather than a prompt, so "None" reads as the
+            choice that is actually saved instead of looking unanswered. */}
+        <Text
+          numberOfLines={1}
+          style={[styles.dropdownValue, !selected && styles.dropdownValueMuted]}
+        >
+          {selected ? selected.name : "None"}
+        </Text>
+        <FontAwesome name={open ? "chevron-up" : "chevron-down"} size={13} color={colors.muted} />
+      </Pressable>
+
+      {open ? (
+        <View style={styles.dropdownList}>
+          {[{ id: "", name: "None" }, ...categories].map((option, index, all) => {
+            const active = option.id === value;
+            const isLast = index === all.length - 1;
+            return (
+              <Pressable
+                key={option.id || "none"}
+                accessibilityRole="menuitem"
+                accessibilityState={{ selected: active }}
+                onPress={() => {
+                  onChange(option.id);
+                  setOpen(false);
+                }}
+                style={({ pressed }) => [
+                  styles.dropdownOption,
+                  // The last option has no divider below it, so the border is
+                  // applied per row rather than baked into the shared style.
+                  !isLast && styles.dropdownOptionDivider,
+                  active && styles.dropdownOptionActive,
+                  pressed && styles.dropdownPressed,
+                ]}
+              >
+                <Text
+                  numberOfLines={1}
+                  style={[styles.dropdownOptionText, active && styles.dropdownOptionTextActive]}
+                >
+                  {option.name}
+                </Text>
+                {active ? <FontAwesome name="check" size={13} color={colors.ink} /> : null}
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -968,6 +1429,111 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     marginBottom: 8,
   },
+  fieldHint: { color: colors.muted, fontSize: 11, lineHeight: 16 },
+  discountSummary: {
+    backgroundColor: colors.paper,
+    borderRadius: 10,
+    marginBottom: 14,
+    padding: 11,
+  },
+  discountProduct: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  discountBase: { color: colors.muted, fontSize: 11, marginTop: 3 },
+  discountOptionRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginBottom: 16,
+  },
+  discountOption: {
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: 1,
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+  },
+  discountOptionActive: {
+    backgroundColor: colors.ink,
+    borderColor: colors.ink,
+  },
+  discountOptionText: {
+    color: colors.ink,
+    fontSize: 13,
+    fontWeight: "800",
+  },
+  discountOptionHint: {
+    color: colors.muted,
+    fontSize: 10,
+    marginTop: 2,
+  },
+  discountOptionTextActive: { color: colors.white },
+  discountPreview: {
+    backgroundColor: colors.paper,
+    borderRadius: 10,
+    marginBottom: 14,
+    marginTop: 12,
+    padding: 12,
+  },
+  discountPreviewRow: {
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 3,
+  },
+  discountPreviewLabel: { color: colors.muted, fontSize: 11 },
+  discountPreviewValue: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  discountPreviewTotal: {
+    borderTopColor: colors.line,
+    borderTopWidth: 1,
+    marginTop: 5,
+    paddingTop: 8,
+  },
+  discountPreviewTotalValue: { fontSize: 15 },
+  discountError: {
+    color: "#A33D2F",
+    fontSize: 11,
+    marginBottom: 12,
+  },
+  dropdownField: {
+    alignItems: "center",
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+    minHeight: 48,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  dropdownValue: { color: colors.ink, flex: 1, fontSize: 14 },
+  dropdownValueMuted: { color: colors.muted },
+  dropdownList: {
+    backgroundColor: colors.white,
+    borderColor: colors.line,
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: 6,
+    overflow: "hidden",
+  },
+  dropdownOption: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 10,
+    justifyContent: "space-between",
+    minHeight: 46,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  dropdownOptionDivider: {
+    borderBottomColor: colors.line,
+    borderBottomWidth: 1,
+  },
+  dropdownOptionActive: { backgroundColor: "#F3F1FC" },
+  dropdownOptionText: { color: colors.ink, flex: 1, fontSize: 14, fontWeight: "600" },
+  dropdownOptionTextActive: { fontWeight: "800" },
+  dropdownPressed: { opacity: 0.7 },
   fieldInput: {
     backgroundColor: colors.white,
     borderColor: colors.line,

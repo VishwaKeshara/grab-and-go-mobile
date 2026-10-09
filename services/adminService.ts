@@ -5,7 +5,7 @@ export type ManagedUser = {
   email: string | null;
   full_name: string;
   phone: string | null;
-  role: "customer" | "shop" | "admin";
+  role: "customer" | "shop" | "staff" | "admin";
   status: "active" | "suspended";
   created_at: string;
   updated_at: string;

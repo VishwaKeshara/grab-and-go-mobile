@@ -9,7 +9,10 @@ import {
   useRef,
   useState,
 } from "react";
+
 import { Alert } from "react-native";
+
+import { ShopSwitchModal } from "@/components/ShopSwitchModal";
 
 import { getProfile } from "@/services/authService";
 import {
@@ -29,6 +32,7 @@ import {
   setOrderStatus,
 } from "@/services/orderService";
 import { processDemoPayment } from "@/services/paymentService";
+
 import type {
   CartItem,
   CheckoutDraft,
@@ -36,8 +40,15 @@ import type {
   GroceryShop,
   SubstitutePreference,
 } from "@/types/cart";
-import type { Order, OrderAdditionItem, OrderStatus } from "@/types/order";
+
+import type {
+  Order,
+  OrderAdditionItem,
+  OrderStatus,
+} from "@/types/order";
+
 import { addProductToCart } from "@/utils/ordering";
+import { describeError } from "@/utils/errors";
 
 type Store = {
   cart: CartItem[];
@@ -56,7 +67,7 @@ type Store = {
   closeCartSheet: () => void;
   setQuantity: (id: string, quantity: number) => void;
   removeItem: (id: string) => void;
-  addItem: (product: GroceryProduct) => Promise<boolean>;
+  addItem: (product: GroceryProduct) => Promise<AddToCartResult>;
   clearCart: () => void;
   setSubstitution: (id: string, value: SubstitutePreference) => void;
   updateDraft: (value: Partial<CheckoutDraft>) => void;
@@ -74,8 +85,37 @@ type Store = {
   reloadOrders: () => Promise<void>;
 };
 
+/**
+ * What one Add tap produced.
+ *
+ * `reason` used to be read off the store's `error` state at the call site, which
+ * is the value from the render that started the tap -- addItem's own setError
+ * lands in a later render, so every caller read "" and fell back to "We could not
+ * add that to your cart", hiding the server's actual complaint ("Product inventory
+ * unavailable", "Cart contains products from another shop"). Returning the reason
+ * directly is what makes a failed add diagnosable.
+ *
+ * `reason` is absent when the shopper declined the shop-switch prompt. That is a
+ * choice, not an error, so callers show no banner.
+ */
+export type AddToCartResult = {
+  added: boolean;
+  reason?: string;
+};
+
 const Context = createContext<Store | null>(null);
 
+/**
+ * A failure message the shopper can act on.
+ *
+ * The `instanceof Error` test that used to sit here was wrong for every database
+ * failure: supabase-js rejects with plain objects (PostgrestError), never Error
+ * instances, so `cause instanceof Error` was false and the generic fallback was
+ * shown while the server's actual complaint -- "Product inventory unavailable",
+ * "Cart contains products from another shop" -- was thrown away. That is why a
+ * failed add could only ever read "We could not add that to your cart".
+ * describeError exists for exactly this; see utils/errors.ts.
+ */
 function cartErrorMessage(cause: unknown, fallback: string): string {
   const code = (cause as { code?: string } | null)?.code;
 
@@ -88,7 +128,10 @@ function cartErrorMessage(cause: unknown, fallback: string): string {
     return "Ordering is unavailable right now. Please try again later.";
   }
 
-  return cause instanceof Error ? cause.message : fallback;
+  // change_customer_cart and place_customer_order raise plain sentences, and they
+  // are more specific than anything this layer could invent, so they are passed
+  // through rather than replaced.
+  return describeError(cause, fallback);
 }
 
 class InitialOrderingLoadError extends Error {
@@ -161,6 +204,10 @@ async function loadWithTimeout<T>(request: Promise<T>): Promise<T> {
 
 export function OrderingProvider({ children }: PropsWithChildren) {
   const [cart, setCart] = useState<CartItem[]>([]);
+  // The shop customer_carts is scoped to. Not the same as the shop of the items
+  // on screen: the column outlives an emptied cart, and change_customer_cart
+  // compares against it. See LoadedCart.
+  const [cartShopId, setCartShopId] = useState<string | null>(null);
   const [draft, setDraft] = useState<CheckoutDraft>(initialDraft);
   const [orders, setOrders] = useState<Order[]>([]);
   const [shop, setShop] = useState<GroceryShop | null>(null);
@@ -173,6 +220,16 @@ export function OrderingProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [cartSheetOpen, setCartSheetOpen] = useState(false);
+
+  type ShopSwitchPrompt = { currentShopName: string; newShopName: string } | null;
+  const [shopSwitchPrompt, setShopSwitchPrompt] = useState<ShopSwitchPrompt>(null);
+  const shopSwitchResolver = useRef<((confirmed: boolean) => void) | null>(null);
+
+  const askToSwitchShop = (currentShopName: string, newShopName: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      shopSwitchResolver.current = resolve;
+      setShopSwitchPrompt({ currentShopName, newShopName });
+    });
 
   const lock = useRef(false);
   const addInFlight = useRef(false);
@@ -192,11 +249,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       }
     } catch (cause) {
       if (version === orderLoadVersion.current) {
-        setError(
-          cause instanceof Error
-            ? cause.message
-            : "Could not load your orders.",
-        );
+        setError(describeError(cause, "Could not load your orders."));
       }
     }
   }, []);
@@ -214,7 +267,8 @@ export function OrderingProvider({ children }: PropsWithChildren) {
           const savedCart = await loadInitialStage("cart", loadCart);
 
           // Preserve the loaded cart if catalog loading fails.
-          setCart(savedCart);
+          setCart(savedCart.items);
+          setCartShopId(savedCart.shopId);
 
           const catalog = await loadInitialStage("catalog", loadCatalog);
 
@@ -225,14 +279,15 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       setShop(catalog.shop);
       setProducts(catalog.products);
       setAlternatives(catalog.alternatives);
-      setCart(savedCart);
+      setCart(savedCart.items);
       ready.current = true;
 
       if (__DEV__) {
         console.log("[Cart] initial load succeeded", {
           shopId: catalog.shop.id,
           catalogCount: catalog.products.length,
-          cartCount: savedCart.length,
+          cartCount: savedCart.items.length,
+          cartShopId: savedCart.shopId,
         });
       }
 
@@ -301,7 +356,8 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     const remote = await loadCart();
 
     if (version === cartVersion.current) {
-      setCart(remote);
+      setCart(remote.items);
+      setCartShopId(remote.shopId);
     }
   };
 
@@ -362,8 +418,8 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       });
   };
 
-  const addItem = async (requested: GroceryProduct): Promise<boolean> => {
-    const product = products.find((value) => value.id === requested.id);
+  const addItem = async (requested: GroceryProduct): Promise<AddToCartResult> => {
+    let product = products.find((value) => value.id === requested.id);
 
     if (__DEV__) {
       console.log("[Cart] addItem entered", {
@@ -380,7 +436,11 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       });
     }
 
-    const blocked = (reason: string, title: string, message: string): false => {
+    const blocked = (
+      reason: string,
+      title: string,
+      message: string,
+    ): AddToCartResult => {
       if (__DEV__) {
         console.warn("[Cart] add blocked", {
           reason,
@@ -390,7 +450,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
 
       setError(message);
       Alert.alert(title, message);
-      return false;
+      return { added: false, reason: message };
     };
 
     if (loading) {
@@ -409,7 +469,10 @@ export function OrderingProvider({ children }: PropsWithChildren) {
         });
       }
 
-      return false;
+      return {
+        added: false,
+        reason: "Another item is being added to your cart. Try again in a moment.",
+      };
     }
 
     if (lock.current) {
@@ -428,12 +491,87 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       );
     }
 
-    if (!product) {
+    const targetShopId = product?.shopId || requested.shopId || (requested as any).shop_id;
+
+    if (__DEV__) {
+      console.log("[Cart] add item check:", {
+        requestedId: requested.id,
+        requestedShopId: requested.shopId,
+        requestedAsAnyShopId: (requested as any).shop_id,
+        requestedAsAnyShopName: (requested as any).shop_name,
+        currentCartShopId: cart.length > 0 ? cart[0].product.shopId : "empty",
+        targetShopId,
+      });
+    }
+
+    if (!product && !targetShopId) {
       return blocked(
         "product-not-in-catalog",
         "Product unavailable",
         "This product is not available in the ordering catalog.",
       );
+    }
+
+    if (!product) {
+      product = {
+        id: requested.id,
+        shopId: targetShopId,
+        name: requested.name,
+        unit: requested.unit || (requested as any).unit || "",
+        price: requested.price || (requested as any).price_lkr || 0,
+        regularPrice: requested.regularPrice || (requested as any).regular_price_lkr || 0,
+        image: requested.image || (requested as any).image_url || ""
+      };
+    }
+
+    // The switch check used to be `cart.length > 0 && cart[0].product.shopId !==
+    // targetShopId`, which read the cart's shop off its first item. That missed
+    // the case the RPC actually rejects: a cart that is empty on screen but still
+    // scoped to a shop on the server, because customer_carts.shop_id is only reset
+    // by 'clear' or by removing the last line. No items meant no prompt, and the
+    // add came straight back as 'Cart contains products from another shop'.
+    // cartShopId is the server's own column, so it is used directly.
+    const currentShopId = cartShopId ?? cart[0]?.product.shopId ?? null;
+
+    if (currentShopId && targetShopId && currentShopId !== targetShopId) {
+      const currentShopName = shop && shop.id === currentShopId ? shop.name : "another shop";
+      const newShopName = (requested as any).shop_name || "this shop";
+
+        const confirmed = await askToSwitchShop(currentShopName, newShopName);
+
+        if (!confirmed) {
+          // The shopper declined, so there is nothing to report. Callers show no
+          // banner when `reason` is absent.
+          return { added: false };
+        }
+
+        try {
+          addInFlight.current = true;
+          setAdding(true);
+
+          await enqueue(() => changeCart("clear"));
+          setCart([]);
+          setCartShopId(null);
+
+          if (__DEV__) {
+            console.log("[Cart] sending add RPC (switch)", product!.id);
+          }
+          await enqueue(() => changeCart("add", product!.id, 1));
+
+          await reload();
+
+          setCartSheetOpen(true);
+          return { added: true };
+        } catch (e) {
+          mutationFailed(e, ++cartVersion.current);
+          return {
+            added: false,
+            reason: cartErrorMessage(e, "Could not add that to your cart."),
+          };
+        } finally {
+          addInFlight.current = false;
+          setAdding(false);
+        }
     }
 
     // Keep shop/cart rules enforced by the server RPC.
@@ -443,38 +581,57 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     setError("");
 
     const version = ++cartVersion.current;
+    const wasEmpty = cart.length === 0;
 
     try {
       if (__DEV__) {
-        console.log("[Cart] sending add RPC", product.id);
+        console.log("[Cart] sending add RPC", product!.id);
       }
 
-      await enqueue(() => changeCart("add", product.id, 1));
+      await enqueue(() => changeCart("add", product!.id, 1));
 
       if (__DEV__) {
-        console.log("[Cart] add RPC succeeded", product.id);
+        console.log("[Cart] add RPC succeeded", product!.id);
       }
 
-      setCart((previous) => addProductToCart(previous, product));
+      setCart((previous) => addProductToCart(previous, product!));
 
-      setCartSheetOpen(true);
-
-      void loadWithTimeout(syncCart(version)).catch(() => {
+      try {
+        await loadWithTimeout(
+          (async () => {
+            await syncCart(version);
+            if (wasEmpty) {
+              const catalog = await loadCatalog();
+              if (version === cartVersion.current) {
+                setShop(catalog.shop);
+                setProducts(catalog.products);
+                setAlternatives(catalog.alternatives);
+              }
+            }
+          })()
+        );
+      } catch (e) {
+        if (__DEV__) console.warn("Could not refresh shop on first add", e);
         if (version === cartVersion.current) {
           setError(
             "Added to cart, but the cart could not be refreshed. Please try again.",
           );
         }
-      });
+      }
 
-      return true;
+      setCartSheetOpen(true);
+
+      return { added: true };
     } catch (cause) {
       if (__DEV__) {
         console.warn("[Cart] add failed", cause);
       }
 
       mutationFailed(cause, version);
-      return false;
+      return {
+        added: false,
+        reason: cartErrorMessage(cause, "Could not add that to your cart."),
+      };
     } finally {
       addInFlight.current = false;
       setAdding(false);
@@ -548,9 +705,9 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       );
 
       if (
-        remoteCart.length &&
-        (remoteCart.length !== cart.length ||
-          remoteCart.some((item) => {
+        remoteCart.items.length &&
+        (remoteCart.items.length !== cart.length ||
+          remoteCart.items.some((item) => {
             const current = displayed.get(item.product.id);
 
             return (
@@ -562,7 +719,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
             );
           }))
       ) {
-        setCart(remoteCart);
+        setCart(remoteCart.items);
         throw new Error(
           "Your cart changed. Review it before placing your order.",
         );
@@ -571,7 +728,7 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       await processDemoPayment(draft.paymentMethod);
 
       const order = await createOrder(
-        remoteCart,
+        remoteCart.items,
         draft,
         shop,
         cartTotals(cart).subtotal,
@@ -583,7 +740,8 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       ]);
 
       setOrders(savedOrders);
-      setCart(remainingCart);
+      setCart(remainingCart.items);
+      setCartShopId(remainingCart.shopId);
       setCartSheetOpen(false);
 
       // Rotate the checkout ID only after confirming the saved
@@ -608,7 +766,9 @@ export function OrderingProvider({ children }: PropsWithChildren) {
       return order;
     } catch (cause) {
       try {
-        setCart(await loadCart());
+        const refreshed = await loadCart();
+        setCart(refreshed.items);
+        setCartShopId(refreshed.shopId);
       } catch {
         // Keep the displayed cart if the refresh fails.
       }
@@ -721,7 +881,24 @@ export function OrderingProvider({ children }: PropsWithChildren) {
     reloadOrders,
   };
 
-  return createElement(Context.Provider, { value }, children);
+  return createElement(Context.Provider, { value },
+    children,
+    createElement(ShopSwitchModal, {
+      visible: !!shopSwitchPrompt,
+      currentShopName: shopSwitchPrompt?.currentShopName || "",
+      newShopName: shopSwitchPrompt?.newShopName || "",
+      onConfirm: () => {
+        if (shopSwitchResolver.current) shopSwitchResolver.current(true);
+        setShopSwitchPrompt(null);
+        shopSwitchResolver.current = null;
+      },
+      onCancel: () => {
+        if (shopSwitchResolver.current) shopSwitchResolver.current(false);
+        setShopSwitchPrompt(null);
+        shopSwitchResolver.current = null;
+      }
+    })
+  );
 }
 
 export function useCart(): Store {

@@ -6,7 +6,11 @@ import {
     PrimaryButton,
 } from "@/components/AuthUI";
 import { colors } from "@/constants/colors";
-import { listPickupHubs, signUp } from "@/services/authService";
+import {
+  listPickupHubs,
+  resendSignupConfirmation,
+  signUp,
+} from "@/services/authService";
 import { router } from "expo-router";
 import { useEffect, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -23,6 +27,7 @@ export default function Signup() {
   const [hubs, setHubs] = useState<Hub[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [confirmationSent, setConfirmationSent] = useState(false);
 
   useEffect(() => {
     listPickupHubs()
@@ -32,10 +37,20 @@ export default function Signup() {
 
   const submit = async () => {
     setError("");
-    if (!fullName.trim() || !email.trim() || password.length < 8) {
-      setError(
-        "Add your name, a valid email, and a password with at least 8 characters.",
-      );
+    if (fullName.trim().length < 2) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (!/^\+94\s?7\d{8}$/.test(phone.replace(/\s/g, ""))) {
+      setError("Enter a valid Sri Lankan mobile number, for example +94771234567.");
+      return;
+    }
+    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d).{8,}$/.test(password)) {
+      setError("Password must be 8+ characters with uppercase, lowercase, and a number.");
       return;
     }
     if (!acceptedTerms) {
@@ -58,13 +73,30 @@ export default function Signup() {
       if (result.session) {
         router.replace("/(customer)/home");
       } else {
-        router.replace("/(auth)/login");
+        setConfirmationSent(true);
       }
     } catch (submitError) {
       setError(
         submitError instanceof Error
           ? submitError.message
           : "We could not create your account.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const resendConfirmation = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      await resendSignupConfirmation(email);
+      setConfirmationSent(true);
+    } catch (resendError) {
+      setError(
+        resendError instanceof Error
+          ? resendError.message
+          : "We could not resend the confirmation email.",
       );
     } finally {
       setLoading(false);
@@ -90,6 +122,22 @@ export default function Signup() {
   return (
     <AuthFrame>
       <AuthHeader title="Sign Up" />
+      {confirmationSent ? (
+        <View style={styles.confirmationCard}>
+          <Text style={styles.confirmationTitle}>Check your email</Text>
+          <Text style={styles.confirmationText}>
+            We sent a confirmation link to {email.trim()}. Confirm your email before signing in.
+          </Text>
+          <PrimaryButton loading={loading} onPress={resendConfirmation}>
+            Resend confirmation email
+          </PrimaryButton>
+          <Pressable onPress={() => router.replace("/(auth)/login")} style={styles.loginLink}>
+            <Text style={styles.link}>Go to Log In</Text>
+          </Pressable>
+        </View>
+      ) : null}
+      {confirmationSent ? null : (
+        <>
       <Text style={styles.body}>
         Save time on daily groceries with instant queue-free local pickup.
       </Text>
@@ -176,6 +224,8 @@ export default function Signup() {
           <Text style={styles.link}>Log In</Text>
         </Pressable>
       </View>
+        </>
+      )}
     </AuthFrame>
   );
 }
@@ -252,4 +302,13 @@ const styles = StyleSheet.create({
     marginTop: 18,
   },
   footerText: { color: colors.muted, fontSize: 11 },
+  confirmationCard: {
+    backgroundColor: colors.mintSoft,
+    borderRadius: 14,
+    marginBottom: 18,
+    padding: 16,
+  },
+  confirmationTitle: { color: colors.ink, fontSize: 17, fontWeight: "800" },
+  confirmationText: { color: colors.muted, fontSize: 11, lineHeight: 17, marginVertical: 8 },
+  loginLink: { alignItems: "center", marginTop: 12 },
 });
