@@ -6,9 +6,12 @@ import {
     PrimaryButton,
     SecondaryButton,
 } from "@/components/AuthUI";
+import {
+  OrderActionDialog,
+  type OrderDialogContent,
+} from "@/components/OrderActionDialog";
 import { colors } from "@/constants/colors";
-import { supabase } from "@/lib/supabase";
-import { getProfile, updateProfile } from "@/services/authService";
+import { getProfile, signOut, updateProfile } from "@/services/authService";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
@@ -35,6 +38,9 @@ export default function Profile() {
   const [saving, setSaving] = useState(false);
   const [profileId, setProfileId] = useState("");
   const [photoUri, setPhotoUri] = useState<string | null>(null);
+  const [signOutDialog, setSignOutDialog] =
+    useState<OrderDialogContent | null>(null);
+  const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -125,9 +131,23 @@ export default function Profile() {
     }
   };
 
-  const signOut = async () => {
-    await supabase.auth.signOut();
-    router.replace("/(auth)/login");
+  const confirmSignOut = async () => {
+    if (signingOut) return;
+
+    setSigningOut(true);
+    try {
+      await signOut();
+      setSignOutDialog(null);
+      router.replace("/(auth)/login");
+    } catch {
+      setSignOutDialog({
+        tone: "error",
+        title: "Couldn’t sign out",
+        message: "Please check your connection and try again.",
+      });
+    } finally {
+      setSigningOut(false);
+    }
   };
 
   return (
@@ -229,13 +249,39 @@ export default function Profile() {
               <Text style={styles.helpIcon}>?</Text>
             </Pressable>
             <Text style={styles.separator}>•</Text>
-            <Pressable onPress={signOut}>
+            <Pressable
+              accessibilityRole="button"
+              onPress={() =>
+                setSignOutDialog({
+                  tone: "confirm",
+                  title: "Sign out?",
+                  message: "Are you sure you want to sign out of your Grab & Go account?",
+                })
+              }
+            >
               <Text style={styles.danger}>Sign out</Text>
             </Pressable>
           </View>
       <SecondaryButton onPress={() => router.replace("/(customer)/home")}>
         ← Back to Home
       </SecondaryButton>
+      <OrderActionDialog
+        dialog={signOutDialog}
+        onClose={() => setSignOutDialog(null)}
+        primaryLabel={signOutDialog?.tone === "confirm" ? "Sign Out" : "Got it"}
+        onPrimary={
+          signOutDialog?.tone === "confirm"
+            ? () => void confirmSignOut()
+            : undefined
+        }
+        secondaryLabel={
+          signOutDialog?.tone === "confirm" ? "Stay Signed In" : undefined
+        }
+        busy={signingOut}
+        busyLabel="Signing out..."
+        busyAccessibilityLabel="Signing out"
+        destructive={signOutDialog?.tone === "confirm"}
+      />
     </AuthFrame>
   );
 }
