@@ -4,6 +4,7 @@ import { router } from "expo-router";
 import { ShopOrder, ShopOrderStatus, ShopOrderItem } from "@/types/shopOrder";
 import { supabase } from "@/lib/supabase";
 import { getShopByProfileId, getIncomingOrders, updateOrderStatus, staffGetOrders, staffAcceptOrder, staffSetOrderStatus, getStaffProfile, getLocalStaffSession, clearLocalStaffSession } from "@/services/shopService";
+import { colors } from "@/constants/colors";
 
 import { FontAwesome } from "@expo/vector-icons";
 
@@ -165,7 +166,7 @@ export default function NewOrders() {
   if (!sessionChecked) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
-        <Text style={{ color: '#4A4A68' }}>Checking session...</Text>
+        <Text style={{ color: '#4B5563' }}>Checking session...</Text>
       </View>
     );
   }
@@ -186,7 +187,7 @@ export default function NewOrders() {
 
     return (
       <View style={styles.emptyStateCard}>
-        <FontAwesome name="inbox" size={32} color="#D0D0E0" style={{ marginBottom: 12 }} />
+        <FontAwesome name="inbox" size={32} color={colors.iconMuted} style={{ marginBottom: 12 }} />
         <Text style={styles.emptyStateTitle}>{title}</Text>
         <Text style={styles.emptyStateSubtitle}>{subtitle}</Text>
       </View>
@@ -238,7 +239,7 @@ export default function NewOrders() {
             {loading ? "Syncing..." : lastSyncedAt ? "Last synced just now" : "Not synced"}
           </Text>
           <Pressable onPress={handleRefresh} style={styles.refreshBtn}>
-            <FontAwesome name="refresh" size={12} color="#8A8A9E" />
+            <FontAwesome name="refresh" size={12} color="#4B5563" />
             <Text style={styles.refreshText}>Refresh</Text>
           </Pressable>
         </View>
@@ -265,7 +266,7 @@ export default function NewOrders() {
         {error ? (
           <Text style={{ color: 'red', margin: 20 }}>{error}</Text>
         ) : loading && orders.length === 0 ? (
-          <Text style={{ color: '#4A4A68', margin: 20 }}>Loading live orders...</Text>
+          <Text style={{ color: '#4B5563', margin: 20 }}>Loading live orders...</Text>
         ) : filteredOrders.length === 0 ? (
           renderEmptyState()
         ) : (
@@ -291,13 +292,13 @@ function OrderCard({ order, onAccept, onReject, onStage }: { order: ExtendedShop
 
   const getStatusBadge = () => {
     switch (order.status) {
-      case "placed": return { text: "NEW", color: "#0052CC", bg: "#DEEBFF" };
-      case "accepted": return { text: "ACCEPTED", color: "#00A859", bg: "#E6F7ED" };
-      case "packing": return { text: "PACKING", color: "#F5A623", bg: "#FFF5E6" };
-      case "ready": return { text: "READY", color: "#00A859", bg: "#E6F7ED" };
-      case "collected": return { text: "COMPLETED", color: "#1E2030", bg: "#E0E0EB" };
-      case "cancelled": return { text: "CANCELLED", color: "#D0021B", bg: "#FFEBEB" };
-      default: return { text: String(order.status).toUpperCase(), color: "#4A4A68", bg: "#F0F0F5" };
+      case "placed": return { text: "NEW", color: "#15803D", bg: "#F3F4F6" };
+      case "accepted": return { text: "ACCEPTED", color: "#16A34A", bg: "#DCFCE7" };
+      case "packing": return { text: "PACKING", color: "#F59E0B", bg: "#FEF3C2" };
+      case "ready": return { text: "READY", color: "#16A34A", bg: "#DCFCE7" };
+      case "collected": return { text: "COMPLETED", color: "#111827", bg: "#D1D5DB" };
+      case "cancelled": return { text: "CANCELLED", color: "#DC2626", bg: "#FEE2E2" };
+      default: return { text: String(order.status).toUpperCase(), color: "#4B5563", bg: "#F3F4F6" };
     }
   };
   const badge = getStatusBadge();
@@ -372,7 +373,7 @@ function OrderCard({ order, onAccept, onReject, onStage }: { order: ExtendedShop
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F8F8FC",
+    backgroundColor: "#F3F4F6",
   },
   scrollContent: {
     padding: 16,
@@ -389,29 +390,28 @@ const styles = StyleSheet.create({
   headerBrand: {
     fontSize: 12,
     fontWeight: "700",
-    color: "#4A4A68",
+    color: "#4B5563",
     marginBottom: 4,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#1E2030",
+    fontSize: 20,
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 2,
   },
-  headerSubtitle: {
-    fontSize: 13,
-    color: "#8A8A9E",
+  headerSubtitle: {fontWeight: "400", fontSize: 13,
+    color: "#4B5563",
     marginBottom: 8,
   },
   statusBadge: {
-    backgroundColor: "#E6F7ED",
+    backgroundColor: "#DCFCE7",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 4,
     alignSelf: "flex-start",
   },
   statusBadgeText: {
-    color: "#00A859",
+    color: "#16A34A",
     fontWeight: "700",
     fontSize: 12,
   },
@@ -419,12 +419,12 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "#D0D0E0",
+    backgroundColor: "#D1D5DB",
   },
   tabsContainer: {
     flexDirection: "row",
     borderBottomWidth: 1,
-    borderBottomColor: "#E0E0EB",
+    borderBottomColor: "#D1D5DB",
     marginBottom: 12,
   },
   tab: {
@@ -437,29 +437,29 @@ const styles = StyleSheet.create({
     borderBottomColor: "transparent",
   },
   tabActive: {
-    borderBottomColor: "#1E2030",
+    borderBottomColor: "#111827",
   },
   tabText: {
-    color: "#8A8A9E",
+    color: "#4B5563",
     fontWeight: "600",
   },
   tabTextActive: {
-    color: "#1E2030",
+    color: "#111827",
   },
   tabBadge: {
-    backgroundColor: "#E0E0EB",
+    backgroundColor: "#D1D5DB",
     borderRadius: 12,
     paddingHorizontal: 6,
     paddingVertical: 2,
     marginLeft: 6,
   },
   tabBadgeActive: {
-    backgroundColor: "#1E2030",
+    backgroundColor: "#111827",
   },
   tabBadgeText: {
-    fontSize: 10,
-    color: "#4A4A68",
-    fontWeight: "bold",
+    fontSize: 12,
+    color: "#4B5563",
+    fontWeight: "700",
   },
   tabBadgeTextActive: {
     color: "#FFFFFF",
@@ -471,9 +471,8 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     paddingHorizontal: 4,
   },
-  syncText: {
-    fontSize: 12,
-    color: "#8A8A9E",
+  syncText: {fontWeight: "400", fontSize: 12,
+    color: "#4B5563",
   },
   refreshBtn: {
     flexDirection: "row",
@@ -484,7 +483,7 @@ const styles = StyleSheet.create({
   },
   refreshText: {
     fontSize: 12,
-    color: "#8A8A9E",
+    color: "#4B5563",
     fontWeight: "600",
   },
   chipsScroll: {
@@ -494,7 +493,7 @@ const styles = StyleSheet.create({
   chip: {
     backgroundColor: "#FFFFFF",
     borderWidth: 1,
-    borderColor: "#E0E0EB",
+    borderColor: "#D1D5DB",
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
@@ -503,13 +502,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chipSelected: {
-    backgroundColor: "#1E2030",
-    borderColor: "#1E2030",
+    backgroundColor: "#111827",
+    borderColor: "#111827",
   },
   chipText: {
-    color: "#4A4A68",
+    color: "#4B5563",
     fontWeight: "600",
-    fontSize: 13,
+    fontSize: 12,
   },
   chipTextSelected: {
     color: "#FFFFFF",
@@ -521,19 +520,18 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "#E0E0EB",
+    borderColor: "#D1D5DB",
     marginTop: 20,
   },
   emptyStateTitle: {
     fontSize: 16,
     fontWeight: "700",
-    color: "#1E2030",
+    color: "#111827",
     marginBottom: 8,
     textAlign: "center",
   },
-  emptyStateSubtitle: {
-    fontSize: 14,
-    color: "#8A8A9E",
+  emptyStateSubtitle: {fontWeight: "400", fontSize: 13,
+    color: "#4B5563",
     textAlign: "center",
   },
   card: {
@@ -547,7 +545,7 @@ const styles = StyleSheet.create({
     shadowRadius: 8,
     elevation: 2,
     borderWidth: 1,
-    borderColor: "#F0F0F5",
+    borderColor: "#F3F4F6",
   },
   cardHeader: {
     flexDirection: "row",
@@ -557,12 +555,12 @@ const styles = StyleSheet.create({
   },
   orderId: {
     fontSize: 16,
-    fontWeight: "800",
-    color: "#1E2030",
+    fontWeight: "600",
+    color: "#111827",
   },
   urgency: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -572,22 +570,21 @@ const styles = StyleSheet.create({
     marginTop: 8,
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: "#F0F0F5",
+    borderTopColor: "#F3F4F6",
   },
   customerName: {
     fontSize: 16,
-    fontWeight: "700",
-    color: "#1E2030",
+    fontWeight: "600",
+    color: "#111827",
     marginBottom: 6,
   },
-  pickupInfo: {
-    fontSize: 14,
-    color: "#4A4A68",
+  pickupInfo: {fontWeight: "400", fontSize: 14,
+    color: "#4B5563",
     marginBottom: 4,
   },
   paymentInfo: {
     fontSize: 14,
-    color: "#8A8A9E",
+    color: "#4B5563",
     fontWeight: "500",
   },
   actions: {
@@ -597,7 +594,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   btnPrimary: {
-    backgroundColor: "#00A859",
+    backgroundColor: "#16A34A",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -605,7 +602,7 @@ const styles = StyleSheet.create({
     flexGrow: 1,
   },
   btnSecondary: {
-    backgroundColor: "#F0F0F5",
+    backgroundColor: "#F3F4F6",
     paddingVertical: 12,
     paddingHorizontal: 16,
     borderRadius: 8,
@@ -617,12 +614,12 @@ const styles = StyleSheet.create({
   },
   btnPrimaryText: {
     color: "#FFFFFF",
-    fontWeight: "700",
-    fontSize: 14,
+    fontWeight: "600",
+    fontSize: 15,
   },
   btnSecondaryText: {
-    color: "#1E2030",
+    color: "#111827",
     fontWeight: "600",
-    fontSize: 14,
+    fontSize: 15,
   },
 });

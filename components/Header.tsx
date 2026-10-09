@@ -1,4 +1,4 @@
-import { colors } from "@/constants/colors";
+import { colors, accentOnDark } from "@/constants/colors";
 import { CartHeaderButton } from "@/components/CartHeaderButton";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { FontAwesome } from "@expo/vector-icons";
@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   header: {
     alignItems: "center",
     backgroundColor: colors.paper,
-    borderBottomColor: "#ECEBF4",
+    borderBottomColor: "#F3F4F6",
     borderBottomWidth: 1,
     flexDirection: "row",
     paddingBottom: 12,
@@ -108,13 +108,13 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 36,
   },
-  brandMarkText: { color: colors.mint, fontSize: 19 },
+  brandMarkText: { color: accentOnDark, fontSize: 19 },
   brandLogo: { height: 34, width: 34 },
   brandCopy: { flex: 1, marginLeft: 10, minWidth: 0 },
   eyebrow: {
-    color: "#07856A",
-    fontSize: 9,
-    fontWeight: "900",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 1,
   },
   locationRow: { alignItems: "center", flexDirection: "row", marginTop: 3 },
@@ -125,11 +125,11 @@ const styles = StyleSheet.create({
     marginRight: 5,
     width: 8,
   },
-  location: { color: colors.ink, flexShrink: 1, fontSize: 11, fontWeight: "700" },
+  location: { color: colors.ink, flexShrink: 1, fontSize: 12, fontWeight: "700" },
   chevron: { color: colors.muted, fontSize: 14, marginLeft: 4, marginTop: -3 },
   iconButton: {
     alignItems: "center",
-    backgroundColor: "#EEF0FF",
+    backgroundColor: "#F3F4F6",
     borderRadius: 18,
     height: 36,
     justifyContent: "center",
@@ -155,6 +155,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 36,
   },
-  avatarText: { color: colors.ink, fontSize: 10, fontWeight: "900" },
+  avatarText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   headerAvatarImage: { borderRadius: 18, height: 36, width: 36 },
 });

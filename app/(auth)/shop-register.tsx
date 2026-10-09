@@ -171,8 +171,7 @@ export default function ShopRegister() {
 }
 
 const styles = StyleSheet.create({
-  body: {
-    fontSize: 16,
+  body: {fontWeight: "400", fontSize: 15,
     color: colors.muted,
     marginBottom: 24,
     lineHeight: 22,
@@ -190,8 +189,7 @@ const styles = StyleSheet.create({
     marginTop: 24,
     marginBottom: 40,
   },
-  loginText: {
-    color: colors.muted,
+  loginText: {fontWeight: "400", color: colors.muted,
     fontSize: 16,
   },
   link: {

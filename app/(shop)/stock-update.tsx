@@ -12,6 +12,7 @@ import {
   TextInput,
   View,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { supabase } from "@/lib/supabase";
 import { formatCurrencyShort } from "@/utils/formatters";
 import {
@@ -42,12 +43,13 @@ import {
 type Shop = { id: string; name: string; shopCode: string | null };
 
 const STATUS_STYLES = {
-  in: { bg: colors.mintSoft, fg: "#0A7D5F", label: "In Stock" },
-  low: { bg: "#FDF0DC", fg: "#9A6412", label: "Low Stock" },
-  out: { bg: "#FDE4E0", fg: "#A33D2F", label: "Out Of Stock" },
+  in: { bg: colors.mintSoft, fg: "#15803D", label: "In Stock" },
+  low: { bg: "#FEF3C2", fg: "#92400E", label: "Low Stock" },
+  out: { bg: "#FEE2E2", fg: "#DC2626", label: "Out Of Stock" },
 } as const;
 
 export default function StockUpdate() {
+  const insets = useSafeAreaInsets();
   const [shop, setShop] = useState<Shop | null>(null);
   const [items, setItems] = useState<StockItem[]>([]);
   const [cheapest, setCheapest] = useState<Record<string, CheapestElsewhere>>(
@@ -198,7 +200,7 @@ export default function StockUpdate() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 14 }]}>
         <Pressable
           accessibilityLabel="Go back"
           onPress={() => router.back()}
@@ -215,7 +217,7 @@ export default function StockUpdate() {
         <TextInput
           onChangeText={setQuery}
           placeholder={`Search ${items.length} catalogued SKUs...`}
-          placeholderTextColor="#9A98AA"
+          placeholderTextColor={colors.muted}
           returnKeyType="search"
           style={styles.search}
           value={query}
@@ -321,7 +323,7 @@ function Chip({
   onPress: () => void;
   tone: "neutral" | "amber" | "coral";
 }) {
-  const toneColor = { neutral: colors.ink, amber: "#9A6412", coral: "#A33D2F" }[tone];
+  const toneColor = { neutral: colors.ink, amber: "#92400E", coral: "#DC2626" }[tone];
 
   return (
     <Pressable
@@ -392,7 +394,7 @@ function StockCard({
           disabled={busy}
           onValueChange={(next) => onChange({ isAvailable: next })}
           thumbColor={colors.white}
-          trackColor={{ false: colors.line, true: "#2FB98C" }}
+          trackColor={{ false: colors.line, true: "#16A34A" }}
           value={item.isAvailable}
         />
       </View>
@@ -478,11 +480,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     flexDirection: "row",
     paddingHorizontal: 18,
-    paddingVertical: 14,
+    paddingBottom: 14,
   },
   back: { marginRight: 10 },
   backIcon: { color: colors.ink, fontSize: 22 },
-  title: { color: colors.ink, flex: 1, fontSize: 18, fontWeight: "800" },
+  title: { color: colors.ink, flex: 1, fontSize: 24, fontWeight: "700" },
   shopCode: { color: colors.muted, fontSize: 12, fontWeight: "700" },
   searchWrap: {
     alignItems: "center",
@@ -495,10 +497,10 @@ const styles = StyleSheet.create({
     minHeight: 44,
     paddingHorizontal: 12,
   },
-  searchIcon: { color: colors.muted, fontSize: 16, marginRight: 8 },
-  search: { color: colors.ink, flex: 1, fontSize: 13, paddingVertical: 10 },
+  searchIcon: {fontWeight: "400", color: colors.muted, fontSize: 16, marginRight: 8 },
+  search: { fontWeight: "400", color: colors.ink, flex: 1, fontSize: 16, paddingVertical: 10 },
   clear: { paddingHorizontal: 4 },
-  clearText: { color: colors.muted, fontSize: 18 },
+  clearText: {fontWeight: "600", color: colors.muted, fontSize: 14 },
   filterButton: {
     alignItems: "center",
     backgroundColor: colors.paper,
@@ -507,7 +509,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 28,
   },
-  filterIcon: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+  filterIcon: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   chipRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: 7, paddingHorizontal: 18, paddingVertical: 12 },
   chip: {
     backgroundColor: colors.white,
@@ -522,16 +524,16 @@ const styles = StyleSheet.create({
     minHeight: 36,
   },
   chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
-  chipText: { color: colors.ink, fontSize: 10, fontWeight: "700" },
+  chipText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   chipTextActive: { color: colors.white },
   errorBanner: {
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#FEE2E2",
     borderRadius: 10,
     marginHorizontal: 18,
     marginBottom: 10,
     padding: 11,
   },
-  errorText: { color: "#A33D2F", fontSize: 11, lineHeight: 16 },
+  errorText: {fontWeight: "400", color: "#DC2626", fontSize: 13, lineHeight: 16 },
   list: { gap: 12, paddingBottom: 96, paddingHorizontal: 18, paddingTop: 4 },
   card: {
     backgroundColor: colors.white,
@@ -548,10 +550,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 46,
   },
-  thumbText: { color: colors.ink, fontSize: 18, fontWeight: "900" },
+  thumbText: { color: colors.ink, fontSize: 18, fontWeight: "700" },
   cardHead: { flex: 1 },
-  reference: { color: colors.muted, fontSize: 9, letterSpacing: 0.3 },
-  cardName: { color: colors.ink, fontSize: 13, fontWeight: "800", marginTop: 2 },
+  reference: {fontWeight: "400", color: colors.muted, fontSize: 12, letterSpacing: 0.3 },
+  cardName: { color: colors.ink, fontSize: 15, fontWeight: "500", marginTop: 2 },
   badge: {
     alignSelf: "flex-start",
     borderRadius: 9,
@@ -559,7 +561,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
   },
-  badgeText: { fontSize: 9, fontWeight: "800" },
+  badgeText: { fontSize: 12, fontWeight: "600" },
   priceRow: {
     alignItems: "center",
     flexDirection: "row",
@@ -567,8 +569,8 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   priceBlock: { flex: 1 },
-  priceLabel: { color: colors.muted, fontSize: 9 },
-  priceValue: { color: colors.ink, fontSize: 13, fontWeight: "800" },
+  priceLabel: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+  priceValue: { color: colors.ink, fontSize: 13, fontWeight: "600" },
   stepper: {
     alignItems: "center",
     backgroundColor: colors.paper,
@@ -581,11 +583,11 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 30,
   },
-  stepText: { color: colors.ink, fontSize: 16, fontWeight: "800" },
+  stepText: { color: colors.ink, fontSize: 16, fontWeight: "600" },
   stepValue: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     minWidth: 22,
     textAlign: "center",
   },
@@ -596,12 +598,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: 11,
     paddingVertical: 6,
   },
-  actionSoft: { backgroundColor: "#E4F3FB" },
-  actionText: { color: colors.white, fontSize: 10, fontWeight: "800" },
-  actionTextSoft: { color: "#0B5D7A" },
+  actionSoft: { backgroundColor: "#DCFCE7" },
+  actionText: { color: colors.white, fontSize: 15, fontWeight: "600" },
+  actionTextSoft: { color: "#15803D" },
   cardFoot: { marginTop: 9 },
-  footText: { color: colors.muted, fontSize: 9 },
-  hiddenNote: { color: colors.muted, fontSize: 9, marginTop: 4 },
+  footText: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+  hiddenNote: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 4 },
   syncNote: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -612,20 +614,19 @@ const styles = StyleSheet.create({
     gap: 8,
     padding: 11,
   },
-  syncDot: { color: "#2FB98C", fontSize: 8 },
-  syncText: { color: colors.muted, flex: 1, fontSize: 9, lineHeight: 14 },
+  syncDot: {fontWeight: "400", color: "#16A34A", fontSize: 12 },
+  syncText: {fontWeight: "400", color: colors.muted, flex: 1, fontSize: 12, lineHeight: 14 },
   empty: {
     alignItems: "center",
     backgroundColor: colors.white,
     borderRadius: 14,
     padding: 26,
   },
-  emptyTitle: { color: colors.ink, fontSize: 14, fontWeight: "800" },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 11,
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  emptyText: {fontWeight: "400", color: colors.muted,
+    fontSize: 13,
     marginTop: 6,
     textAlign: "center",
   },
-  muted: { color: colors.muted, fontSize: 12 },
+  muted: {fontWeight: "400", color: colors.muted, fontSize: 12 },
 });

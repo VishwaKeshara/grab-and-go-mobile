@@ -1,4 +1,4 @@
-import { colors } from "@/constants/colors";
+import { colors, accentOnDark } from "@/constants/colors";
 import { router } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   brandLogoFrame: {
     alignItems: "center",
     backgroundColor: colors.white,
-    borderColor: "#E6E7FF",
+    borderColor: "#F3F4F6",
     borderRadius: 13,
     borderWidth: 1,
     elevation: 2,
@@ -246,22 +246,22 @@ const styles = StyleSheet.create({
   },
   brandCaption: {
     color: colors.muted,
-    fontSize: 7,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 0.65,
     marginTop: 2,
   },
   skip: { color: colors.ink, fontSize: 12, fontWeight: "600", padding: 8 },
   content: { flex: 1, justifyContent: "center", paddingBottom: 16 },
   heroImage: {
-    backgroundColor: "#DCE8D1",
+    backgroundColor: "#FEF3C2",
     borderRadius: 17,
     height: 192,
     overflow: "hidden",
     position: "relative",
   },
   shelf: {
-    backgroundColor: "#A26F46",
+    backgroundColor: "#92400E",
     bottom: 38,
     height: 12,
     left: 14,
@@ -277,28 +277,28 @@ const styles = StyleSheet.create({
     width: 43,
   },
   productOne: {
-    backgroundColor: "#F59B63",
+    backgroundColor: "#F59E0B",
     left: 45,
     transform: [{ rotate: "-8deg" }],
   },
   productTwo: {
-    backgroundColor: "#F0CB63",
+    backgroundColor: "#F59E0B",
     left: 102,
     height: 110,
     transform: [{ rotate: "4deg" }],
   },
   productThree: {
-    backgroundColor: "#83B76F",
+    backgroundColor: "#16A34A",
     right: 47,
     height: 72,
     transform: [{ rotate: "10deg" }],
   },
   shelfLabel: {
-    backgroundColor: "rgba(23,21,67,0.75)",
+    backgroundColor: "rgba(17,24,39,0.75)",
     bottom: 12,
     color: colors.white,
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     left: 14,
     letterSpacing: 1,
     paddingHorizontal: 9,
@@ -316,25 +316,25 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.12,
     shadowRadius: 8,
   },
-  productName: { color: colors.ink, fontSize: 12, fontWeight: "800" },
+  productName: { color: colors.ink, fontSize: 15, fontWeight: "500" },
   priceRow: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "space-between",
     marginTop: 12,
   },
-  oldPrice: { color: colors.muted, fontSize: 9, lineHeight: 15 },
+  oldPrice: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 15 },
   bestPrice: {
     backgroundColor: colors.ink,
     borderRadius: 8,
     paddingHorizontal: 10,
     paddingVertical: 6,
   },
-  bestCaption: { color: colors.mint, fontSize: 8, fontWeight: "700" },
+  bestCaption: { color: accentOnDark, fontSize: 12, fontWeight: "600" },
   bestValue: {
     color: colors.white,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "700",
     marginTop: 2,
   },
   mintLabel: {
@@ -346,22 +346,21 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   mintLabelText: {
-    color: "#118065",
-    fontSize: 9,
-    fontWeight: "800",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 0.2,
   },
   heading: {
     color: colors.ink,
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "600",
     letterSpacing: -0.5,
     marginTop: 9,
     textAlign: "center",
   },
-  body: {
-    color: colors.muted,
-    fontSize: 11,
+  body: {fontWeight: "400", color: colors.muted,
+    fontSize: 15,
     lineHeight: 17,
     marginHorizontal: 16,
     marginTop: 8,
@@ -376,15 +375,15 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   illustrationEyebrow: {
-    color: colors.mint,
-    fontSize: 10,
-    fontWeight: "800",
+    color: accentOnDark,
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 1.3,
   },
   illustrationTitle: {
     color: colors.white,
     fontSize: 29,
-    fontWeight: "800",
+    fontWeight: "600",
     letterSpacing: -0.8,
     lineHeight: 32,
     marginTop: 12,
@@ -403,7 +402,7 @@ const styles = StyleSheet.create({
   marketEmoji: {
     color: colors.ink,
     fontSize: 74,
-    fontWeight: "200",
+    fontWeight: "400",
     marginTop: -24,
   },
   floatingCard: {
@@ -417,14 +416,14 @@ const styles = StyleSheet.create({
   },
   floatingSmall: {
     color: colors.muted,
-    fontSize: 8,
+    fontSize: 12,
     fontWeight: "700",
     letterSpacing: 0.7,
   },
   floatingMain: {
     color: colors.ink,
     fontSize: 17,
-    fontWeight: "800",
+    fontWeight: "600",
     marginVertical: 5,
   },
   stem: {
@@ -447,7 +446,7 @@ const styles = StyleSheet.create({
     width: 50,
   },
   locker: {
-    backgroundColor: "#F4F0D8",
+    backgroundColor: "#FEF3C2",
     borderRadius: 12,
     bottom: 26,
     left: 36,
@@ -464,7 +463,7 @@ const styles = StyleSheet.create({
   lockerBrand: {
     color: colors.ink,
     fontSize: 12,
-    fontWeight: "900",
+    fontWeight: "700",
     letterSpacing: 0.4,
   },
   signal: {
@@ -485,14 +484,14 @@ const styles = StyleSheet.create({
   lockerGrid: { flexDirection: "row", flexWrap: "wrap", gap: 5 },
   lockerSlot: {
     alignItems: "center",
-    backgroundColor: "#D5D0AD",
+    backgroundColor: "#FEF3C2",
     borderRadius: 4,
     height: 32,
     justifyContent: "center",
     width: "31%",
   },
   selectedSlot: { backgroundColor: colors.mint },
-  slotText: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+  slotText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   selectedSlotText: { color: colors.ink },
   pickupBadge: {
     alignItems: "center",
@@ -509,13 +508,13 @@ const styles = StyleSheet.create({
   pickupBadgeNumber: {
     color: colors.white,
     fontSize: 20,
-    fontWeight: "900",
+    fontWeight: "700",
     marginRight: 7,
   },
   pickupBadgeText: {
     color: colors.white,
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
     maxWidth: 68,
   },
   footer: { paddingBottom: 20 },
@@ -526,7 +525,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: 16,
   },
-  dot: { backgroundColor: "#C7C7D3", borderRadius: 12, height: 22, width: 22 },
+  dot: { backgroundColor: "#D1D5DB", borderRadius: 12, height: 22, width: 22 },
   activeDot: { backgroundColor: colors.ink },
   primaryButton: {
     alignItems: "center",
@@ -540,7 +539,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 5,
   },
-  primaryText: { color: colors.white, fontSize: 12, fontWeight: "800" },
+  primaryText: { color: colors.white, fontSize: 12, fontWeight: "600" },
   arrow: { color: colors.white, fontSize: 18, marginLeft: 7, marginTop: -2 },
   loginRow: {
     alignItems: "center",
@@ -548,6 +547,6 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 14,
   },
-  loginHint: { color: colors.muted, fontSize: 10 },
-  loginLink: { color: colors.ink, fontSize: 10, fontWeight: "800" },
+  loginHint: {fontWeight: "400", color: colors.muted, fontSize: 12 },
+  loginLink: { color: colors.ink, fontSize: 12, fontWeight: "600" },
 });

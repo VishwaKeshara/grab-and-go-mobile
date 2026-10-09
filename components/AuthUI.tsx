@@ -1,4 +1,4 @@
-import { colors } from "@/constants/colors";
+import { colors, accentOnDark } from "@/constants/colors";
 import { router } from "expo-router";
 import { ReactNode } from "react";
 import {
@@ -103,7 +103,7 @@ export function Field({
       <View style={[styles.inputWrap, error && styles.inputError]}>
         <TextInput
           {...props}
-          placeholderTextColor="#9A98AA"
+          placeholderTextColor={colors.muted}
           style={styles.input}
         />
       </View>
@@ -177,7 +177,7 @@ export function ErrorBanner({ message }: { message: string }) {
 const styles = StyleSheet.create({
   screen: { backgroundColor: colors.paper, flex: 1, position: "relative", width: "100%", maxWidth: 480, alignSelf: "center", overflow: "hidden" },
   topWash: {
-    backgroundColor: "#EEF0FF",
+    backgroundColor: "#F3F4F6",
     borderBottomLeftRadius: 120,
     height: 150,
     position: "absolute",
@@ -215,28 +215,27 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 32,
   },
-  headerMarkText: { color: colors.mint, fontSize: 17 },
+  headerMarkText: { color: accentOnDark, fontSize: 17 },
   headerCopy: { flex: 1, marginLeft: 9 },
   eyebrow: {
-    color: "#0E8067",
-    fontSize: 9,
-    fontWeight: "800",
+    color: "#15803D",
+    fontSize: 12,
+    fontWeight: "600",
     letterSpacing: 0.8,
   },
   headerTitle: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "600",
     marginTop: 1,
   },
-  headerSubtitle: {
-    color: colors.muted,
-    fontSize: 11,
+  headerSubtitle: {fontWeight: "400", color: colors.muted,
+    fontSize: 12,
     marginTop: 2,
   },
   headerAvatar: {
     alignItems: "center",
-    backgroundColor: "#E5E6FB",
+    backgroundColor: "#F3F4F6",
     borderColor: colors.white,
     borderRadius: 24,
     borderWidth: 3,
@@ -253,13 +252,13 @@ const styles = StyleSheet.create({
   fieldWrap: { marginBottom: 14 },
   fieldLabel: {
     color: colors.ink,
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 14,
+    fontWeight: "500",
     marginBottom: 7,
   },
   inputWrap: {
-    backgroundColor: "#F0F1FC",
-    borderColor: "#E8E8F3",
+    backgroundColor: "#F3F4F6",
+    borderColor: "#D1D5DB",
     borderRadius: 11,
     borderWidth: 1,
     elevation: 1,
@@ -268,15 +267,14 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 4,
   },
-  input: {
-    color: colors.ink,
+  input: {fontWeight: "400", color: colors.ink,
     flex: 1,
-    fontSize: 13,
+    fontSize: 16,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
   inputError: { borderColor: colors.coral },
-  errorText: { color: colors.coral, fontSize: 10, marginTop: 5 },
+  errorText: {fontWeight: "400", color: colors.coral, fontSize: 13, marginTop: 5 },
   primaryButton: {
     alignItems: "center",
     backgroundColor: colors.ink,
@@ -289,7 +287,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.22,
     shadowRadius: 6,
   },
-  primaryText: { color: colors.white, fontSize: 13, fontWeight: "800" },
+  primaryText: { color: colors.white, fontSize: 13, fontWeight: "600" },
   secondaryButton: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -305,7 +303,7 @@ const styles = StyleSheet.create({
   disabled: { opacity: 0.55 },
   errorBanner: {
     alignItems: "center",
-    backgroundColor: "#FFF0ED",
+    backgroundColor: "#FEE2E2",
     borderRadius: 10,
     flexDirection: "row",
     gap: 8,
@@ -317,32 +315,32 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     color: colors.white,
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "600",
     height: 20,
     lineHeight: 20,
     textAlign: "center",
     width: 20,
   },
-  errorBannerText: { color: "#A33D2F", flex: 1, fontSize: 11, lineHeight: 16 },
+  errorBannerText: {fontWeight: "400", color: "#DC2626", flex: 1, fontSize: 12, lineHeight: 16 },
   heading: {
     color: colors.ink,
-    fontSize: 25,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "600",
     letterSpacing: -0.6,
     marginBottom: 7,
   },
-  body: { color: colors.muted, fontSize: 12, lineHeight: 18, marginBottom: 18 },
-  helper: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: -5 },
-  link: { color: "#07856A", fontSize: 11, fontWeight: "800" },
+  body: {fontWeight: "400", color: colors.muted, fontSize: 15, lineHeight: 18, marginBottom: 18 },
+  helper: {fontWeight: "400", color: colors.muted, fontSize: 12, lineHeight: 15, marginTop: -5 },
+  link: { color: "#15803D", fontSize: 12, fontWeight: "600" },
   footerRow: {
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
     marginTop: 18,
   },
-  footerText: { color: colors.muted, fontSize: 11 },
+  footerText: {fontWeight: "400", color: colors.muted, fontSize: 12 },
   segmented: {
-    backgroundColor: "#E9EAF9",
+    backgroundColor: "#F3F4F6",
     borderRadius: 10,
     flexDirection: "row",
     marginBottom: 20,
@@ -356,6 +354,6 @@ const styles = StyleSheet.create({
     minHeight: 38,
   },
   segmentActive: { backgroundColor: colors.ink },
-  segmentText: { color: colors.ink, fontSize: 11, fontWeight: "700" },
+  segmentText: { color: colors.ink, fontSize: 12, fontWeight: "700" },
   segmentTextActive: { color: colors.white },
 });

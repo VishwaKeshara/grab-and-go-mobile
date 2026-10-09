@@ -354,7 +354,7 @@ const styles = StyleSheet.create({
   header: { alignItems: "center", flexDirection: "row", marginBottom: 18, paddingHorizontal: 4 },
   headerLeft: { flex: 1, marginRight: 12 },
   greeting: { color: colors.muted, fontSize: 13, fontWeight: "600" },
-  title: { color: colors.ink, fontSize: 24, fontWeight: "900", letterSpacing: -0.5, marginTop: 2 },
+  title: { color: colors.ink, fontSize: 24, fontWeight: "700", letterSpacing: -0.5, marginTop: 2 },
   avatar: {
     alignItems: "center",
     backgroundColor: colors.ink,
@@ -367,18 +367,18 @@ const styles = StyleSheet.create({
   // Error
   errorBanner: {
     alignItems: "center",
-    backgroundColor: "rgba(224, 69, 75, 0.1)",
+    backgroundColor: "rgba(220, 38, 38, 0.1)",
     borderRadius: 12,
     flexDirection: "row",
     gap: 8,
     marginBottom: 14,
     padding: 12,
   },
-  errorText: { color: colors.coral, flex: 1, fontSize: 13, fontWeight: "600" },
+  errorText: { color: colors.coral, flex: 1, fontSize: 13, fontWeight: "400" },
 
   // Hero
   hero: {
-    backgroundColor: "#506784",
+    backgroundColor: "#4B5563",
     borderRadius: 24,
     marginBottom: 12,
     padding: 20,
@@ -415,7 +415,7 @@ const styles = StyleSheet.create({
   heroMetricVal: { color: colors.white, fontSize: 22, fontWeight: "800" },
   heroMetricLabelRow: { alignItems: "center", flexDirection: "row", gap: 5, marginTop: 4 },
   miniDot: { borderRadius: 3, height: 6, width: 6 },
-  heroMetricLabel: { color: "rgba(255,255,255,0.6)", fontSize: 11, fontWeight: "600" },
+  heroMetricLabel: { color: "rgba(255,255,255,0.6)", fontSize: 12, fontWeight: "600" },
 
   // Info chips
   infoRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 14 },
@@ -449,7 +449,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     width: 28,
   },
-  bannerText: { color: colors.ink, flex: 1, fontSize: 14, fontWeight: "800" },
+  bannerText: { color: colors.ink, flex: 1, fontSize: 14, fontWeight: "600" },
 
   // Quick actions
   actionsRow: { flexDirection: "row", gap: 10, marginBottom: 16 },
@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
     right: -6,
     top: -6,
   },
-  badgeText: { color: colors.white, fontSize: 10, fontWeight: "800" },
+  badgeText: { color: colors.white, fontSize: 12, fontWeight: "600" },
 
   // Cards
   card: {
@@ -493,22 +493,22 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   cardHeader: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
-  sectionTitle: { color: colors.ink, fontSize: 16, fontWeight: "800", letterSpacing: -0.2 },
+  sectionTitle: { color: colors.ink, fontSize: 18, fontWeight: "600", letterSpacing: -0.2 },
   link: { color: colors.ink, fontSize: 13, fontWeight: "700", textDecorationLine: "underline" },
   rowBorder: { borderBottomColor: colors.line, borderBottomWidth: StyleSheet.hairlineWidth },
   empty: { alignItems: "center", gap: 8, paddingVertical: 20 },
-  emptyText: { color: colors.muted, fontSize: 13, textAlign: "center" },
+  emptyText: {fontWeight: "400", color: colors.muted, fontSize: 13, textAlign: "center" },
 
   // Orders
   orderRow: { alignItems: "center", flexDirection: "row", gap: 12, paddingVertical: 12 },
   orderAccent: { borderRadius: 2, height: 36, width: 4 },
   orderLeft: { flex: 1 },
   orderCustomer: { color: colors.ink, fontSize: 14, fontWeight: "700" },
-  orderRef: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  orderRef: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 2 },
   orderRight: { alignItems: "flex-end", gap: 6 },
-  orderTotal: { color: colors.ink, fontSize: 14, fontWeight: "800" },
+  orderTotal: { color: colors.ink, fontSize: 14, fontWeight: "600" },
   statusBadge: { borderRadius: 8, paddingHorizontal: 8, paddingVertical: 3 },
-  statusText: { fontSize: 11, fontWeight: "700", textTransform: "capitalize" },
+  statusText: { fontSize: 12, fontWeight: "700", textTransform: "capitalize" },
 
   // Stock
   stockRow: { alignItems: "center", flexDirection: "row", justifyContent: "space-between", paddingVertical: 12 },

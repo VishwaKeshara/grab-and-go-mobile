@@ -50,7 +50,7 @@ export function CustomerNavbar() {
             >
               <View style={[styles.iconWrap, active && styles.activeIconWrap]}>
                 <FontAwesome
-                  color={active ? colors.white : "#8B899B"}
+                  color={active ? colors.white : "#4B5563"}
                   name={item.icon}
                   size={17}
                 />
@@ -78,7 +78,7 @@ const styles = StyleSheet.create({
   navbar: {
     alignItems: "center",
     backgroundColor: "rgba(255,255,255,0.97)",
-    borderColor: "#E5E4EF",
+    borderColor: "#D1D5DB",
     borderRadius: 20,
     borderWidth: 1,
     elevation: 9,
@@ -100,6 +100,6 @@ const styles = StyleSheet.create({
     width: 42,
   },
   activeIconWrap: { backgroundColor: colors.ink },
-  label: { color: "#8B899B", fontSize: 9, fontWeight: "700", marginTop: 3 },
+  label: { color: "#4B5563", fontSize: 12, fontWeight: "500", marginTop: 3 },
   activeLabel: { color: colors.ink },
 });

@@ -4,7 +4,7 @@ import {
     ErrorBanner,
     SecondaryButton,
 } from "@/components/AuthUI";
-import { colors } from "@/constants/colors";
+import { colors, accentText } from "@/constants/colors";
 import {
     deleteNotification,
     listNotifications,
@@ -171,11 +171,11 @@ function iconFor(kind: Notification["kind"]) {
 }
 function iconColor(kind: Notification["kind"]) {
   return kind === "order"
-    ? "#D8ECDD"
+    ? "#DCFCE7"
     : kind === "pickup"
-      ? "#FFE3BC"
+      ? "#FEF3C2"
       : kind === "price"
-        ? "#DDE2FF"
+        ? "#D1D5DB"
         : colors.mintSoft;
 }
 function timeLabel(value: string) {
@@ -195,18 +195,17 @@ const styles = StyleSheet.create({
   },
   heading: {
     color: colors.ink,
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 20,
+    fontWeight: "600",
     letterSpacing: -0.6,
   },
-  subtitle: {
-    color: colors.muted,
-    fontSize: 11,
+  subtitle: {fontWeight: "400", color: colors.muted,
+    fontSize: 14,
     lineHeight: 16,
     marginTop: 4,
     maxWidth: 210,
   },
-  markAll: { color: "#07856A", fontSize: 9, fontWeight: "800", marginTop: 5 },
+  markAll: { color: "#15803D", fontSize: 12, fontWeight: "600", marginTop: 5 },
   card: {
     backgroundColor: colors.white,
     borderColor: colors.line,
@@ -217,7 +216,7 @@ const styles = StyleSheet.create({
     padding: 12,
   },
   unreadCard: {
-    borderColor: "#B8B9F0",
+    borderColor: "#F3F4F6",
     shadowColor: colors.ink,
     shadowOpacity: 0.06,
     shadowRadius: 6,
@@ -231,34 +230,33 @@ const styles = StyleSheet.create({
   },
   cardCopy: { flex: 1, marginLeft: 10 },
   cardTitleRow: { alignItems: "center", flexDirection: "row" },
-  cardTitle: { color: colors.ink, flex: 1, fontSize: 12, fontWeight: "800" },
+  cardTitle: { color: colors.ink, flex: 1, fontSize: 16, fontWeight: "600" },
   unreadDot: {
     backgroundColor: colors.coral,
     borderRadius: 4,
     height: 7,
     width: 7,
   },
-  cardBody: { color: colors.muted, fontSize: 10, lineHeight: 15, marginTop: 4 },
-  time: { color: "#9A98AA", fontSize: 9, marginTop: 8 },
-  action: { color: colors.ink, fontSize: 10, fontWeight: "800", marginTop: 8 },
+  cardBody: {fontWeight: "400", color: colors.muted, fontSize: 13, lineHeight: 15, marginTop: 4 },
+  time: {fontWeight: "400", color: "#4B5563", fontSize: 12, marginTop: 8 },
+  action: { color: colors.ink, fontSize: 12, fontWeight: "600", marginTop: 8 },
   delete: { alignSelf: "flex-start", paddingLeft: 8 },
   empty: {
     alignItems: "center",
-    backgroundColor: "#F0F1FC",
+    backgroundColor: "#F3F4F6",
     borderRadius: 16,
     marginTop: 22,
     padding: 28,
   },
-  emptyIcon: { color: colors.mint, fontSize: 34 },
+  emptyIcon: {fontWeight: "400", color: accentText, fontSize: 34 },
   emptyTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "600",
     marginTop: 10,
   },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 11,
+  emptyText: {fontWeight: "400", color: colors.muted,
+    fontSize: 13,
     lineHeight: 17,
     marginTop: 7,
     textAlign: "center",

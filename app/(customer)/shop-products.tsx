@@ -16,6 +16,7 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 /**
  * One shop's products, reached by tapping a row in Nearby Shops.
@@ -25,6 +26,7 @@ import {
  * learning two different flows.
  */
 export default function ShopProducts() {
+  const insets = useSafeAreaInsets();
   const { shopId, shopName } = useLocalSearchParams<{
     shopId?: string;
     shopName?: string;
@@ -144,7 +146,7 @@ export default function ShopProducts() {
           onChangeText={setQuery}
           onSubmitEditing={() => setSubmitted(query.trim())}
           placeholder={`Search in ${title}`}
-          placeholderTextColor="#9693A6"
+          placeholderTextColor={colors.muted}
           returnKeyType="search"
           style={styles.search}
           value={query}
@@ -232,7 +234,7 @@ export default function ShopProducts() {
 
   return (
     <View style={styles.screen}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 18 }]}>
         <Pressable
           accessibilityLabel="Go back"
           accessibilityRole="button"
@@ -289,10 +291,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     paddingHorizontal: 20,
-    paddingTop: 18,
   },
   back: { alignItems: "center", height: 30, justifyContent: "center", width: 30 },
-  heading: { color: colors.ink, flex: 1, fontSize: 17, fontWeight: "900", textAlign: "center" },
+  heading: { color: colors.ink, flex: 1, fontSize: 20, fontWeight: "600", textAlign: "center" },
   shopHead: { alignItems: "center", flexDirection: "row", marginTop: 16 },
   icon: {
     alignItems: "center",
@@ -303,18 +304,18 @@ const styles = StyleSheet.create({
     width: 42,
   },
   shopHeadCopy: { flex: 1, marginLeft: 11, minWidth: 0 },
-  shopName: { color: colors.ink, fontSize: 15, fontWeight: "900" },
-  shopMeta: { color: colors.muted, fontSize: 10, marginTop: 3 },
+  shopName: { color: colors.ink, fontSize: 16, fontWeight: "600" },
+  shopMeta: {fontWeight: "400", color: colors.muted, fontSize: 12, marginTop: 3 },
   notice: {
     alignItems: "center",
-    backgroundColor: "#FFF0D5",
+    backgroundColor: "#FEF3C2",
     borderRadius: 11,
     flexDirection: "row",
     gap: 8,
     marginTop: 12,
     padding: 10,
   },
-  noticeText: { color: colors.ink, flex: 1, fontSize: 10, fontWeight: "700", lineHeight: 14 },
+  noticeText: { color: colors.ink, flex: 1, fontSize: 12, fontWeight: "700", lineHeight: 14 },
   searchWrap: {
     alignItems: "center",
     backgroundColor: colors.white,
@@ -326,7 +327,7 @@ const styles = StyleSheet.create({
     marginTop: 13,
     paddingHorizontal: 14,
   },
-  search: { color: colors.ink, flex: 1, fontSize: 12, paddingHorizontal: 9 },
+  search: {fontWeight: "400", color: colors.ink, flex: 1, fontSize: 12, paddingHorizontal: 9 },
   chipRow: { flexDirection: "row", gap: 8, marginTop: 11 },
   chip: {
     alignItems: "center",
@@ -338,13 +339,13 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
   },
   chipActive: { backgroundColor: colors.ink },
-  chipText: { color: colors.ink, fontSize: 11, fontWeight: "800" },
+  chipText: { color: colors.ink, fontSize: 12, fontWeight: "600" },
   chipTextActive: { color: colors.white },
   error: {
-    backgroundColor: "#FFE6E0",
+    backgroundColor: "#FEE2E2",
     borderRadius: 10,
-    color: "#A43A32",
-    fontSize: 11,
+    color: "#DC2626",
+    fontSize: 12,
     fontWeight: "700",
     marginTop: 11,
     padding: 10,
@@ -352,10 +353,9 @@ const styles = StyleSheet.create({
   list: { paddingBottom: 110, paddingHorizontal: 22, paddingTop: 4 },
   columnWrapper: { gap: 12, marginBottom: 12 },
   empty: { alignItems: "center", paddingTop: 48 },
-  emptyTitle: { color: colors.ink, fontSize: 15, fontWeight: "900", marginTop: 12 },
-  emptyText: {
-    color: colors.muted,
-    fontSize: 12,
+  emptyTitle: { color: colors.ink, fontSize: 16, fontWeight: "600", marginTop: 12 },
+  emptyText: {fontWeight: "400", color: colors.muted,
+    fontSize: 13,
     lineHeight: 18,
     marginTop: 7,
     maxWidth: 260,

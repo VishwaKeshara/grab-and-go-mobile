@@ -4,7 +4,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { router } from "expo-router";
 import { FontAwesome } from "@expo/vector-icons";
-import { colors } from "@/constants/colors";
+import { colors, accentText } from "@/constants/colors";
 import { supabase } from "@/lib/supabase";
 import { getShopByProfileId, getLocalStaffSession, clearLocalStaffSession, getStaffProfile } from "@/services/shopService";
 export default function ShopProfileScreen() {
@@ -191,8 +191,8 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: colors.ink,
-    fontSize: 16,
-    fontWeight: "700",
+    fontSize: 20,
+    fontWeight: "600",
   },
   placeholder: {
     width: 36,
@@ -212,18 +212,18 @@ const styles = StyleSheet.create({
   },
   shopName: {
     color: colors.ink,
-    fontSize: 22,
-    fontWeight: "800",
+    fontSize: 16,
+    fontWeight: "600",
     marginBottom: 8,
   },
   roleBadge: {
-    backgroundColor: "rgba(14, 128, 103, 0.1)",
+    backgroundColor: "rgba(22, 163, 74, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 4,
     borderRadius: 12,
   },
   roleText: {
-    color: colors.mint,
+    color: accentText,
     fontSize: 12,
     fontWeight: "700",
   },
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     color: colors.ink,
     fontSize: 16,
-    fontWeight: "800",
+    fontWeight: "600",
     marginBottom: 16,
   },
   infoRow: {
@@ -271,26 +271,26 @@ const styles = StyleSheet.create({
     marginVertical: 12,
   },
   openBadge: {
-    backgroundColor: "rgba(14, 128, 103, 0.1)",
+    backgroundColor: "rgba(22, 163, 74, 0.1)",
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   openText: {
-    color: colors.mint,
-    fontSize: 11,
-    fontWeight: "800",
+    color: accentText,
+    fontSize: 12,
+    fontWeight: "600",
   },
   closedBadge: {
-    backgroundColor: "rgba(224, 69, 75, 0.1)",
+    backgroundColor: "rgba(220, 38, 38, 0.1)",
     borderRadius: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
   },
   closedText: {
     color: colors.coral,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "600",
   },
   logoutButton: {
     backgroundColor: colors.paper,
@@ -299,10 +299,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginTop: 8,
     borderWidth: 1,
-    borderColor: "rgba(224, 69, 75, 0.2)",
+    borderColor: "rgba(220, 38, 38, 0.2)",
   },
   logoutButtonPressed: {
-    backgroundColor: "rgba(224, 69, 75, 0.05)",
+    backgroundColor: "rgba(220, 38, 38, 0.05)",
   },
   logoutButtonText: {
     color: colors.coral,
